@@ -1,137 +1,258 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { ActionCard } from "@/components/action-card";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
+import { ResponsiveGrid } from "@/components/responsive-grid";
+import { RiskBadge } from "@/components/risk-badge";
+import { SectionPanel } from "@/components/section-panel";
+import { StatCard } from "@/components/stat-card";
+import { StatusBadge } from "@/components/status-badge";
+import { Timeline, TimelineItem } from "@/components/timeline-item";
+import {
+  continueItems,
+  dashboardStats,
+  projects,
+  recentActivity,
+  riskItems,
+  upcomingDeadlines,
+} from "@/lib/mock-data";
 
-type NavCard = {
-  title: string;
-  description: string;
-  href: string;
-  icon: ReactNode;
-};
+export default function DashboardPage() {
+  const featuredProject = projects.find((p) => p.priority === "high") ?? projects[0];
 
-const iconClass = "h-6 w-6";
-const iconProps = {
-  className: iconClass,
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.5,
-  viewBox: "0 0 24 24",
-  "aria-hidden": true,
-} as const;
-
-const cards: NavCard[] = [
-  {
-    title: "Properties",
-    description: "Browse and manage your portfolio.",
-    href: "/properties",
-    icon: (
-      <svg {...iconProps}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5V21a.75.75 0 0 1-.75.75h-4.5V15h-7.5v6.75h-4.5A.75.75 0 0 1 3 21V10.5Z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Projects",
-    description: "Track ongoing work and milestones.",
-    href: "/projects",
-    icon: (
-      <svg {...iconProps}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75A2.25 2.25 0 0 1 6 4.5h3.75l1.5 1.5H18a2.25 2.25 0 0 1 2.25 2.25v9A2.25 2.25 0 0 1 18 19.5H6a2.25 2.25 0 0 1-2.25-2.25v-10.5Z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Contacts",
-    description: "Keep your network organized.",
-    href: "/contacts",
-    icon: (
-      <svg {...iconProps}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 8.25a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 19.5a7.5 7.5 0 0 1 15 0v.75H4.5v-.75Z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Documents",
-    description: "Store and find important files.",
-    href: "/documents",
-    icon: (
-      <svg {...iconProps}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3.75h7.19a1.5 1.5 0 0 1 1.06.44l3.31 3.31a1.5 1.5 0 0 1 .44 1.06v10.69a1.5 1.5 0 0 1-1.5 1.5h-10.5a1.5 1.5 0 0 1-1.5-1.5V5.25a1.5 1.5 0 0 1 1.5-1.5Z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 3.75v4.5h4.5" />
-      </svg>
-    ),
-  },
-  {
-    title: "Budget",
-    description: "Plan and review your finances.",
-    href: "/budget",
-    icon: (
-      <svg {...iconProps}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 19.5h16.5M5.25 19.5V12m4.5 7.5V8.25m4.5 11.25V14.25m4.5 5.25V5.25" />
-      </svg>
-    ),
-  },
-  {
-    title: "Settings",
-    description: "Configure your workspace preferences.",
-    href: "/settings",
-    icon: (
-      <svg {...iconProps}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.094c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.66.838.347.151.738.108 1.05-.105l1.06-.726a1.125 1.125 0 0 1 1.45.12l.773.773c.39.39.44 1.005.12 1.45l-.726 1.06c-.213.312-.256.704-.105 1.05.151.347.463.597.838.66l1.281.213c.542.09.94.56.94 1.11v1.094c0 .55-.398 1.02-.94 1.11l-1.281.213c-.375.063-.687.313-.838.66-.151.347-.108.738.105 1.05l.726 1.06c.32.445.27 1.06-.12 1.45l-.773.773a1.125 1.125 0 0 1-1.45.12l-1.06-.726a1.125 1.125 0 0 0-1.05-.105c-.347.151-.597.463-.66.838l-.213 1.281c-.09.542-.56.94-1.11.94H11.45c-.55 0-1.02-.398-1.11-.94l-.213-1.281a1.125 1.125 0 0 0-.66-.838 1.125 1.125 0 0 0-1.05.105l-1.06.726a1.125 1.125 0 0 1-1.45-.12l-.773-.773a1.125 1.125 0 0 1-.12-1.45l.726-1.06c.213-.312.256-.704.105-1.05a1.125 1.125 0 0 0-.838-.66l-1.281-.213c-.542-.09-.94-.56-.94-1.11V11.45c0-.55.398-1.02.94-1.11l1.281-.213c.375-.063.687-.313.838-.66.151-.347.108-.738-.105-1.05l-.726-1.06a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l1.06.726c.312.213.704.256 1.05.105.347-.151.597-.463.66-.838l.213-1.281Z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-      </svg>
-    ),
-  },
-];
-
-export default function Home() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-6 py-16 font-sans dark:bg-zinc-950">
-      <main className="flex w-full max-w-5xl flex-col items-center gap-12">
-        <header className="flex flex-col items-center gap-3 text-center">
-          <h1 className="text-4xl font-semibold tracking-tight text-zinc-900 sm:text-5xl dark:text-zinc-50">
-            Welcome
-          </h1>
-          <p className="max-w-md text-base text-zinc-600 sm:text-lg dark:text-zinc-400">
-            Choose a section below to get started.
-          </p>
-        </header>
+    <>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Dashboard"
+        description="A calm overview of your portfolio. Generic placeholder data."
+        primaryAction={
+          <Link
+            href="/tasks"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-text-inverse)] transition-colors hover:bg-[var(--color-primary-hover)]"
+          >
+            Review tasks
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
+            </svg>
+          </Link>
+        }
+        secondaryAction={
+          <Link
+            href="/properties"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)]"
+          >
+            View properties
+          </Link>
+        }
+      />
 
-        <ul className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((card) => (
-            <li key={card.href}>
+      <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
+        {dashboardStats.map((stat, idx) => (
+          <StatCard
+            key={stat.label}
+            label={stat.label}
+            value={stat.value}
+            delta={stat.delta}
+            emphasis={idx === 0}
+          />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-[21px] lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <SectionPanel
+            title="Priority actions"
+            description="Short list, focused next steps."
+            action={
               <Link
-                href={card.href}
-                className="group flex h-full flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 dark:focus-visible:ring-zinc-50 dark:focus-visible:ring-offset-zinc-950"
+                href="/tasks"
+                className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition-colors group-hover:bg-zinc-900 group-hover:text-white dark:bg-zinc-800 dark:text-zinc-300 dark:group-hover:bg-zinc-50 dark:group-hover:text-zinc-900">
-                  {card.icon}
-                </span>
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-base font-medium text-zinc-900 dark:text-zinc-50">
-                    {card.title}
-                  </h2>
-                  <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                    {card.description}
-                  </p>
-                </div>
-                <span className="mt-auto inline-flex items-center gap-1 text-sm font-medium text-zinc-700 transition-colors group-hover:text-zinc-900 dark:text-zinc-300 dark:group-hover:text-zinc-50">
-                  Open
-                  <svg
-                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    viewBox="0 0 24 24"
-                    aria-hidden
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
-                  </svg>
-                </span>
+                See all
               </Link>
-            </li>
-          ))}
-        </ul>
-      </main>
-    </div>
+            }
+          >
+            <ResponsiveGrid minItemWidth="md" gap="md">
+              <ActionCard
+                title="Confirm vendor quote"
+                description="Roof and envelope refresh, awaiting approval."
+                href="/projects"
+                cta="Open project"
+                emphasis
+                meta="Due Apr 30 • Property One"
+              />
+              <ActionCard
+                title="Upload latest survey"
+                description="Survey draft missing for review."
+                href="/documents"
+                cta="Open documents"
+                meta="Due May 02 • Property Three"
+              />
+              <ActionCard
+                title="Review insurance gap"
+                description="Coverage placeholder needs verification."
+                href="/tasks"
+                cta="Open task"
+                meta="Due May 01 • Property Two"
+              />
+              <ActionCard
+                title="Walkthrough notes"
+                description="Add summary to recent visit."
+                href="/properties"
+                cta="Open property"
+                meta="Property Six"
+              />
+            </ResponsiveGrid>
+          </SectionPanel>
+        </div>
+
+        <div className="flex flex-col gap-[21px]">
+          <SectionPanel title="Status summary" description="Across active workspaces.">
+            <ul className="flex flex-col gap-2 text-sm">
+              <li className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Active</span>
+                <StatusBadge status="active" />
+              </li>
+              <li className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">In progress</span>
+                <StatusBadge status="in_progress" />
+              </li>
+              <li className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">In review</span>
+                <StatusBadge status="review" />
+              </li>
+              <li className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Needs verification</span>
+                <StatusBadge status="needs_verification" />
+              </li>
+              <li className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">At risk</span>
+                <StatusBadge status="risk" />
+              </li>
+            </ul>
+          </SectionPanel>
+
+          <SectionPanel title="Continue where you left off">
+            <ul className="flex flex-col gap-2">
+              {continueItems.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={item.href}
+                    className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-warm)] px-3 py-2.5 text-sm transition-colors hover:border-[var(--color-border-strong)]"
+                  >
+                    <span className="flex flex-col">
+                      <span className="font-medium text-[var(--color-text)]">{item.label}</span>
+                      <span className="text-xs text-[var(--color-text-muted)]">{item.context}</span>
+                    </span>
+                    <svg className="h-4 w-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                    </svg>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SectionPanel>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-[21px] lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <SectionPanel title="Recent activity" description="Calm, glanceable updates.">
+            <Timeline>
+              {recentActivity.map((item) => (
+                <TimelineItem
+                  key={item.id}
+                  label={item.label}
+                  context={item.context}
+                  timestamp={item.timestamp}
+                  tone={item.tone}
+                />
+              ))}
+            </Timeline>
+          </SectionPanel>
+        </div>
+
+        <div className="flex flex-col gap-[21px]">
+          <SectionPanel title="Upcoming deadlines">
+            <ul className="flex flex-col gap-2 text-sm">
+              {upcomingDeadlines.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-start justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-warm)] px-3 py-2.5"
+                >
+                  <span className="flex flex-col">
+                    <span className="font-medium text-[var(--color-text)]">{item.label}</span>
+                    <span className="text-xs text-[var(--color-text-muted)]">{item.context}</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-[var(--color-text-muted)]">
+                    {item.due}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </SectionPanel>
+
+          <SectionPanel
+            title="Risk & attention"
+            action={<RiskBadge severity="high" />}
+          >
+            {riskItems.length === 0 ? (
+              <EmptyState
+                variant="inline"
+                title="Nothing to flag"
+                description="No open risks across the workspace."
+              />
+            ) : (
+              <ul className="flex flex-col gap-2 text-sm">
+                {riskItems.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] pb-2 last:border-0 last:pb-0"
+                  >
+                    <span className="flex flex-col">
+                      <span className="font-medium text-[var(--color-text)]">{item.label}</span>
+                      <span className="text-xs text-[var(--color-text-muted)]">{item.context}</span>
+                    </span>
+                    <RiskBadge severity={item.severity} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionPanel>
+        </div>
+      </div>
+
+      <SectionPanel
+        title="Featured project"
+        description="The current high-priority initiative."
+        action={
+          <Link
+            href="/projects"
+            className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
+          >
+            View all projects
+          </Link>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <h3 className="font-display text-2xl text-[var(--color-text)]">
+                {featuredProject.name}
+              </h3>
+              <p className="text-sm text-[var(--color-text-muted)]">
+                {featuredProject.description}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={featuredProject.phase} />
+            </div>
+          </div>
+          <ProgressBar value={featuredProject.progress} label={`Due ${featuredProject.dueDate}`} />
+        </div>
+      </SectionPanel>
+    </>
   );
 }
