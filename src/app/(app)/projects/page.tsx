@@ -1,7 +1,6 @@
 import { FilterPill, FilterPillRow } from "@/components/filter-pill";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
-import { SectionPanel } from "@/components/section-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { priorityLabels, statusTokens, type StatusKey } from "@/lib/status";
 import { projects, type Project } from "@/lib/mock-data";
@@ -109,17 +108,6 @@ export default function ProjectsPage() {
           );
         })}
       </div>
-
-      <SectionPanel
-        title="What's the Kanban for?"
-        description="Helps you see workload distribution at a glance."
-      >
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Each card represents a generic project placeholder. Filtering, sorting,
-          and detail views are coming soon. Use this layout to plan phase movement
-          and identify bottlenecks early.
-        </p>
-      </SectionPanel>
     </>
   );
 }

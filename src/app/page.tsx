@@ -32,8 +32,8 @@ export default function Home() {
             Welcome to your workspace.
           </h1>
           <p className="max-w-xl text-base text-[var(--color-text-muted)] sm:text-lg">
-            A calm command center for properties, projects, and the work in
-            between. Choose a section to get started.
+            A private operating system for property work. Choose a section to
+            get started.
           </p>
         </header>
 
@@ -83,6 +83,17 @@ export default function Home() {
             </li>
           ))}
         </ul>
+
+        <button
+          type="button"
+          aria-label="Open command palette (coming soon)"
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-glass)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-muted)] backdrop-blur transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
+        >
+          <kbd className="inline-flex h-5 items-center gap-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 font-mono text-[10px] font-semibold text-[var(--color-text-muted)]">
+            <span aria-hidden>⌘</span>K
+          </kbd>
+          <span>Search workspace</span>
+        </button>
 
         <p className="text-xs text-[var(--color-text-faint)]">
           Workspace placeholder · Setup in progress
