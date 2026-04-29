@@ -1,258 +1,96 @@
 import Link from "next/link";
-import { ActionCard } from "@/components/action-card";
-import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
-import { ProgressBar } from "@/components/progress-bar";
-import { ResponsiveGrid } from "@/components/responsive-grid";
-import { RiskBadge } from "@/components/risk-badge";
-import { SectionPanel } from "@/components/section-panel";
-import { StatCard } from "@/components/stat-card";
-import { StatusBadge } from "@/components/status-badge";
-import { Timeline, TimelineItem } from "@/components/timeline-item";
-import {
-  continueItems,
-  dashboardStats,
-  projects,
-  recentActivity,
-  riskItems,
-  upcomingDeadlines,
-} from "@/lib/mock-data";
+import { landingCards } from "@/lib/navigation";
 
-export default function DashboardPage() {
-  const featuredProject = projects.find((p) => p.priority === "high") ?? projects[0];
-
+export default function Home() {
   return (
-    <>
-      <PageHeader
-        eyebrow="Workspace"
-        title="Dashboard"
-        description="A calm overview of your portfolio. Generic placeholder data."
-        primaryAction={
-          <Link
-            href="/tasks"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-text-inverse)] transition-colors hover:bg-[var(--color-primary-hover)]"
-          >
-            Review tasks
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
-            </svg>
-          </Link>
-        }
-        secondaryAction={
-          <Link
-            href="/properties"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)]"
-          >
-            View properties
-          </Link>
-        }
+    <div
+      className="relative isolate flex min-h-dvh w-full flex-col items-center justify-center overflow-hidden px-5 py-[55px] sm:px-8 sm:py-[89px]"
+      style={{
+        background:
+          "radial-gradient(at 25% 0%, rgba(36, 76, 58, 0.10), transparent 55%), radial-gradient(at 85% 100%, rgba(158, 63, 43, 0.06), transparent 55%), linear-gradient(to bottom, var(--color-bg-warm), var(--color-bg))",
+      }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.04]"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, var(--color-text) 1px, transparent 0)",
+          backgroundSize: "32px 32px",
+        }}
       />
 
-      <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
-        {dashboardStats.map((stat, idx) => (
-          <StatCard
-            key={stat.label}
-            label={stat.label}
-            value={stat.value}
-            delta={stat.delta}
-            emphasis={idx === 0}
-          />
-        ))}
-      </div>
+      <main className="flex w-full max-w-6xl flex-col items-center gap-[55px]">
+        <header className="flex max-w-2xl flex-col items-center gap-[13px] text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-white)]/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] backdrop-blur">
+            <span
+              aria-hidden
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
+            >
+              <span className="font-display text-[11px] font-semibold">W</span>
+            </span>
+            Walsh Co
+          </span>
+          <h1 className="font-display text-4xl leading-[1.1] text-[var(--color-text)] sm:text-5xl md:text-6xl">
+            Welcome to your workspace.
+          </h1>
+          <p className="max-w-xl text-base text-[var(--color-text-muted)] sm:text-lg">
+            A calm command center for properties, projects, and the work in
+            between. Choose a section to get started.
+          </p>
+        </header>
 
-      <div className="grid grid-cols-1 gap-[21px] lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <SectionPanel
-            title="Priority actions"
-            description="Short list, focused next steps."
-            action={
+        <ul className="grid w-full grid-cols-1 gap-[13px] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {landingCards.map((card) => (
+            <li key={card.href}>
               <Link
-                href="/tasks"
-                className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
+                href={card.href}
+                className="group relative flex h-full min-h-[148px] flex-col gap-3 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-white)]/80 p-[21px] shadow-[var(--shadow-card)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-[var(--color-primary)] hover:bg-[var(--color-surface-white)] hover:shadow-[var(--shadow-card-hover)]"
               >
-                See all
-              </Link>
-            }
-          >
-            <ResponsiveGrid minItemWidth="md" gap="md">
-              <ActionCard
-                title="Confirm vendor quote"
-                description="Roof and envelope refresh, awaiting approval."
-                href="/projects"
-                cta="Open project"
-                emphasis
-                meta="Due Apr 30 • Property One"
-              />
-              <ActionCard
-                title="Upload latest survey"
-                description="Survey draft missing for review."
-                href="/documents"
-                cta="Open documents"
-                meta="Due May 02 • Property Three"
-              />
-              <ActionCard
-                title="Review insurance gap"
-                description="Coverage placeholder needs verification."
-                href="/tasks"
-                cta="Open task"
-                meta="Due May 01 • Property Two"
-              />
-              <ActionCard
-                title="Walkthrough notes"
-                description="Add summary to recent visit."
-                href="/properties"
-                cta="Open property"
-                meta="Property Six"
-              />
-            </ResponsiveGrid>
-          </SectionPanel>
-        </div>
-
-        <div className="flex flex-col gap-[21px]">
-          <SectionPanel title="Status summary" description="Across active workspaces.">
-            <ul className="flex flex-col gap-2 text-sm">
-              <li className="flex items-center justify-between">
-                <span className="text-[var(--color-text-muted)]">Active</span>
-                <StatusBadge status="active" />
-              </li>
-              <li className="flex items-center justify-between">
-                <span className="text-[var(--color-text-muted)]">In progress</span>
-                <StatusBadge status="in_progress" />
-              </li>
-              <li className="flex items-center justify-between">
-                <span className="text-[var(--color-text-muted)]">In review</span>
-                <StatusBadge status="review" />
-              </li>
-              <li className="flex items-center justify-between">
-                <span className="text-[var(--color-text-muted)]">Needs verification</span>
-                <StatusBadge status="needs_verification" />
-              </li>
-              <li className="flex items-center justify-between">
-                <span className="text-[var(--color-text-muted)]">At risk</span>
-                <StatusBadge status="risk" />
-              </li>
-            </ul>
-          </SectionPanel>
-
-          <SectionPanel title="Continue where you left off">
-            <ul className="flex flex-col gap-2">
-              {continueItems.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    href={item.href}
-                    className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-warm)] px-3 py-2.5 text-sm transition-colors hover:border-[var(--color-border-strong)]"
-                  >
-                    <span className="flex flex-col">
-                      <span className="font-medium text-[var(--color-text)]">{item.label}</span>
-                      <span className="text-xs text-[var(--color-text-muted)]">{item.context}</span>
-                    </span>
-                    <svg className="h-4 w-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
-                    </svg>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </SectionPanel>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-[21px] lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <SectionPanel title="Recent activity" description="Calm, glanceable updates.">
-            <Timeline>
-              {recentActivity.map((item) => (
-                <TimelineItem
-                  key={item.id}
-                  label={item.label}
-                  context={item.context}
-                  timestamp={item.timestamp}
-                  tone={item.tone}
+                <span
+                  aria-hidden
+                  className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--color-primary)]/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
                 />
-              ))}
-            </Timeline>
-          </SectionPanel>
-        </div>
-
-        <div className="flex flex-col gap-[21px]">
-          <SectionPanel title="Upcoming deadlines">
-            <ul className="flex flex-col gap-2 text-sm">
-              {upcomingDeadlines.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-start justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-warm)] px-3 py-2.5"
+                <span
+                  aria-hidden
+                  className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] text-[var(--color-primary)] transition-colors group-hover:bg-[var(--color-primary)] group-hover:text-[var(--color-text-inverse)]"
                 >
-                  <span className="flex flex-col">
-                    <span className="font-medium text-[var(--color-text)]">{item.label}</span>
-                    <span className="text-xs text-[var(--color-text-muted)]">{item.context}</span>
-                  </span>
-                  <span className="shrink-0 text-xs font-semibold text-[var(--color-text-muted)]">
-                    {item.due}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </SectionPanel>
-
-          <SectionPanel
-            title="Risk & attention"
-            action={<RiskBadge severity="high" />}
-          >
-            {riskItems.length === 0 ? (
-              <EmptyState
-                variant="inline"
-                title="Nothing to flag"
-                description="No open risks across the workspace."
-              />
-            ) : (
-              <ul className="flex flex-col gap-2 text-sm">
-                {riskItems.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] pb-2 last:border-0 last:pb-0"
+                  {card.icon}
+                </span>
+                <div className="flex flex-1 flex-col gap-1">
+                  <h2 className="text-base font-semibold text-[var(--color-text)]">
+                    {card.label}
+                  </h2>
+                  <p className="text-sm leading-6 text-[var(--color-text-muted)]">
+                    {card.description}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-primary)]">
+                  Open
+                  <svg
+                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    viewBox="0 0 24 24"
+                    aria-hidden
                   >
-                    <span className="flex flex-col">
-                      <span className="font-medium text-[var(--color-text)]">{item.label}</span>
-                      <span className="text-xs text-[var(--color-text-muted)]">{item.context}</span>
-                    </span>
-                    <RiskBadge severity={item.severity} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionPanel>
-        </div>
-      </div>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 12h14M13 5l7 7-7 7"
+                    />
+                  </svg>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
 
-      <SectionPanel
-        title="Featured project"
-        description="The current high-priority initiative."
-        action={
-          <Link
-            href="/projects"
-            className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
-          >
-            View all projects
-          </Link>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <h3 className="font-display text-2xl text-[var(--color-text)]">
-                {featuredProject.name}
-              </h3>
-              <p className="text-sm text-[var(--color-text-muted)]">
-                {featuredProject.description}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={featuredProject.phase} />
-            </div>
-          </div>
-          <ProgressBar value={featuredProject.progress} label={`Due ${featuredProject.dueDate}`} />
-        </div>
-      </SectionPanel>
-    </>
+        <p className="text-xs text-[var(--color-text-faint)]">
+          Workspace placeholder · Setup in progress
+        </p>
+      </main>
+    </div>
   );
 }

@@ -18,7 +18,7 @@ const iconProps = {
 
 export const primaryNav: NavItem[] = [
   {
-    label: "Dashboard",
+    label: "Home",
     shortLabel: "Home",
     href: "/",
     icon: (
@@ -102,3 +102,55 @@ export function isActiveHref(currentPath: string, href: string): boolean {
   if (href === "/") return currentPath === "/";
   return currentPath === href || currentPath.startsWith(`${href}/`);
 }
+
+export type LandingCard = {
+  label: string;
+  description: string;
+  href: string;
+  icon: ReactNode;
+};
+
+export const landingCards: LandingCard[] = [
+  {
+    label: "Properties",
+    description: "Browse your portfolio.",
+    href: "/properties",
+    icon: primaryNav[1].icon,
+  },
+  {
+    label: "Projects",
+    description: "Track ongoing work.",
+    href: "/projects",
+    icon: primaryNav[2].icon,
+  },
+  {
+    label: "Tasks",
+    description: "See what's next.",
+    href: "/tasks",
+    icon: primaryNav[3].icon,
+  },
+  {
+    label: "Contacts",
+    description: "Keep your network close.",
+    href: "/contacts",
+    icon: primaryNav[4].icon,
+  },
+  {
+    label: "Documents",
+    description: "Find important files.",
+    href: "/documents",
+    icon: primaryNav[5].icon,
+  },
+  {
+    label: "Budget",
+    description: "Plan and review costs.",
+    href: "/budget",
+    icon: primaryNav[6].icon,
+  },
+  {
+    label: "Settings",
+    description: "Configure your workspace.",
+    href: "/settings",
+    icon: secondaryNav[0].icon,
+  },
+];
