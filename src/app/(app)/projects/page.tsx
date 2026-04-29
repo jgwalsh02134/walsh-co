@@ -28,7 +28,7 @@ function PriorityPill({ priority }: { priority: Project["priority"] }) {
 
 function ProjectCard({ project }: { project: Project }) {
   return (
-    <article className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] p-3 shadow-[var(--shadow-card)]">
+    <article className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-semibold leading-snug text-[var(--color-text)]">
           {project.name}
@@ -61,7 +61,7 @@ export default function ProjectsPage() {
           </button>
         }
         secondaryAction={
-          <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] p-0.5 text-sm">
+          <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-sm">
             <span className="rounded-[6px] bg-[var(--color-bg-warm)] px-3 py-1 font-medium text-[var(--color-text)]">
               Board
             </span>
@@ -84,7 +84,7 @@ export default function ProjectsPage() {
           return (
             <section
               key={column.key}
-              className="flex flex-col gap-[13px] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+              className="flex flex-col gap-[13px] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] p-3"
             >
               <header className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -95,7 +95,7 @@ export default function ProjectsPage() {
                 </div>
               </header>
               {items.length === 0 ? (
-                <p className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-white)] px-3 py-6 text-center text-xs text-[var(--color-text-faint)]">
+                <p className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-6 text-center text-xs text-[var(--color-text-faint)]">
                   Nothing in this phase
                 </p>
               ) : (

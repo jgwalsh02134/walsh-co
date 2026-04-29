@@ -38,7 +38,7 @@ export default function DocumentsPage() {
         </p>
         <button
           type="button"
-          className="mt-2 inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)]"
+          className="mt-2 inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)]"
         >
           Browse files
         </button>

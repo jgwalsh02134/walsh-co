@@ -11,7 +11,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-surface-white)] pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow-rail)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-surface)] pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow-rail)] lg:hidden"
     >
       <ul className="grid grid-cols-5">
         {items.map((item) => {

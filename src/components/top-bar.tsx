@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function TopBar() {
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-white)]/90 px-4 py-3 backdrop-blur sm:px-6 lg:px-[34px]">
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3 backdrop-blur sm:px-6 lg:px-[34px]">
       <Link href="/" className="flex items-center gap-2 lg:hidden" aria-label="Walsh Co home">
         <span
           aria-hidden
@@ -26,7 +26,7 @@ export function TopBar() {
         <button
           type="button"
           aria-label="Notifications"
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-white)] text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
+          className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
         >
           <svg
             className="h-5 w-5"

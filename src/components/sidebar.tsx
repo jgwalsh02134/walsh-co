@@ -32,7 +32,7 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Primary"
-      className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:gap-[34px] lg:border-r lg:border-[var(--color-border)] lg:bg-[var(--color-surface)] lg:px-4 lg:py-6"
+      className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:gap-[34px] lg:border-r lg:border-[var(--color-border)] lg:bg-[var(--color-surface-soft)] lg:px-4 lg:py-6"
     >
       <Link
         href="/"

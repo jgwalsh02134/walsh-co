@@ -12,7 +12,7 @@ export function ProgressBar({
   tone = "primary",
 }: ProgressBarProps) {
   const safe = Math.max(0, Math.min(100, value));
-  const fill = tone === "primary" ? "var(--color-primary)" : "var(--color-neutral-500)";
+  const fill = tone === "primary" ? "var(--color-primary)" : "var(--color-text-muted)";
   return (
     <div className="flex flex-col gap-1.5">
       {label || showValue ? (
@@ -28,7 +28,7 @@ export function ProgressBar({
         </div>
       ) : null}
       <div
-        className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-neutral-200)]"
+        className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-surface-soft)]"
         role="progressbar"
         aria-valuenow={safe}
         aria-valuemin={0}

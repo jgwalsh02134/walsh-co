@@ -17,7 +17,7 @@ export function EmptyState({
     <div
       className={`flex flex-col items-center gap-3 text-center ${
         variant === "panel"
-          ? "rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-[34px]"
+          ? "rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-soft)] p-[34px]"
           : "py-6"
       }`}
     >

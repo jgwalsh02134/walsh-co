@@ -5,10 +5,7 @@ export default function Home() {
   return (
     <div
       className="relative isolate flex min-h-dvh w-full flex-col items-center justify-center overflow-hidden px-5 py-[55px] sm:px-8 sm:py-[89px]"
-      style={{
-        background:
-          "radial-gradient(at 25% 0%, rgba(36, 76, 58, 0.10), transparent 55%), radial-gradient(at 85% 100%, rgba(158, 63, 43, 0.06), transparent 55%), linear-gradient(to bottom, var(--color-bg-warm), var(--color-bg))",
-      }}
+      style={{ background: "var(--landing-bg)" }}
     >
       <div
         aria-hidden
@@ -22,7 +19,7 @@ export default function Home() {
 
       <main className="flex w-full max-w-6xl flex-col items-center gap-[55px]">
         <header className="flex max-w-2xl flex-col items-center gap-[13px] text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-white)]/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] backdrop-blur">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-glass)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] backdrop-blur">
             <span
               aria-hidden
               className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
@@ -45,7 +42,7 @@ export default function Home() {
             <li key={card.href}>
               <Link
                 href={card.href}
-                className="group relative flex h-full min-h-[148px] flex-col gap-3 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-white)]/80 p-[21px] shadow-[var(--shadow-card)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-[var(--color-primary)] hover:bg-[var(--color-surface-white)] hover:shadow-[var(--shadow-card-hover)]"
+                className="group relative flex h-full min-h-[148px] flex-col gap-3 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-glass)] p-[21px] shadow-[var(--shadow-card)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-[var(--color-primary)] hover:bg-[var(--color-surface)] hover:shadow-[var(--shadow-card-hover)]"
               >
                 <span
                   aria-hidden

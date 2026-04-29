@@ -21,7 +21,7 @@ export default function SettingsPage() {
             <input
               type="text"
               defaultValue="Walsh Co"
-              className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
+              className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
             />
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
@@ -29,7 +29,7 @@ export default function SettingsPage() {
             <input
               type="text"
               defaultValue="Generic Region"
-              className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
+              className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
             />
           </label>
           <label className="flex flex-col gap-1.5 text-sm sm:col-span-2">
@@ -37,7 +37,7 @@ export default function SettingsPage() {
             <textarea
               rows={3}
               defaultValue="Generic placeholder description for this workspace."
-              className="resize-y rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-white)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
+              className="resize-y rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
             />
           </label>
           <div className="sm:col-span-2">
@@ -69,7 +69,7 @@ export default function SettingsPage() {
                 className={`rounded-[var(--radius-md)] border px-4 py-2 text-sm font-medium ${
                   idx === 0
                     ? "border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
-                    : "border-[var(--color-border)] bg-[var(--color-surface-white)] text-[var(--color-text)] hover:border-[var(--color-border-strong)]"
+                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-border-strong)]"
                 }`}
               >
                 {label}

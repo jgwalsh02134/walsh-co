@@ -24,7 +24,7 @@ export function ActionCard({
       className={`group flex h-full flex-col gap-3 rounded-[var(--radius-lg)] border p-[21px] shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)] ${
         emphasis
           ? "border-[var(--color-primary)] bg-[var(--color-primary-soft)]"
-          : "border-[var(--color-border)] bg-[var(--color-surface-white)] hover:border-[var(--color-border-strong)]"
+          : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-border-strong)]"
       }`}
     >
       <div className="flex flex-col gap-1">

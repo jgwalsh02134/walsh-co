@@ -15,7 +15,7 @@ export function FilterPill({ label, active = false, count, children }: FilterPil
       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
         active
           ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
-          : "border-[var(--color-border)] bg-[var(--color-surface-white)] text-[var(--color-text)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-warm)]"
+          : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-warm)]"
       }`}
     >
       {children}

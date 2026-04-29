@@ -40,7 +40,7 @@ function CardChrome({ title, description, icon, badge, footer, children }: Omit<
 
 export function ModuleCard(props: ModuleCardProps) {
   const baseClasses =
-    "block h-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-white)] shadow-[var(--shadow-card)] transition-all";
+    "block h-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] transition-all";
 
   if (props.href) {
     return (

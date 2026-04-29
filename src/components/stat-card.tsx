@@ -11,7 +11,7 @@ export function StatCard({ label, value, delta, emphasis = false }: StatCardProp
       className={`flex flex-col gap-1 rounded-[var(--radius-lg)] border p-[21px] shadow-[var(--shadow-card)] ${
         emphasis
           ? "border-[var(--color-primary)] bg-[var(--color-primary-soft)]"
-          : "border-[var(--color-border)] bg-[var(--color-surface-white)]"
+          : "border-[var(--color-border)] bg-[var(--color-surface)]"
       }`}
     >
       <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">

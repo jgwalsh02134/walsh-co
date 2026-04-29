@@ -16,7 +16,7 @@ export function SectionPanel({
   padded = true,
 }: SectionPanelProps) {
   return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-white)] shadow-[var(--shadow-card)]">
+    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card)]">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border)] px-[21px] py-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-semibold text-[var(--color-text)]">

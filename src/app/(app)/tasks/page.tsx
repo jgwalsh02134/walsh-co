@@ -49,7 +49,7 @@ export default function TasksPage() {
               className="flex flex-col gap-2 px-[21px] py-3 sm:flex-row sm:items-center sm:gap-4"
             >
               <span
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--color-border-strong)] bg-[var(--color-surface-white)]"
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--color-border-strong)] bg-[var(--color-surface)]"
                 aria-hidden
               />
               <div className="flex flex-1 flex-col gap-0.5">
