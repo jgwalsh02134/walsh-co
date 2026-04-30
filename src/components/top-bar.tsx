@@ -15,10 +15,10 @@ export function TopBar() {
 
       <div className="hidden items-center gap-2 lg:flex">
         <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
-          Workspace
+          Workbench
         </span>
         <span className="text-sm font-medium text-[var(--color-text)]">
-          Generic Placeholder
+          322 Osborne Rd · Renovation
         </span>
       </div>
 

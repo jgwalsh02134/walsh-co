@@ -2,19 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isActiveHref, primaryNav } from "@/lib/navigation";
+import { isActiveHref, mobileFieldNav } from "@/lib/navigation";
 
 export function MobileNav() {
   const pathname = usePathname();
-  const items = primaryNav.slice(0, 5);
 
   return (
     <nav
-      aria-label="Primary"
+      aria-label="Field shortcuts"
       className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-surface)] pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow-rail)] lg:hidden"
     >
       <ul className="grid grid-cols-5">
-        {items.map((item) => {
+        {mobileFieldNav.map((item) => {
           const active = isActiveHref(pathname, item.href);
           return (
             <li key={item.href} className="contents">

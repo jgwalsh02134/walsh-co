@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isActiveHref, primaryNav, secondaryNav, type NavItem } from "@/lib/navigation";
+import { desktopNav, isActiveHref, secondaryNav, type NavItem } from "@/lib/navigation";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
@@ -50,7 +50,7 @@ export function Sidebar() {
       </Link>
 
       <nav className="flex flex-col gap-1" aria-label="Sections">
-        {primaryNav.map((item) => (
+        {desktopNav.map((item) => (
           <NavLink
             key={item.href}
             item={item}

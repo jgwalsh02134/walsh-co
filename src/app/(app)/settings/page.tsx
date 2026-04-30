@@ -25,10 +25,10 @@ export default function SettingsPage() {
             />
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-[var(--color-text)]">Region</span>
+            <span className="font-medium text-[var(--color-text)]">Active project</span>
             <input
               type="text"
-              defaultValue="Generic Region"
+              defaultValue="322 Osborne Rd Renovation"
               className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
             />
           </label>
@@ -36,7 +36,7 @@ export default function SettingsPage() {
             <span className="font-medium text-[var(--color-text)]">Description</span>
             <textarea
               rows={3}
-              defaultValue="Generic placeholder description for this workspace."
+              defaultValue="Renovation & construction operations workspace. Desktop for planning and decisions, iPhone for field updates."
               className="resize-y rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-focus)] focus:outline-none"
             />
           </label>

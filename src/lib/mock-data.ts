@@ -1,27 +1,90 @@
-import type { Priority, StatusKey } from "./status";
+import type { ContractorStatus, Priority, StatusKey } from "./status";
 
-export type Property = {
+export type Trade =
+  | "General"
+  | "Demolition"
+  | "Framing"
+  | "Roofing"
+  | "Siding"
+  | "Windows"
+  | "Plumbing"
+  | "Electrical"
+  | "HVAC"
+  | "Insulation"
+  | "Drywall"
+  | "Painting"
+  | "Flooring"
+  | "Tile"
+  | "Cabinetry"
+  | "Countertops"
+  | "Masonry"
+  | "Concrete"
+  | "Landscape"
+  | "Architect"
+  | "Engineer"
+  | "Inspector"
+  | "Other";
+
+export const trades: readonly Trade[] = [
+  "General",
+  "Demolition",
+  "Framing",
+  "Roofing",
+  "Siding",
+  "Windows",
+  "Plumbing",
+  "Electrical",
+  "HVAC",
+  "Insulation",
+  "Drywall",
+  "Painting",
+  "Flooring",
+  "Tile",
+  "Cabinetry",
+  "Countertops",
+  "Masonry",
+  "Concrete",
+  "Landscape",
+  "Architect",
+  "Engineer",
+  "Inspector",
+  "Other",
+] as const;
+
+export type Qualifications = {
+  insurance: boolean;
+  workersComp: boolean;
+  license: boolean;
+  w9: boolean;
+  references: boolean;
+};
+
+export type Contractor = {
   id: string;
   name: string;
-  region: string;
-  type: "Residential" | "Mixed-use" | "Commercial" | "Land";
-  status: StatusKey;
-  units: number;
-  squareFeet: number;
-  lastReviewed: string;
+  organization: string;
+  trade: Trade;
+  status: ContractorStatus;
+  qualifications: Qualifications;
+  email: string;
+  phone: string;
   notes: string;
 };
 
-export type Project = {
+export type Bid = {
   id: string;
-  name: string;
-  propertyId: string;
-  phase: "planning" | "in_progress" | "review" | "complete";
-  priority: Priority;
-  progress: number;
-  dueDate: string;
-  owner: string;
-  description: string;
+  contractorId: string;
+  contractor: string;
+  trade: Trade;
+  amount: number;
+  startDate: string;
+  durationDays: number;
+  includes: string[];
+  excludes: string[];
+  insuranceOk: boolean;
+  risk: "low" | "medium" | "high";
+  score: number;
+  award: "pending" | "shortlisted" | "awarded" | "declined";
 };
 
 export type Task = {
@@ -31,23 +94,14 @@ export type Task = {
   priority: Priority;
   dueDate: string;
   owner: string;
-  context: string;
+  context: "Office" | "Field" | "Punch list";
 };
 
-export type Contact = {
-  id: string;
-  name: string;
-  role: "Architect" | "Contractor" | "Inspector" | "Realtor" | "Vendor" | "Other";
-  organization: string;
-  email: string;
-  phone: string;
-};
-
-export type Document = {
+export type DocumentRecord = {
   id: string;
   title: string;
-  category: "Legal" | "Financial" | "Plans" | "Permits" | "Photos" | "Other";
-  property: string;
+  category: "Contract" | "COI" | "Proposal" | "Permit" | "Plan" | "Photo" | "Inspection" | "Other";
+  contractor?: string;
   status: StatusKey;
   updated: string;
   size: string;
@@ -57,7 +111,29 @@ export type BudgetCategory = {
   id: string;
   name: string;
   estimate: number;
+  committed: number;
   actual: number;
+};
+
+export type ChangeOrder = {
+  id: string;
+  number: string;
+  description: string;
+  contractor: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected";
+  submitted: string;
+};
+
+export type Permit = {
+  id: string;
+  type: string;
+  number: string;
+  authority: string;
+  status: StatusKey;
+  filed: string;
+  inspectionDate?: string;
+  notes: string;
 };
 
 export type ActivityItem = {
@@ -68,11 +144,11 @@ export type ActivityItem = {
   tone: "info" | "success" | "warning" | "review" | "neutral";
 };
 
-export type Deadline = {
+export type Decision = {
   id: string;
   label: string;
-  due: string;
   context: string;
+  due: string;
 };
 
 export type RiskItem = {
@@ -89,453 +165,637 @@ export type ContinueItem = {
   context: string;
 };
 
-export const properties: Property[] = [
+export type PropertyProfile = {
+  id: string;
+  address: string;
+  shortName: string;
+  type: "Residential" | "Mixed-use" | "Commercial" | "Land";
+  squareFeet: number;
+  phase: string;
+  startDate: string;
+  targetCompletion: string;
+};
+
+export const propertyProfile: PropertyProfile = {
+  id: "osborne-322",
+  address: "322 Osborne Rd",
+  shortName: "322 Osborne",
+  type: "Residential",
+  squareFeet: 3200,
+  phase: "Bidding & Procurement",
+  startDate: "Mar 17",
+  targetCompletion: "Sep 30",
+};
+
+export const contractors: Contractor[] = [
   {
-    id: "p1",
-    name: "Property One",
-    region: "Region A",
-    type: "Residential",
-    status: "active",
-    units: 4,
-    squareFeet: 3200,
-    lastReviewed: "Apr 24",
-    notes: "Generic placeholder description. Needs verification.",
+    id: "ctr-roof-1",
+    name: "Generic Placeholder",
+    organization: "Northline Roofing Co.",
+    trade: "Roofing",
+    status: "bid_received",
+    qualifications: {
+      insurance: true,
+      workersComp: true,
+      license: true,
+      w9: true,
+      references: true,
+    },
+    email: "estimating@example.com",
+    phone: "(000) 000-0000",
+    notes: "Bid received, scope review pending.",
   },
   {
-    id: "p2",
-    name: "Property Two",
-    region: "Region B",
-    type: "Mixed-use",
-    status: "in_progress",
-    units: 6,
-    squareFeet: 5400,
-    lastReviewed: "Apr 22",
-    notes: "Phase plan in draft.",
+    id: "ctr-roof-2",
+    name: "Generic Placeholder",
+    organization: "Capital Roofing & Sheet Metal",
+    trade: "Roofing",
+    status: "bid_requested",
+    qualifications: {
+      insurance: true,
+      workersComp: true,
+      license: true,
+      w9: false,
+      references: false,
+    },
+    email: "bids@example.com",
+    phone: "(000) 000-0000",
+    notes: "Awaiting W-9 and references.",
   },
   {
-    id: "p3",
-    name: "Property Three",
-    region: "Region A",
-    type: "Land",
-    status: "needs_verification",
-    units: 0,
-    squareFeet: 0,
-    lastReviewed: "Apr 12",
-    notes: "Title and zoning placeholders. Needs verification.",
+    id: "ctr-elec-1",
+    name: "Generic Placeholder",
+    organization: "Mohawk Electric LLC",
+    trade: "Electrical",
+    status: "shortlisted",
+    qualifications: {
+      insurance: true,
+      workersComp: true,
+      license: true,
+      w9: true,
+      references: true,
+    },
+    email: "office@example.com",
+    phone: "(000) 000-0000",
+    notes: "Strong references, panel upgrade scope confirmed.",
   },
   {
-    id: "p4",
-    name: "Property Four",
-    region: "Region C",
-    type: "Commercial",
-    status: "planning",
-    units: 2,
-    squareFeet: 8800,
-    lastReviewed: "Apr 18",
-    notes: "Scoping draft only.",
+    id: "ctr-plumb-1",
+    name: "Generic Placeholder",
+    organization: "Adirondack Plumbing",
+    trade: "Plumbing",
+    status: "bid_received",
+    qualifications: {
+      insurance: true,
+      workersComp: false,
+      license: true,
+      w9: true,
+      references: true,
+    },
+    email: "office@example.com",
+    phone: "(000) 000-0000",
+    notes: "Workers comp certificate expired — needs update.",
   },
   {
-    id: "p5",
-    name: "Property Five",
-    region: "Region B",
-    type: "Residential",
-    status: "on_hold",
-    units: 3,
-    squareFeet: 2400,
-    lastReviewed: "Mar 30",
-    notes: "Awaiting decision.",
+    id: "ctr-hvac-1",
+    name: "Generic Placeholder",
+    organization: "Pinebush HVAC",
+    trade: "HVAC",
+    status: "prequalification_needed",
+    qualifications: {
+      insurance: false,
+      workersComp: false,
+      license: true,
+      w9: false,
+      references: false,
+    },
+    email: "service@example.com",
+    phone: "(000) 000-0000",
+    notes: "New prospect, no qualification documents on file.",
   },
   {
-    id: "p6",
-    name: "Property Six",
-    region: "Region D",
-    type: "Residential",
-    status: "review",
-    units: 1,
-    squareFeet: 1900,
-    lastReviewed: "Apr 27",
-    notes: "Walkthrough scheduled.",
+    id: "ctr-fram-1",
+    name: "Generic Placeholder",
+    organization: "Hudson Carpentry",
+    trade: "Framing",
+    status: "preferred",
+    qualifications: {
+      insurance: true,
+      workersComp: true,
+      license: true,
+      w9: true,
+      references: true,
+    },
+    email: "shop@example.com",
+    phone: "(000) 000-0000",
+    notes: "Preferred trade partner across prior projects.",
+  },
+  {
+    id: "ctr-arch-1",
+    name: "Generic Placeholder",
+    organization: "Loudonville Architecture",
+    trade: "Architect",
+    status: "awarded",
+    qualifications: {
+      insurance: true,
+      workersComp: true,
+      license: true,
+      w9: true,
+      references: true,
+    },
+    email: "studio@example.com",
+    phone: "(000) 000-0000",
+    notes: "Drawings issued for permit set.",
+  },
+  {
+    id: "ctr-paint-1",
+    name: "Generic Placeholder",
+    organization: "Crescent Painting",
+    trade: "Painting",
+    status: "prospect",
+    qualifications: {
+      insurance: false,
+      workersComp: false,
+      license: false,
+      w9: false,
+      references: false,
+    },
+    email: "estimates@example.com",
+    phone: "(000) 000-0000",
+    notes: "Referral, not yet qualified.",
+  },
+  {
+    id: "ctr-floor-1",
+    name: "Generic Placeholder",
+    organization: "Riverbend Flooring",
+    trade: "Flooring",
+    status: "backup",
+    qualifications: {
+      insurance: true,
+      workersComp: true,
+      license: true,
+      w9: true,
+      references: true,
+    },
+    email: "sales@example.com",
+    phone: "(000) 000-0000",
+    notes: "Backup if preferred installer is unavailable.",
+  },
+  {
+    id: "ctr-demo-1",
+    name: "Generic Placeholder",
+    organization: "Eastline Demo",
+    trade: "Demolition",
+    status: "do_not_use",
+    qualifications: {
+      insurance: true,
+      workersComp: true,
+      license: true,
+      w9: true,
+      references: false,
+    },
+    email: "office@example.com",
+    phone: "(000) 000-0000",
+    notes: "Prior site safety incident — do not use.",
   },
 ];
 
-export const projects: Project[] = [
+export const bids: Bid[] = [
   {
-    id: "j1",
-    name: "Roof and envelope refresh",
-    propertyId: "p1",
-    phase: "in_progress",
-    priority: "high",
-    progress: 62,
-    dueDate: "May 22",
-    owner: "Generic owner",
-    description: "Generic scope placeholder.",
+    id: "bid-roof-1",
+    contractorId: "ctr-roof-1",
+    contractor: "Northline Roofing Co.",
+    trade: "Roofing",
+    amount: 38400,
+    startDate: "May 12",
+    durationDays: 9,
+    includes: ["Tear-off", "Underlayment", "Architectural shingles", "Drip edge"],
+    excludes: ["Decking replacement", "Skylight reflash"],
+    insuranceOk: true,
+    risk: "low",
+    score: 86,
+    award: "shortlisted",
   },
   {
-    id: "j2",
-    name: "Interior repaint, common areas",
-    propertyId: "p2",
-    phase: "planning",
-    priority: "medium",
-    progress: 12,
-    dueDate: "Jun 03",
-    owner: "Generic owner",
-    description: "Generic scope placeholder.",
+    id: "bid-roof-2",
+    contractorId: "ctr-roof-2",
+    contractor: "Capital Roofing & Sheet Metal",
+    trade: "Roofing",
+    amount: 41250,
+    startDate: "May 19",
+    durationDays: 7,
+    includes: ["Tear-off", "Synthetic underlayment", "30-yr shingles", "Ridge vent"],
+    excludes: ["Gutter work", "Rotted decking"],
+    insuranceOk: true,
+    risk: "medium",
+    score: 78,
+    award: "pending",
   },
   {
-    id: "j3",
-    name: "HVAC service review",
-    propertyId: "p4",
-    phase: "review",
-    priority: "medium",
-    progress: 90,
-    dueDate: "May 05",
-    owner: "Generic owner",
-    description: "Awaiting vendor confirmation.",
+    id: "bid-plumb-1",
+    contractorId: "ctr-plumb-1",
+    contractor: "Adirondack Plumbing",
+    trade: "Plumbing",
+    amount: 26500,
+    startDate: "Jun 02",
+    durationDays: 14,
+    includes: ["Rough-in", "Water heater", "Fixture set"],
+    excludes: ["Permit fees", "Trench work"],
+    insuranceOk: false,
+    risk: "high",
+    score: 64,
+    award: "pending",
   },
   {
-    id: "j4",
-    name: "Landscape concept",
-    propertyId: "p3",
-    phase: "planning",
-    priority: "low",
-    progress: 5,
-    dueDate: "Jun 30",
-    owner: "Generic owner",
-    description: "Concept-only placeholder.",
-  },
-  {
-    id: "j5",
-    name: "Tenant fit-out punch list",
-    propertyId: "p2",
-    phase: "in_progress",
-    priority: "high",
-    progress: 48,
-    dueDate: "May 14",
-    owner: "Generic owner",
-    description: "Punch list draft.",
-  },
-  {
-    id: "j6",
-    name: "Storage build-out",
-    propertyId: "p6",
-    phase: "complete",
-    priority: "low",
-    progress: 100,
-    dueDate: "Apr 18",
-    owner: "Generic owner",
-    description: "Closed out for documentation.",
-  },
-  {
-    id: "j7",
-    name: "Permit package draft",
-    propertyId: "p4",
-    phase: "review",
-    priority: "high",
-    progress: 70,
-    dueDate: "May 09",
-    owner: "Generic owner",
-    description: "Internal review pending.",
+    id: "bid-elec-1",
+    contractorId: "ctr-elec-1",
+    contractor: "Mohawk Electric LLC",
+    trade: "Electrical",
+    amount: 32100,
+    startDate: "Jun 09",
+    durationDays: 12,
+    includes: ["200A service upgrade", "Rough-in", "Trim & devices"],
+    excludes: ["Low-voltage", "Generator wiring"],
+    insuranceOk: true,
+    risk: "low",
+    score: 89,
+    award: "awarded",
   },
 ];
 
 export const tasks: Task[] = [
   {
     id: "t1",
-    title: "Confirm vendor quote, roofing scope",
+    title: "Confirm roofing scope and decking allowance",
     status: "in_progress",
     priority: "high",
-    dueDate: "Apr 30",
+    dueDate: "May 02",
     owner: "Unassigned",
-    context: "Property One",
+    context: "Office",
   },
   {
     id: "t2",
-    title: "Upload latest survey draft",
+    title: "Collect updated workers comp from Adirondack Plumbing",
     status: "needs_verification",
-    priority: "medium",
-    dueDate: "May 02",
+    priority: "high",
+    dueDate: "May 03",
     owner: "Unassigned",
-    context: "Property Three",
+    context: "Office",
   },
   {
     id: "t3",
-    title: "Schedule envelope walkthrough",
+    title: "Walk roof access and dumpster placement",
     status: "planning",
-    priority: "medium",
-    dueDate: "May 05",
-    owner: "Unassigned",
-    context: "Property One",
-  },
-  {
-    id: "t4",
-    title: "Review HVAC service proposal",
-    status: "review",
     priority: "medium",
     dueDate: "May 06",
     owner: "Unassigned",
-    context: "Property Four",
+    context: "Field",
+  },
+  {
+    id: "t4",
+    title: "Photograph existing kitchen conditions",
+    status: "in_progress",
+    priority: "medium",
+    dueDate: "May 04",
+    owner: "Unassigned",
+    context: "Field",
   },
   {
     id: "t5",
-    title: "Tag closed photos for archive",
-    status: "complete",
-    priority: "low",
-    dueDate: "Apr 22",
+    title: "Issue permit set to electrical bidders",
+    status: "review",
+    priority: "medium",
+    dueDate: "May 07",
     owner: "Unassigned",
-    context: "Property Six",
+    context: "Office",
   },
   {
     id: "t6",
-    title: "Flag insurance coverage gap",
-    status: "risk",
-    priority: "high",
-    dueDate: "May 01",
+    title: "Punch: replace damaged sill plate, NW corner",
+    status: "planning",
+    priority: "low",
+    dueDate: "May 24",
     owner: "Unassigned",
-    context: "Property Two",
+    context: "Punch list",
   },
   {
     id: "t7",
-    title: "Review repaint color palette",
-    status: "in_progress",
+    title: "Punch: re-caulk basement window wells",
+    status: "planning",
     priority: "low",
-    dueDate: "May 12",
+    dueDate: "May 24",
     owner: "Unassigned",
-    context: "Property Two",
+    context: "Punch list",
   },
   {
     id: "t8",
-    title: "Draft landscape RFP outline",
-    status: "planning",
-    priority: "low",
-    dueDate: "May 20",
+    title: "Flag insurance coverage gap with Adirondack",
+    status: "risk",
+    priority: "high",
+    dueDate: "May 03",
     owner: "Unassigned",
-    context: "Property Three",
+    context: "Office",
   },
 ];
 
-export const contacts: Contact[] = [
-  {
-    id: "c1",
-    name: "Generic Architect",
-    role: "Architect",
-    organization: "Studio Placeholder",
-    email: "architect@example.com",
-    phone: "(000) 000-0000",
-  },
-  {
-    id: "c2",
-    name: "Generic GC",
-    role: "Contractor",
-    organization: "Generic Build Co.",
-    email: "gc@example.com",
-    phone: "(000) 000-0000",
-  },
-  {
-    id: "c3",
-    name: "Generic Inspector",
-    role: "Inspector",
-    organization: "Inspections Placeholder",
-    email: "inspect@example.com",
-    phone: "(000) 000-0000",
-  },
-  {
-    id: "c4",
-    name: "Generic Realtor",
-    role: "Realtor",
-    organization: "Realty Placeholder",
-    email: "realtor@example.com",
-    phone: "(000) 000-0000",
-  },
-  {
-    id: "c5",
-    name: "Generic Roofer",
-    role: "Vendor",
-    organization: "Roofing Placeholder",
-    email: "roof@example.com",
-    phone: "(000) 000-0000",
-  },
-  {
-    id: "c6",
-    name: "Generic HVAC",
-    role: "Vendor",
-    organization: "HVAC Placeholder",
-    email: "hvac@example.com",
-    phone: "(000) 000-0000",
-  },
-  {
-    id: "c7",
-    name: "Generic Counsel",
-    role: "Other",
-    organization: "Counsel Placeholder",
-    email: "counsel@example.com",
-    phone: "(000) 000-0000",
-  },
-  {
-    id: "c8",
-    name: "Generic Surveyor",
-    role: "Vendor",
-    organization: "Survey Placeholder",
-    email: "survey@example.com",
-    phone: "(000) 000-0000",
-  },
-];
-
-export const documents: Document[] = [
+export const documents: DocumentRecord[] = [
   {
     id: "d1",
-    title: "Title summary draft",
-    category: "Legal",
-    property: "Property One",
-    status: "needs_verification",
-    updated: "Apr 24",
-    size: "1.2 MB",
+    title: "Architect agreement (executed)",
+    category: "Contract",
+    contractor: "Loudonville Architecture",
+    status: "complete",
+    updated: "Apr 09",
+    size: "1.1 MB",
   },
   {
     id: "d2",
-    title: "Roofing proposal (vendor draft)",
-    category: "Financial",
-    property: "Property One",
-    status: "in_progress",
-    updated: "Apr 26",
-    size: "640 KB",
-  },
-  {
-    id: "d3",
-    title: "Site plan (concept)",
-    category: "Plans",
-    property: "Property Two",
-    status: "planning",
-    updated: "Apr 22",
-    size: "3.4 MB",
-  },
-  {
-    id: "d4",
-    title: "Permit checklist (placeholder)",
-    category: "Permits",
-    property: "Property Four",
-    status: "needs_verification",
-    updated: "Apr 18",
+    title: "Mohawk Electric — COI",
+    category: "COI",
+    contractor: "Mohawk Electric LLC",
+    status: "complete",
+    updated: "Apr 24",
     size: "210 KB",
   },
   {
-    id: "d5",
-    title: "Walkthrough photos, batch 4",
-    category: "Photos",
-    property: "Property Six",
-    status: "complete",
+    id: "d3",
+    title: "Northline Roofing proposal v2",
+    category: "Proposal",
+    contractor: "Northline Roofing Co.",
+    status: "in_progress",
     updated: "Apr 27",
-    size: "12.8 MB",
+    size: "640 KB",
+  },
+  {
+    id: "d4",
+    title: "Adirondack Plumbing — workers comp (expired)",
+    category: "COI",
+    contractor: "Adirondack Plumbing",
+    status: "needs_verification",
+    updated: "Apr 18",
+    size: "180 KB",
+  },
+  {
+    id: "d5",
+    title: "Building permit application draft",
+    category: "Permit",
+    status: "planning",
+    updated: "Apr 22",
+    size: "320 KB",
   },
   {
     id: "d6",
-    title: "Coverage notes",
-    category: "Legal",
-    property: "Property Two",
-    status: "risk",
+    title: "Permit set — issued",
+    category: "Plan",
+    status: "complete",
+    updated: "Apr 26",
+    size: "8.4 MB",
+  },
+  {
+    id: "d7",
+    title: "Existing conditions photos, kitchen",
+    category: "Photo",
+    status: "complete",
     updated: "Apr 28",
+    size: "12.8 MB",
+  },
+  {
+    id: "d8",
+    title: "Pre-construction inspection notes",
+    category: "Inspection",
+    status: "review",
+    updated: "Apr 25",
     size: "98 KB",
   },
 ];
 
 export const budgetCategories: BudgetCategory[] = [
-  { id: "b1", name: "Construction", estimate: 184000, actual: 162400 },
-  { id: "b2", name: "Architecture & design", estimate: 32000, actual: 31200 },
-  { id: "b3", name: "Permits & filings", estimate: 12500, actual: 9800 },
-  { id: "b4", name: "Inspections", estimate: 6500, actual: 7100 },
-  { id: "b5", name: "Vendor services", estimate: 28000, actual: 24650 },
-  { id: "b6", name: "Contingency", estimate: 18000, actual: 4200 },
+  { id: "b1", name: "Site & demolition", estimate: 14000, committed: 12500, actual: 9200 },
+  { id: "b2", name: "Framing & structure", estimate: 38000, committed: 36000, actual: 0 },
+  { id: "b3", name: "Roofing", estimate: 42000, committed: 0, actual: 0 },
+  { id: "b4", name: "Plumbing", estimate: 28000, committed: 0, actual: 0 },
+  { id: "b5", name: "Electrical", estimate: 33000, committed: 32100, actual: 0 },
+  { id: "b6", name: "HVAC", estimate: 26000, committed: 0, actual: 0 },
+  { id: "b7", name: "Finishes", estimate: 48000, committed: 0, actual: 0 },
+  { id: "b8", name: "Architecture & engineering", estimate: 22000, committed: 22000, actual: 18400 },
+  { id: "b9", name: "Permits & inspections", estimate: 8500, committed: 4200, actual: 4200 },
+  { id: "b10", name: "Contingency (10%)", estimate: 26000, committed: 0, actual: 0 },
+];
+
+export const changeOrders: ChangeOrder[] = [
+  {
+    id: "co-1",
+    number: "CO-001",
+    description: "Replace sill plate at NW corner discovered during demo.",
+    contractor: "Hudson Carpentry",
+    amount: 2400,
+    status: "pending",
+    submitted: "Apr 27",
+  },
+  {
+    id: "co-2",
+    number: "CO-002",
+    description: "Upgrade panel from 150A to 200A per inspector recommendation.",
+    contractor: "Mohawk Electric LLC",
+    amount: 3850,
+    status: "approved",
+    submitted: "Apr 21",
+  },
+];
+
+export const permits: Permit[] = [
+  {
+    id: "pm-1",
+    type: "Building",
+    number: "B-2026-1184",
+    authority: "Town of Loudonville",
+    status: "review",
+    filed: "Apr 22",
+    notes: "Plan review in progress.",
+  },
+  {
+    id: "pm-2",
+    type: "Electrical",
+    number: "E-2026-0421",
+    authority: "Town of Loudonville",
+    status: "planning",
+    filed: "—",
+    notes: "Awaiting awarded contractor to file.",
+  },
+  {
+    id: "pm-3",
+    type: "Plumbing",
+    number: "P-2026-0412",
+    authority: "Town of Loudonville",
+    status: "planning",
+    filed: "—",
+    notes: "Awaiting awarded contractor to file.",
+  },
+  {
+    id: "pm-4",
+    type: "Demolition",
+    number: "D-2026-0388",
+    authority: "Town of Loudonville",
+    status: "complete",
+    filed: "Apr 02",
+    inspectionDate: "Apr 09",
+    notes: "Demo complete, signed off.",
+  },
 ];
 
 export const recentActivity: ActivityItem[] = [
   {
     id: "a1",
-    label: "Vendor quote received",
-    context: "Roof and envelope refresh • Property One",
+    label: "Roofing bid received",
+    context: "Northline Roofing Co.",
     timestamp: "2h ago",
     tone: "info",
   },
   {
     id: "a2",
-    label: "Walkthrough notes added",
-    context: "Property Six",
+    label: "Existing conditions photos uploaded",
+    context: "Kitchen, batch 3",
     timestamp: "5h ago",
     tone: "neutral",
   },
   {
     id: "a3",
     label: "Coverage gap flagged",
-    context: "Property Two",
+    context: "Adirondack Plumbing — workers comp expired",
     timestamp: "Yesterday",
     tone: "warning",
   },
   {
     id: "a4",
-    label: "Photo batch archived",
-    context: "Property Six",
+    label: "Demolition permit closed out",
+    context: "D-2026-0388",
     timestamp: "Yesterday",
     tone: "success",
   },
   {
     id: "a5",
-    label: "Permit package sent for review",
-    context: "Property Four",
+    label: "Change order submitted",
+    context: "CO-001 — sill plate replacement",
     timestamp: "2d ago",
     tone: "review",
   },
 ];
 
-export const upcomingDeadlines: Deadline[] = [
-  { id: "u1", label: "Insurance coverage review", due: "May 01", context: "Property Two" },
-  { id: "u2", label: "Vendor quote confirmation", due: "Apr 30", context: "Property One" },
-  { id: "u3", label: "HVAC proposal review", due: "May 06", context: "Property Four" },
-  { id: "u4", label: "Survey upload", due: "May 02", context: "Property Three" },
+export const openDecisions: Decision[] = [
+  {
+    id: "dc1",
+    label: "Award roofing trade",
+    context: "Two bids in, scope variance under review",
+    due: "May 02",
+  },
+  {
+    id: "dc2",
+    label: "Approve CO-001",
+    context: "Sill plate replacement, $2,400",
+    due: "May 03",
+  },
+  {
+    id: "dc3",
+    label: "Confirm tile selection",
+    context: "Primary bath, lead time risk",
+    due: "May 09",
+  },
+];
+
+export const upcomingDeadlines: Decision[] = [
+  { id: "u1", label: "Building permit response", due: "May 06", context: "Plan review" },
+  { id: "u2", label: "Workers comp update — Adirondack", due: "May 03", context: "Compliance" },
+  { id: "u3", label: "Roofing award decision", due: "May 02", context: "Trade selection" },
+  { id: "u4", label: "Pre-rough-in walkthrough", due: "Jun 01", context: "Field" },
 ];
 
 export const riskItems: RiskItem[] = [
   {
     id: "r1",
-    label: "Coverage gap flagged",
+    label: "Adirondack Plumbing workers comp expired",
     severity: "high",
-    context: "Property Two — needs verification",
+    context: "Cannot award until updated certificate received.",
   },
   {
     id: "r2",
-    label: "Permit checklist incomplete",
+    label: "Tile lead time exceeds finish window",
     severity: "medium",
-    context: "Property Four — placeholder file",
+    context: "Primary bath — alternate selection needed by May 09.",
   },
   {
     id: "r3",
-    label: "Title summary unverified",
+    label: "Decking allowance not yet quantified",
     severity: "medium",
-    context: "Property One",
+    context: "Roofing scope has placeholder; verify before award.",
   },
 ];
 
 export const continueItems: ContinueItem[] = [
   {
     id: "k1",
-    label: "Roof and envelope refresh",
-    href: "/projects",
+    label: "Roofing bid comparison",
+    href: "/bids",
     context: "Last opened 2h ago",
   },
   {
     id: "k2",
-    label: "Title summary draft",
-    href: "/documents",
+    label: "Adirondack Plumbing — qualification gap",
+    href: "/contractors",
     context: "Last opened yesterday",
   },
 ];
 
 export const dashboardStats = [
-  { label: "Active properties", value: "4", delta: "+1 this month" },
-  { label: "Active projects", value: "5", delta: "2 in review" },
-  { label: "Open tasks", value: "12", delta: "3 high priority" },
-  { label: "Documents pending review", value: "6", delta: "Needs verification" },
+  { label: "Active contractors", value: "10", delta: "1 do-not-use, 2 prospect" },
+  { label: "Open bids", value: "4", delta: "1 awarded, 1 shortlisted" },
+  { label: "Open tasks", value: "8", delta: "3 high priority" },
+  { label: "Documents pending review", value: "3", delta: "Needs verification" },
 ];
 
-export const propertyTypes = ["All", "Residential", "Mixed-use", "Commercial", "Land"] as const;
-export const propertyStatuses = ["All", "Active", "Planning", "In progress", "Review", "On hold", "Needs verification"] as const;
-export const taskFilters = ["All", "Today", "This week", "High priority", "In review", "At risk"] as const;
-export const contactRoles = ["All", "Architect", "Contractor", "Inspector", "Realtor", "Vendor", "Other"] as const;
-export const documentCategories = ["All", "Legal", "Financial", "Plans", "Permits", "Photos", "Other"] as const;
+export const contractorStatusFilters = [
+  "All",
+  "Prospect",
+  "Prequalification needed",
+  "Bid requested",
+  "Bid received",
+  "Shortlisted",
+  "Awarded",
+  "Preferred",
+  "Backup",
+  "Do not use",
+] as const;
+
+export const tradeFilters = [
+  "All",
+  "General",
+  "Roofing",
+  "Framing",
+  "Electrical",
+  "Plumbing",
+  "HVAC",
+  "Painting",
+  "Flooring",
+  "Architect",
+] as const;
+
+export const taskFilters = [
+  "All",
+  "Today",
+  "Office",
+  "Field",
+  "Punch list",
+  "High priority",
+  "At risk",
+] as const;
+
+export const documentCategories = [
+  "All",
+  "Contract",
+  "COI",
+  "Proposal",
+  "Permit",
+  "Plan",
+  "Photo",
+  "Inspection",
+  "Other",
+] as const;

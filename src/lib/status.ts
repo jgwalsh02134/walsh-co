@@ -50,3 +50,29 @@ export const priorityLabels: Record<Priority, { label: string; tone: StatusTone 
   medium: { label: "Medium", tone: "info" },
   low: { label: "Low", tone: "neutral" },
 };
+
+export type ContractorStatus =
+  | "prospect"
+  | "prequalification_needed"
+  | "bid_requested"
+  | "bid_received"
+  | "shortlisted"
+  | "awarded"
+  | "preferred"
+  | "backup"
+  | "do_not_use";
+
+export const contractorStatusLabels: Record<
+  ContractorStatus,
+  { label: string; tone: StatusTone }
+> = {
+  prospect: { label: "Prospect", tone: "neutral" },
+  prequalification_needed: { label: "Prequalification needed", tone: "warning" },
+  bid_requested: { label: "Bid requested", tone: "info" },
+  bid_received: { label: "Bid received", tone: "review" },
+  shortlisted: { label: "Shortlisted", tone: "review" },
+  awarded: { label: "Awarded", tone: "success" },
+  preferred: { label: "Preferred", tone: "success" },
+  backup: { label: "Backup", tone: "neutral" },
+  do_not_use: { label: "Do not use", tone: "error" },
+};

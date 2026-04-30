@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CommandPalettePlaceholder } from "@/components/command-palette-placeholder";
 import { landingCards } from "@/lib/navigation";
 
 export default function Home() {
@@ -29,15 +30,15 @@ export default function Home() {
             Walsh Co
           </span>
           <h1 className="font-display text-4xl leading-[1.1] text-[var(--color-text)] sm:text-5xl md:text-6xl">
-            Welcome to your workspace.
+            322 Osborne Renovation Workbench.
           </h1>
           <p className="max-w-xl text-base text-[var(--color-text-muted)] sm:text-lg">
-            A private operating system for property work. Choose a section to
-            get started.
+            Renovation and construction operations for the project. Plan and
+            decide on desktop, update from the field on iPhone.
           </p>
         </header>
 
-        <ul className="grid w-full grid-cols-1 gap-[13px] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className="grid w-full grid-cols-1 gap-[13px] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Workspace sections">
           {landingCards.map((card) => (
             <li key={card.href}>
               <Link
@@ -84,16 +85,7 @@ export default function Home() {
           ))}
         </ul>
 
-        <button
-          type="button"
-          aria-label="Open command palette (coming soon)"
-          className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-glass)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-muted)] backdrop-blur transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
-        >
-          <kbd className="inline-flex h-5 items-center gap-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 font-mono text-[10px] font-semibold text-[var(--color-text-muted)]">
-            <span aria-hidden>⌘</span>K
-          </kbd>
-          <span>Search workspace</span>
-        </button>
+        <CommandPalettePlaceholder />
 
         <p className="text-xs text-[var(--color-text-faint)]">
           Workspace placeholder · Setup in progress

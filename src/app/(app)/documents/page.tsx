@@ -11,7 +11,23 @@ export default function DocumentsPage() {
       <PageHeader
         eyebrow="Vault"
         title="Documents"
-        description="Mock document store. No real upload logic; placeholder UI only."
+        description="Contracts, COIs, proposals, permits, plans, photos, and inspection notes. Placeholder UI — uploads not wired."
+        primaryAction={
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-text-inverse)] transition-colors hover:bg-[var(--color-primary-hover)]"
+          >
+            Upload
+          </button>
+        }
+        secondaryAction={
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-semibold text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)]"
+          >
+            Capture photo
+          </button>
+        }
       />
 
       <div
@@ -33,8 +49,7 @@ export default function DocumentsPage() {
           Drop files to upload
         </h2>
         <p className="max-w-md text-sm text-[var(--color-text-muted)]">
-          Or browse from your device. Setup in progress — uploads are not yet
-          wired to a real backend.
+          Or browse from your device. Setup in progress — uploads are not yet wired to a backend.
         </p>
         <button
           type="button"
@@ -56,12 +71,12 @@ export default function DocumentsPage() {
       </div>
 
       <SectionPanel title="All documents" description={`${documents.length} files`} padded={false}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
             <thead>
               <tr className="text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                 <th className="border-b border-[var(--color-border)] px-[21px] py-2">Title</th>
-                <th className="border-b border-[var(--color-border)] px-3 py-2">Property</th>
+                <th className="border-b border-[var(--color-border)] px-3 py-2">Linked to</th>
                 <th className="border-b border-[var(--color-border)] px-3 py-2">Category</th>
                 <th className="border-b border-[var(--color-border)] px-3 py-2">Status</th>
                 <th className="border-b border-[var(--color-border)] px-3 py-2">Updated</th>
@@ -75,7 +90,7 @@ export default function DocumentsPage() {
                     {doc.title}
                   </td>
                   <td className="border-b border-[var(--color-border)] px-3 py-3 text-[var(--color-text-muted)]">
-                    {doc.property}
+                    {doc.contractor ?? "—"}
                   </td>
                   <td className="border-b border-[var(--color-border)] px-3 py-3 text-[var(--color-text-muted)]">
                     {doc.category}
@@ -94,6 +109,28 @@ export default function DocumentsPage() {
             </tbody>
           </table>
         </div>
+
+        <ul className="flex flex-col gap-[13px] p-[13px] md:hidden">
+          {documents.map((doc) => (
+            <li
+              key={doc.id}
+              className="flex flex-col gap-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-medium text-[var(--color-text)]">{doc.title}</span>
+                <StatusBadge status={doc.status} />
+              </div>
+              <span className="text-xs text-[var(--color-text-muted)]">
+                {doc.category}
+                {doc.contractor ? ` · ${doc.contractor}` : ""}
+              </span>
+              <div className="flex items-center justify-between text-xs text-[var(--color-text-faint)]">
+                <span>Updated {doc.updated}</span>
+                <span>{doc.size}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       </SectionPanel>
     </>
   );
