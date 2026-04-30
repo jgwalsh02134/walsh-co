@@ -52,6 +52,11 @@ export const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M6 19v-7m4 7V8m4 11v-5m4 5V5" />
     </svg>
   ),
+  integrations: (
+    <svg {...iconProps}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 7H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h4M15 7h4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-4M9 12h6" />
+    </svg>
+  ),
   settings: (
     <svg {...iconProps}>
       <circle cx="12" cy="12" r="3" />
@@ -73,6 +78,7 @@ export const sidebarNav: NavItem[] = [
   { label: "Tasks", href: "/tasks", icon: icons.tasks },
   { label: "Documents", href: "/documents", icon: icons.documents },
   { label: "Budget", href: "/budget", icon: icons.budget },
+  { label: "Integrations", href: "/integrations", icon: icons.integrations },
 ];
 
 export const settingsNav: NavItem[] = [
@@ -122,6 +128,12 @@ export const landingCards: LandingCard[] = [
     description: "Review estimates, quotes, committed costs, and variance.",
     href: "/budget",
     icon: icons.budget,
+  },
+  {
+    title: "Integrations",
+    description: "Connect Slack, Teams, Planner, Notion, Excel, GitHub, and Midpage.",
+    href: "/integrations",
+    icon: icons.integrations,
   },
 ];
 

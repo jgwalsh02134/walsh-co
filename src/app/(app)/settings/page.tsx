@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 
@@ -53,11 +54,20 @@ export default function SettingsPage() {
 
       <SectionPanel
         title="Integrations"
-        description="External services this workspace will connect to."
+        description="External services this workspace can connect to."
       >
         <p className="text-sm text-[var(--color-text-muted)]">
-          Integrations are coming later. None are connected yet.
+          Walsh Co talks to Slack, Microsoft Teams, Microsoft Planner,
+          Microsoft Excel, GitHub, Notion, and Midpage through server-side
+          adapters. Credentials live in environment variables on the server and
+          are never sent to the browser.
         </p>
+        <Link
+          href="/integrations"
+          className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-primary)] hover:underline"
+        >
+          Manage integrations →
+        </Link>
       </SectionPanel>
     </>
   );

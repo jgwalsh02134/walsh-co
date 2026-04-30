@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { SectionPanel } from "@/components/section-panel";
 import {
   bids,
@@ -61,6 +62,12 @@ export default function WorkbenchPage() {
   const totalCommitted = budgetCategories.reduce((s, c) => s + c.committed, 0);
   const totalPaid = budgetCategories.reduce((s, c) => s + c.paid, 0);
   const overrunCategory = budgetCategories.find((c) => c.paid > c.estimated);
+  const committedPct = totalEstimated
+    ? Math.round((totalCommitted / totalEstimated) * 100)
+    : 0;
+  const paidPct = totalEstimated
+    ? Math.round((totalPaid / totalEstimated) * 100)
+    : 0;
 
   return (
     <>
@@ -281,12 +288,14 @@ export default function WorkbenchPage() {
                   {formatCurrency(totalPaid)}
                 </span>
               </div>
+              <ProgressBar value={paidPct} label="Paid vs. estimate" tone="primary" />
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-[var(--color-text-muted)]">Committed</span>
                 <span className="font-semibold text-[var(--color-text)]">
                   {formatCurrency(totalCommitted)}
                 </span>
               </div>
+              <ProgressBar value={committedPct} label="Committed vs. estimate" tone="neutral" />
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-[var(--color-text-muted)]">Estimated</span>
                 <span className="font-semibold text-[var(--color-text)]">

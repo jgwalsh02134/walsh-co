@@ -2,13 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { isActiveHref, settingsNav, sidebarNav } from "@/lib/navigation";
+import { CommandPalette, openCommandPalette } from "./command-palette";
+
+const subscribePlatform = () => () => {};
+const getPlatformSnapshot = () =>
+  typeof navigator !== "undefined" && navigator.platform.toUpperCase().includes("MAC")
+    ? "mac"
+    : "other";
+const getServerPlatformSnapshot = () => "other" as const;
 
 export function TopBar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const platform = useSyncExternalStore(
+    subscribePlatform,
+    getPlatformSnapshot,
+    getServerPlatformSnapshot,
+  );
+  const paletteHint = platform === "mac" ? "⌘K" : "Ctrl K";
   const close = () => setOpen(false);
+
+  const triggerPalette = () => {
+    openCommandPalette();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -52,12 +70,38 @@ export function TopBar() {
         </div>
       </div>
 
-      <span
-        aria-label="Account"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-surface-soft)] text-sm font-semibold text-[var(--color-text)]"
-      >
-        JW
-      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={triggerPalette}
+          aria-label="Open command palette"
+          className="hidden items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)] sm:inline-flex"
+        >
+          <svg
+            className="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path strokeLinecap="round" d="m20 20-3.5-3.5" />
+          </svg>
+          <span>Jump to…</span>
+          <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
+            {paletteHint}
+          </kbd>
+        </button>
+        <span
+          aria-label="Account"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-surface-soft)] text-sm font-semibold text-[var(--color-text)]"
+        >
+          JW
+        </span>
+      </div>
+
+      <CommandPalette />
 
       {open ? (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
