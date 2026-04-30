@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { isActiveHref, settingsNav, sidebarNav } from "@/lib/navigation";
-import { CommandPalette } from "./command-palette";
+import { CommandPalette, openCommandPalette } from "./command-palette";
 
 const subscribePlatform = () => () => {};
 const getPlatformSnapshot = () =>
@@ -25,9 +25,7 @@ export function TopBar() {
   const close = () => setOpen(false);
 
   const triggerPalette = () => {
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true }),
-    );
+    openCommandPalette();
   };
 
   useEffect(() => {

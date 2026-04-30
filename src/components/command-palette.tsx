@@ -18,6 +18,17 @@ const navCommands: Command[] = [...sidebarNav, ...settingsNav].map((item) => ({
   href: item.href,
 }));
 
+type Listener = (next: boolean) => void;
+const listeners = new Set<Listener>();
+
+export function openCommandPalette() {
+  listeners.forEach((l) => l(true));
+}
+
+export function toggleCommandPalette() {
+  listeners.forEach((l) => l(false));
+}
+
 function fuzzyMatch(haystack: string, needle: string): boolean {
   if (!needle) return true;
   const h = haystack.toLowerCase();
@@ -60,17 +71,34 @@ export function CommandPalette() {
   );
 
   useEffect(() => {
+    const listener: Listener = (forceOpen) => {
+      setOpen((prev) => (forceOpen ? true : !prev));
+    };
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen((prev) => !prev);
-      } else if (e.key === "Escape" && open) {
-        close();
+      } else if (e.key === "Escape") {
+        setOpen((prev) => {
+          if (prev) {
+            setQuery("");
+            setRawActive(0);
+            return false;
+          }
+          return prev;
+        });
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, close]);
+  }, []);
 
   useEffect(() => {
     if (open) {
