@@ -6,119 +6,76 @@
   --font-display: "freight-text-pro", Georgia, Cambria, "Times New Roman",
     serif;
 
-  --color-bg: #f6f8f7;
-  --color-bg-warm: #f4efe6;
-  --color-surface: #ffffff;
-  --color-surface-soft: #eef2f0;
-  --color-surface-glass: rgba(255, 255, 255, 0.72);
+  --color-bg: #F4F7F7;
+  --color-bg-warm: #F8F5EF;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #F9FBFA;
+  --color-surface-soft: #EEF3F1;
 
-  --color-text: #101a16;
-  --color-text-muted: #53625b;
-  --color-text-faint: #7b8982;
-  --color-text-inverse: #f8faf9;
+  --color-border: #D9E1DE;
+  --color-border-strong: #A6B3AE;
 
-  --color-border: #d7deda;
-  --color-border-strong: #9ca8a2;
+  --color-text: #111827;
+  --color-text-muted: #52615B;
+  --color-text-faint: #7B8983;
+  --color-text-inverse: #FFFFFF;
 
-  --color-primary: #1f5c54;
-  --color-primary-hover: #174940;
-  --color-primary-soft: #e4f1ef;
-  --color-focus: #2f7d73;
+  --color-primary: #155E63;
+  --color-primary-hover: #0F474A;
+  --color-primary-soft: #E2F2F1;
+  --color-link: #2563A8;
+  --color-focus: #2B7FFF;
 
-  --color-info-link: #2f5f8f;
+  --color-heritage-green: #244C3A;
+  --color-heritage-brick: #8B4A3B;
 
-  --color-estate-green: #244c3a;
-  --color-pruyn-brick: #8f4a3a;
-  --color-loudonville-white: #f7f4ed;
+  --status-success-text: #166534;
+  --status-success-bg: #EAF7EE;
+  --status-success-border: #B8DEC4;
 
-  --status-success-text: #236b3d;
-  --status-success-bg: #eaf7ee;
-  --status-success-border: #b8dfc4;
+  --status-warning-text: #92400E;
+  --status-warning-bg: #FFF7E0;
+  --status-warning-border: #F0D28A;
 
-  --status-warning-text: #875a12;
-  --status-warning-bg: #fff5da;
-  --status-warning-border: #e8c978;
+  --status-review-text: #5B3FA4;
+  --status-review-bg: #F1EDFF;
+  --status-review-border: #CFC4F6;
 
-  --status-review-text: #5b4ba8;
-  --status-review-bg: #f1efff;
-  --status-review-border: #cbc4f3;
+  --status-info-text: #1D5D8F;
+  --status-info-bg: #EAF4FF;
+  --status-info-border: #BBD8F0;
 
-  --status-info-text: #285f8f;
-  --status-info-bg: #eaf4ff;
-  --status-info-border: #b9d8f2;
+  --status-error-text: #A12A2A;
+  --status-error-bg: #FDECEC;
+  --status-error-border: #E8B5B5;
 
-  --status-error-text: #a3392f;
-  --status-error-bg: #fdeeee;
-  --status-error-border: #e7b6b1;
-
-  --status-neutral-text: #415066;
-  --status-neutral-bg: #f1f5f9;
-  --status-neutral-border: #cbd5e1;
-
-  --landing-bg:
-    radial-gradient(circle at top left, rgba(31, 92, 84, 0.14), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(143, 74, 58, 0.10), transparent 32%),
-    linear-gradient(135deg, #f6f8f7 0%, #f4efe6 100%);
+  --status-neutral-text: #475569;
+  --status-neutral-bg: #F1F5F9;
+  --status-neutral-border: #CBD5E1;
 
   --space-1: 8px;
-  --space-2: 13px;
-  --space-3: 21px;
+  --space-2: 12px;
+  --space-3: 16px;
   --space-4: 24px;
-  --space-5: 34px;
-  --space-6: 55px;
+  --space-5: 32px;
+  --space-6: 48px;
 
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
 
-  --shadow-card: 0 1px 2px rgba(15, 23, 19, 0.04),
-    0 1px 1px rgba(15, 23, 19, 0.03);
-  --shadow-card-hover: 0 4px 12px rgba(15, 23, 19, 0.08),
-    0 1px 2px rgba(15, 23, 19, 0.04);
-  --shadow-rail: 0 1px 0 rgba(15, 23, 19, 0.04);
-}
-
-.dark {
-  --color-bg: #0d1412;
-  --color-bg-warm: #151b17;
-  --color-surface: #17211c;
-  --color-surface-soft: #202b25;
-  --color-surface-glass: rgba(23, 33, 28, 0.72);
-
-  --color-text: #f4f7f5;
-  --color-text-muted: #b4c0ba;
-  --color-text-faint: #88958f;
-  --color-text-inverse: #101a16;
-
-  --color-border: #33423b;
-  --color-border-strong: #5b6a63;
-
-  --color-primary: #7ab7ac;
-  --color-primary-hover: #9ccbc3;
-  --color-primary-soft: #183b36;
-  --color-focus: #9ccbc3;
-
-  --color-info-link: #8dbbe5;
-
-  --color-estate-green: #78a98d;
-  --color-pruyn-brick: #c98272;
-  --color-loudonville-white: #f7f4ed;
-
-  --landing-bg:
-    radial-gradient(circle at top left, rgba(122, 183, 172, 0.20), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(201, 130, 114, 0.12), transparent 34%),
-    linear-gradient(135deg, #0d1412 0%, #151b17 100%);
-
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-card-hover: 0 6px 16px rgba(0, 0, 0, 0.45);
-  --shadow-rail: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(17, 24, 39, 0.08),
+    0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-rail: 0 1px 0 rgba(17, 24, 39, 0.04);
 }
 
 @theme inline {
   --color-bg: var(--color-bg);
   --color-bg-warm: var(--color-bg-warm);
   --color-surface: var(--color-surface);
+  --color-surface-raised: var(--color-surface-raised);
   --color-surface-soft: var(--color-surface-soft);
 
   --color-text: var(--color-text);
@@ -132,13 +89,11 @@
   --color-primary: var(--color-primary);
   --color-primary-hover: var(--color-primary-hover);
   --color-primary-soft: var(--color-primary-soft);
+  --color-link: var(--color-link);
   --color-focus: var(--color-focus);
 
-  --color-info-link: var(--color-info-link);
-
-  --color-estate-green: var(--color-estate-green);
-  --color-pruyn-brick: var(--color-pruyn-brick);
-  --color-loudonville-white: var(--color-loudonville-white);
+  --color-heritage-green: var(--color-heritage-green);
+  --color-heritage-brick: var(--color-heritage-brick);
 
   --font-sans: var(--font-ui);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -166,9 +121,8 @@ body {
   font-feature-settings: "liga", "dlig", "kern";
 }
 
-dialog.command-palette::backdrop {
-  background: rgba(13, 20, 18, 0.45);
-  backdrop-filter: blur(4px);
+a {
+  color: inherit;
 }
 
 *:focus-visible {

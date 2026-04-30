@@ -1,63 +1,27 @@
-import { FilterPill, FilterPillRow } from "@/components/filter-pill";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
-import { StatusBadge } from "@/components/status-badge";
+import { tasks, taskLaneLabels, type TaskLane } from "@/lib/mock-data";
 import { priorityLabels, statusTokens } from "@/lib/status";
-import { taskFilters, tasks, type Task } from "@/lib/mock-data";
 
-function PriorityPill({ priority }: { priority: Task["priority"] }) {
+const laneOrder: TaskLane[] = ["today", "this_week", "waiting", "done"];
+
+const laneDescriptions: Record<TaskLane, string> = {
+  today: "Doing now",
+  this_week: "Plan to finish this week",
+  waiting: "Blocked or pending response",
+  done: "Recently closed",
+};
+
+function PriorityTag({ priority }: { priority: keyof typeof priorityLabels }) {
   const meta = priorityLabels[priority];
   const tone = statusTokens[meta.tone];
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
-      style={{ background: tone.background, color: tone.text }}
+      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+      style={{ background: tone.background, color: tone.text, borderColor: tone.border }}
     >
-      {meta.label}
+      {meta.label} priority
     </span>
-  );
-}
-
-const contextOrder: Task["context"][] = ["Office", "Field", "Punch list"];
-
-function ContextSection({ context }: { context: Task["context"] }) {
-  const items = tasks.filter((t) => t.context === context);
-  if (items.length === 0) return null;
-  return (
-    <SectionPanel
-      title={context}
-      description={`${items.length} open`}
-      padded={false}
-    >
-      <ul className="divide-y divide-[var(--color-border)]">
-        {items.map((task) => (
-          <li
-            key={task.id}
-            className="flex flex-col gap-2 px-[21px] py-3 sm:flex-row sm:items-center sm:gap-4"
-          >
-            <span
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--color-border-strong)] bg-[var(--color-surface)]"
-              aria-hidden
-            />
-            <div className="flex flex-1 flex-col gap-0.5">
-              <span className="text-sm font-medium text-[var(--color-text)]">
-                {task.title}
-              </span>
-              <span className="text-xs text-[var(--color-text-muted)]">
-                Owner: {task.owner}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-              <PriorityPill priority={task.priority} />
-              <StatusBadge status={task.status} />
-              <span className="text-xs font-semibold text-[var(--color-text-muted)]">
-                Due {task.dueDate}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </SectionPanel>
   );
 }
 
@@ -65,37 +29,60 @@ export default function TasksPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Tasks & Punch List"
-        title="Tasks"
-        description="Office work, field work, and punch list items grouped by context. Use filters to narrow your view."
-        primaryAction={
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-text-inverse)] transition-colors hover:bg-[var(--color-primary-hover)]"
-          >
-            New task
-          </button>
-        }
-        secondaryAction={
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-semibold text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)]"
-          >
-            Add field issue
-          </button>
-        }
+        eyebrow="Tasks"
+        title="Execution board"
+        description="Today, this week, waiting on others, and recently completed."
       />
 
-      <FilterPillRow>
-        {taskFilters.map((label, idx) => (
-          <FilterPill key={label} label={label} active={idx === 0} />
-        ))}
-      </FilterPillRow>
-
-      <div className="flex flex-col gap-[21px]">
-        {contextOrder.map((c) => (
-          <ContextSection key={c} context={c} />
-        ))}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {laneOrder.map((lane) => {
+          const items = tasks.filter((t) => t.lane === lane);
+          const isDone = lane === "done";
+          return (
+            <SectionPanel
+              key={lane}
+              title={taskLaneLabels[lane]}
+              description={`${items.length} · ${laneDescriptions[lane]}`}
+              padded={false}
+            >
+              {items.length === 0 ? (
+                <p className="px-5 py-6 text-center text-xs text-[var(--color-text-muted)]">
+                  Nothing in this lane.
+                </p>
+              ) : (
+                <ul className="divide-y divide-[var(--color-border)]">
+                  {items.map((t) => (
+                    <li key={t.id} className="flex flex-col gap-1.5 px-5 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <span
+                          className={`text-sm ${
+                            isDone
+                              ? "text-[var(--color-text-muted)] line-through"
+                              : "text-[var(--color-text)]"
+                          }`}
+                        >
+                          {t.title}
+                        </span>
+                        <span className="shrink-0 text-xs font-medium text-[var(--color-text-muted)]">
+                          {t.dueDate}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-muted)]">
+                        <span>{t.context}</span>
+                        <span aria-hidden>·</span>
+                        <span>Owner: {t.owner}</span>
+                        {!isDone ? <PriorityTag priority={t.priority} /> : null}
+                      </div>
+                      {t.notes ? (
+                        <p className="text-xs text-[var(--color-text-muted)]">{t.notes}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionPanel>
+          );
+        })}
       </div>
     </>
   );

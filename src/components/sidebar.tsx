@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { desktopNav, isActiveHref, secondaryNav, type NavItem } from "@/lib/navigation";
+import { isActiveHref, settingsNav, sidebarNav, type NavItem } from "@/lib/navigation";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
@@ -12,7 +12,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-colors ${
         active
           ? "bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
-          : "text-[var(--color-text)] hover:bg-[var(--color-bg-warm)]"
+          : "text-[var(--color-text)] hover:bg-[var(--color-surface-soft)]"
       }`}
     >
       <span
@@ -32,7 +32,7 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Primary"
-      className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:gap-[34px] lg:border-r lg:border-[var(--color-border)] lg:bg-[var(--color-surface-soft)] lg:px-4 lg:py-6"
+      className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-[var(--color-border)] lg:bg-[var(--color-surface)] lg:px-4 lg:py-6"
     >
       <Link
         href="/"
@@ -50,7 +50,7 @@ export function Sidebar() {
       </Link>
 
       <nav className="flex flex-col gap-1" aria-label="Sections">
-        {desktopNav.map((item) => (
+        {sidebarNav.map((item) => (
           <NavLink
             key={item.href}
             item={item}
@@ -60,10 +60,7 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto flex flex-col gap-1">
-        <span className="px-3 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
-          Workspace
-        </span>
-        {secondaryNav.map((item) => (
+        {settingsNav.map((item) => (
           <NavLink
             key={item.href}
             item={item}

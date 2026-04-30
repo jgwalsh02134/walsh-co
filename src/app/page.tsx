@@ -1,26 +1,12 @@
 import Link from "next/link";
-import { CommandPalettePlaceholder } from "@/components/command-palette-placeholder";
-import { landingCards } from "@/lib/navigation";
+import { icons, landingCards } from "@/lib/navigation";
 
 export default function Home() {
   return (
-    <div
-      className="relative isolate flex min-h-dvh w-full flex-col items-center justify-center overflow-hidden px-5 py-[55px] sm:px-8 sm:py-[89px]"
-      style={{ background: "var(--landing-bg)" }}
-    >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, var(--color-text) 1px, transparent 0)",
-          backgroundSize: "32px 32px",
-        }}
-      />
-
-      <main className="flex w-full max-w-6xl flex-col items-center gap-[55px]">
-        <header className="flex max-w-2xl flex-col items-center gap-[13px] text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-glass)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] backdrop-blur">
+    <div className="flex min-h-dvh w-full flex-col bg-[var(--color-bg)]">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-10 px-5 py-12 sm:px-8 sm:py-16 lg:py-20">
+        <header className="flex flex-col gap-3">
+          <span className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1 text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
             <span
               aria-hidden
               className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
@@ -29,35 +15,30 @@ export default function Home() {
             </span>
             Walsh Co
           </span>
-          <h1 className="font-display text-4xl leading-[1.1] text-[var(--color-text)] sm:text-5xl md:text-6xl">
-            322 Osborne Renovation Workbench.
+          <h1 className="font-display text-3xl leading-tight text-[var(--color-text)] sm:text-4xl md:text-5xl">
+            Walsh Co
           </h1>
-          <p className="max-w-xl text-base text-[var(--color-text-muted)] sm:text-lg">
-            Renovation and construction operations for the project. Plan and
-            decide on desktop, update from the field on iPhone.
+          <p className="max-w-2xl text-base text-[var(--color-text-muted)] sm:text-lg">
+            Renovation workspace for 322 Osborne and future properties.
           </p>
         </header>
 
-        <ul className="grid w-full grid-cols-1 gap-[13px] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Workspace sections">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {landingCards.map((card) => (
-            <li key={card.href}>
+            <li key={card.href} className="contents">
               <Link
                 href={card.href}
-                className="group relative flex h-full min-h-[148px] flex-col gap-3 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-glass)] p-[21px] shadow-[var(--shadow-card)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-[var(--color-primary)] hover:bg-[var(--color-surface)] hover:shadow-[var(--shadow-card-hover)]"
+                className="group flex h-full min-h-[160px] flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-card-hover)] sm:p-6"
               >
                 <span
                   aria-hidden
-                  className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--color-primary)]/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
-                />
-                <span
-                  aria-hidden
-                  className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] text-[var(--color-primary)] transition-colors group-hover:bg-[var(--color-primary)] group-hover:text-[var(--color-text-inverse)]"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
                 >
                   {card.icon}
                 </span>
-                <div className="flex flex-1 flex-col gap-1">
-                  <h2 className="text-base font-semibold text-[var(--color-text)]">
-                    {card.label}
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <h2 className="text-lg font-semibold text-[var(--color-text)]">
+                    {card.title}
                   </h2>
                   <p className="text-sm leading-6 text-[var(--color-text-muted)]">
                     {card.description}
@@ -65,31 +46,18 @@ export default function Home() {
                 </div>
                 <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-primary)]">
                   Open
-                  <svg
-                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    viewBox="0 0 24 24"
-                    aria-hidden
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5 12h14M13 5l7 7-7 7"
-                    />
-                  </svg>
+                  <span className="transition-transform group-hover:translate-x-0.5" aria-hidden>
+                    {icons.arrowRight}
+                  </span>
                 </span>
               </Link>
             </li>
           ))}
         </ul>
 
-        <CommandPalettePlaceholder />
-
-        <p className="text-xs text-[var(--color-text-faint)]">
-          Workspace placeholder · Setup in progress
-        </p>
+        <footer className="mt-auto flex flex-col gap-1 pt-8 text-xs text-[var(--color-text-faint)]">
+          <span>Access protected by Cloudflare Access · Microsoft login.</span>
+        </footer>
       </main>
     </div>
   );

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { MobileNav } from "./mobile-nav";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
 
@@ -9,13 +8,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="flex-1 px-4 pb-[96px] pt-[21px] sm:px-6 sm:pt-[34px] lg:px-[34px] lg:pb-[55px] lg:pt-[34px]">
-          <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-[34px] xl:max-w-[1440px]">
+        <main className="flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+          <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-8 xl:max-w-[1320px]">
             {children}
           </div>
         </main>
       </div>
-      <MobileNav />
     </div>
   );
 }
