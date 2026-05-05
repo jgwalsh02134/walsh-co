@@ -22,7 +22,22 @@ export const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 12 12 3l9 9M5 10v10h4v-6h6v6h4V10" />
     </svg>
   ),
-  workbench: (
+  portfolio: (
+    <svg {...iconProps}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18v12H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" />
+    </svg>
+  ),
+  market: (
+    <svg {...iconProps}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l5-5 4 4 7-8M14 8h6v6" />
+    </svg>
+  ),
+  properties: (
+    <svg {...iconProps}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10v10h6v-6h6v6h6V10L12 3 3 10Z" />
+    </svg>
+  ),
+  renovation: (
     <svg {...iconProps}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-7h6v7" />
     </svg>
@@ -67,12 +82,15 @@ export const icons = {
 
 export const sidebarNav: NavItem[] = [
   { label: "Home", href: "/", icon: icons.home },
-  { label: "322 Osborne Workbench", href: "/workbench", icon: icons.workbench },
+  { label: "Portfolio", href: "/portfolio", icon: icons.portfolio },
+  { label: "Market Tracker", href: "/market", icon: icons.market },
+  { label: "Properties", href: "/properties", icon: icons.properties },
+  { label: "322 Osborne Workspace", href: "/renovation", icon: icons.renovation },
   { label: "Contractors", href: "/contractors", icon: icons.contractors },
   { label: "Bids", href: "/bids", icon: icons.bids },
-  { label: "Tasks", href: "/tasks", icon: icons.tasks },
   { label: "Documents", href: "/documents", icon: icons.documents },
   { label: "Budget", href: "/budget", icon: icons.budget },
+  { label: "Tasks", href: "/tasks", icon: icons.tasks },
 ];
 
 export const settingsNav: NavItem[] = [
@@ -88,42 +106,66 @@ export type LandingCard = {
 
 export const landingCards: LandingCard[] = [
   {
-    title: "322 Osborne Workbench",
-    description: "See project status, next decisions, and open items.",
-    href: "/workbench",
-    icon: icons.workbench,
+    title: "Portfolio",
+    description:
+      "View company holdings, property status, and portfolio-level summaries.",
+    href: "/portfolio",
+    icon: icons.portfolio,
   },
   {
-    title: "Contractors",
-    description: "Find, qualify, and contact trades and professionals.",
+    title: "Market Tracker",
+    description:
+      "Track values, rent estimates, comps, market trends, and data sources.",
+    href: "/market",
+    icon: icons.market,
+  },
+  {
+    title: "Properties",
+    description:
+      "Open individual property records, documents, tasks, and financial details.",
+    href: "/properties",
+    icon: icons.properties,
+  },
+  {
+    title: "322 Osborne Workspace",
+    description:
+      "Manage renovation scope, contractors, bids, tasks, budget, and documents.",
+    href: "/renovation",
+    icon: icons.renovation,
+  },
+  {
+    title: "Contractors & Bids",
+    description: "Source trades, compare proposals, and track award decisions.",
     href: "/contractors",
     icon: icons.contractors,
   },
   {
-    title: "Bids",
-    description: "Compare proposals, exclusions, pricing, and award status.",
-    href: "/bids",
-    icon: icons.bids,
-  },
-  {
-    title: "Tasks",
-    description: "Track today's work, follow-ups, and punch list items.",
-    href: "/tasks",
-    icon: icons.tasks,
-  },
-  {
     title: "Documents",
-    description: "Keep contracts, COIs, permits, bids, and photos organized.",
+    description:
+      "Organize deeds, insurance, permits, contracts, COIs, bids, and photos.",
     href: "/documents",
     icon: icons.documents,
   },
   {
-    title: "Budget",
-    description: "Review estimates, quotes, committed costs, and variance.",
+    title: "Budget & Financials",
+    description:
+      "Track estimates, committed costs, actuals, variance, and exposure.",
     href: "/budget",
     icon: icons.budget,
   },
+  {
+    title: "Tasks & Follow-ups",
+    description:
+      "Manage project work, punch items, deadlines, and open decisions.",
+    href: "/tasks",
+    icon: icons.tasks,
+  },
 ];
+
+export const productName = "J.G. Walsh & Co.";
+export const productTitle = "J.G. Walsh & Co. Workspace";
+export const productSubtitle =
+  "Private portfolio, market intelligence, and renovation operations workspace for J.G. Walsh & Co.";
 
 export function isActiveHref(currentPath: string, href: string): boolean {
   if (href === "/") return currentPath === "/";

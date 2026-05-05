@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isActiveHref, settingsNav, sidebarNav, type NavItem } from "@/lib/navigation";
+import {
+  isActiveHref,
+  productName,
+  settingsNav,
+  sidebarNav,
+  type NavItem,
+} from "@/lib/navigation";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
@@ -45,7 +51,7 @@ export function Sidebar() {
           <span className="font-display text-base font-semibold">W</span>
         </span>
         <span className="font-display text-lg text-[var(--color-text)]">
-          Walsh Co
+          {productName}
         </span>
       </Link>
 

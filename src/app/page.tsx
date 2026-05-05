@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { icons, landingCards } from "@/lib/navigation";
+import {
+  icons,
+  landingCards,
+  productName,
+  productSubtitle,
+  productTitle,
+} from "@/lib/navigation";
 
 export default function Home() {
   return (
@@ -13,13 +19,13 @@ export default function Home() {
             >
               <span className="font-display text-[11px] font-semibold">W</span>
             </span>
-            Walsh Co
+            {productName}
           </span>
           <h1 className="font-display text-3xl leading-tight text-[var(--color-text)] sm:text-4xl md:text-5xl">
-            Walsh Co
+            {productTitle}
           </h1>
           <p className="max-w-2xl text-base text-[var(--color-text-muted)] sm:text-lg">
-            Renovation workspace for 322 Osborne and future properties.
+            {productSubtitle}
           </p>
         </header>
 
@@ -46,7 +52,10 @@ export default function Home() {
                 </div>
                 <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-primary)]">
                   Open
-                  <span className="transition-transform group-hover:translate-x-0.5" aria-hidden>
+                  <span
+                    className="transition-transform group-hover:translate-x-0.5"
+                    aria-hidden
+                  >
                     {icons.arrowRight}
                   </span>
                 </span>
@@ -55,8 +64,16 @@ export default function Home() {
           ))}
         </ul>
 
-        <footer className="mt-auto flex flex-col gap-1 pt-8 text-xs text-[var(--color-text-faint)]">
-          <span>Access protected by Cloudflare Access · Microsoft login.</span>
+        <footer className="mt-auto flex flex-col gap-2 pt-8 text-xs text-[var(--color-text-faint)] sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Access protected by Cloudflare Access · Microsoft Entra login.
+          </span>
+          <Link
+            href="/settings"
+            className="self-start text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:underline sm:self-auto"
+          >
+            Settings
+          </Link>
         </footer>
       </main>
     </div>

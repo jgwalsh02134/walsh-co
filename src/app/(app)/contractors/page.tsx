@@ -93,12 +93,6 @@ function ContactRow({ contractor }: { contractor: Contractor }) {
         >
           Email
         </a>
-        <span
-          className="inline-flex items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-faint)]"
-          title="Coming soon"
-        >
-          Notes
-        </span>
       </div>
 
       {contractor.notes ? (
@@ -128,13 +122,214 @@ export default function ContractorsPage() {
     });
   }, [search, trade]);
 
+  const tradeCounts = useMemo(() => {
+    const counts = new Map<Trade, number>();
+    for (const c of contractors) {
+      counts.set(c.trade, (counts.get(c.trade) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  }, []);
+
+  const preferred = contractors.filter((c) => c.status === "preferred");
+  const backup = contractors.filter((c) => c.status === "backup");
+  const doNotUse = contractors.filter((c) => c.status === "do_not_use");
+
+  const insuranceMissing = contractors.filter(
+    (c) => c.insurance === "missing" || c.insurance === "expired",
+  );
+
+  const inPipeline = contractors.filter(
+    (c) =>
+      c.bidStatus === "requested" ||
+      c.bidStatus === "received" ||
+      c.bidStatus === "shortlisted",
+  );
+
   return (
     <>
       <PageHeader
         eyebrow="Contractors"
         title="Trades & professionals"
-        description="Find, qualify, and contact contractors for the renovation. Click a phone or email to call or compose."
+        description="Source trades, qualify them, and track contact and bid status."
       />
+
+      <SectionPanel
+        title="Trade Categories"
+        description="Coverage across the trades currently tracked."
+      >
+        <ul className="flex flex-wrap gap-2">
+          {tradeCounts.map(([t, n]) => (
+            <li
+              key={t}
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-3 py-1 text-xs text-[var(--color-text)]"
+            >
+              {t} · {n}
+            </li>
+          ))}
+        </ul>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Qualification Status"
+        description="Where each contractor sits in qualification."
+      >
+        <ul className="flex flex-col gap-1.5 text-sm">
+          {(["preferred", "qualified", "prequalification_needed", "prospect", "backup", "do_not_use"] as const).map(
+            (key) => {
+              const meta = contractorStatusLabels[key];
+              const count = contractors.filter((c) => c.status === key).length;
+              return (
+                <li
+                  key={key}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <span className="text-[var(--color-text)]">{meta.label}</span>
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    {count}
+                  </span>
+                </li>
+              );
+            },
+          )}
+        </ul>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Insurance / Workers Comp / W-9"
+        description={`${insuranceMissing.length} contractor${
+          insuranceMissing.length === 1 ? "" : "s"
+        } need updated documentation.`}
+        padded={false}
+      >
+        {insuranceMissing.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-[var(--color-text-muted)]">
+            All contractors have insurance on file.
+          </p>
+        ) : (
+          <ul className="divide-y divide-[var(--color-border)]">
+            {insuranceMissing.map((c) => {
+              const ins = insuranceStatusLabels[c.insurance];
+              return (
+                <li
+                  key={c.id}
+                  className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-[var(--color-text)]">
+                      {c.company}
+                    </span>
+                    <span className="text-xs text-[var(--color-text-muted)]">
+                      {c.trade} · {c.contact}
+                    </span>
+                  </div>
+                  <ToneTag label={ins.label} tone={ins.tone} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionPanel>
+
+      <SectionPanel
+        title="Bid Pipeline"
+        description={`${inPipeline.length} contractor${
+          inPipeline.length === 1 ? "" : "s"
+        } in the active bid pipeline.`}
+        padded={false}
+      >
+        <ul className="divide-y divide-[var(--color-border)]">
+          {inPipeline.map((c) => {
+            const bid = bidStatusLabels[c.bidStatus];
+            return (
+              <li
+                key={c.id}
+                className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-[var(--color-text)]">
+                    {c.company}
+                  </span>
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    {c.trade} · {c.contact}
+                  </span>
+                </div>
+                <ToneTag label={bid.label} tone={bid.tone} />
+              </li>
+            );
+          })}
+        </ul>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Preferred / Backup / Do Not Use"
+        description="Quick reference of trade-partner standing."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
+              Preferred
+            </span>
+            <ul className="flex flex-col gap-1 text-sm text-[var(--color-text)]">
+              {preferred.map((c) => (
+                <li key={c.id}>
+                  {c.company}
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    {" "}
+                    · {c.trade}
+                  </span>
+                </li>
+              ))}
+              {preferred.length === 0 ? (
+                <li className="text-xs text-[var(--color-text-muted)]">
+                  None recorded.
+                </li>
+              ) : null}
+            </ul>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
+              Backup
+            </span>
+            <ul className="flex flex-col gap-1 text-sm text-[var(--color-text)]">
+              {backup.map((c) => (
+                <li key={c.id}>
+                  {c.company}
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    {" "}
+                    · {c.trade}
+                  </span>
+                </li>
+              ))}
+              {backup.length === 0 ? (
+                <li className="text-xs text-[var(--color-text-muted)]">
+                  None recorded.
+                </li>
+              ) : null}
+            </ul>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
+              Do Not Use
+            </span>
+            <ul className="flex flex-col gap-1 text-sm text-[var(--color-text)]">
+              {doNotUse.map((c) => (
+                <li key={c.id}>
+                  {c.company}
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    {" "}
+                    · {c.trade}
+                  </span>
+                </li>
+              ))}
+              {doNotUse.length === 0 ? (
+                <li className="text-xs text-[var(--color-text-muted)]">
+                  None recorded.
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        </div>
+      </SectionPanel>
 
       <div className="flex flex-col gap-3">
         <label className="flex w-full items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm shadow-[var(--shadow-card)] focus-within:border-[var(--color-focus)]">
@@ -182,8 +377,10 @@ export default function ContractorsPage() {
       </div>
 
       <SectionPanel
-        title={`${filtered.length} contractor${filtered.length === 1 ? "" : "s"}`}
-        description={trade === "All" ? "Across all trades" : `Filtered to ${trade}`}
+        title="Contractor Directory"
+        description={`${filtered.length} contractor${
+          filtered.length === 1 ? "" : "s"
+        }${trade === "All" ? " across all trades" : ` filtered to ${trade}`}.`}
         padded={false}
       >
         <div className="hidden border-b border-[var(--color-border)] bg-[var(--color-surface-soft)] px-6 py-2 lg:grid lg:grid-cols-[2fr_1fr_2fr_2fr_auto] lg:gap-4 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
@@ -201,7 +398,14 @@ export default function ContractorsPage() {
           filtered.map((c) => <ContactRow key={c.id} contractor={c} />)
         )}
       </SectionPanel>
+
+      <SectionPanel title="Notes" description="Working notes about the directory.">
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Contact details are working entries — verify before publishing
+          contracts. Notes captured per contractor are visible in the directory
+          rows above.
+        </p>
+      </SectionPanel>
     </>
   );
 }
-

@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { isActiveHref, settingsNav, sidebarNav } from "@/lib/navigation";
+import {
+  isActiveHref,
+  productName,
+  settingsNav,
+  sidebarNav,
+} from "@/lib/navigation";
 
 export function TopBar() {
   const pathname = usePathname();
@@ -33,21 +38,27 @@ export function TopBar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <Link href="/" className="flex items-center gap-2 lg:hidden" aria-label="Walsh Co home">
+        <Link
+          href="/"
+          className="flex items-center gap-2 lg:hidden"
+          aria-label={`${productName} home`}
+        >
           <span
             aria-hidden
             className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
           >
             <span className="font-display text-base font-semibold">W</span>
           </span>
-          <span className="font-display text-base text-[var(--color-text)]">Walsh Co</span>
+          <span className="font-display text-base text-[var(--color-text)]">
+            {productName}
+          </span>
         </Link>
         <div className="hidden items-baseline gap-2 lg:flex">
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
-            Project
+            Workspace
           </span>
           <span className="text-sm font-medium text-[var(--color-text)]">
-            322 Osborne Rd
+            {productName}
           </span>
         </div>
       </div>
@@ -76,7 +87,9 @@ export function TopBar() {
                 >
                   <span className="font-display text-base font-semibold">W</span>
                 </span>
-                <span className="font-display text-lg text-[var(--color-text)]">Walsh Co</span>
+                <span className="font-display text-lg text-[var(--color-text)]">
+                  {productName}
+                </span>
               </Link>
               <button
                 type="button"

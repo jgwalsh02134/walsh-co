@@ -6,30 +6,35 @@ export default function SettingsPage() {
     <>
       <PageHeader
         eyebrow="Settings"
-        title="Workspace"
-        description="Configuration and integrations. Most workspace state will live here as the app grows."
+        title="Workspace settings"
+        description="Workspace configuration. Most controls live with the underlying systems and not inside this app."
       />
 
-      <SectionPanel title="Workspace" description="Identifies this workspace.">
+      <SectionPanel
+        title="Workspace Settings"
+        description="Identifies this workspace."
+      >
         <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <dt className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
               Name
             </dt>
-            <dd className="text-[var(--color-text)]">Walsh Co</dd>
+            <dd className="text-[var(--color-text)]">J.G. Walsh & Co.</dd>
           </div>
           <div className="flex flex-col gap-1">
             <dt className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
-              Active project
+              Product
             </dt>
-            <dd className="text-[var(--color-text)]">322 Osborne Rd Renovation</dd>
+            <dd className="text-[var(--color-text)]">
+              J.G. Walsh & Co. Workspace
+            </dd>
           </div>
         </dl>
       </SectionPanel>
 
       <SectionPanel
         title="Access"
-        description="Who can reach this workspace and how."
+        description="Cloudflare Access · Microsoft Entra"
       >
         <ul className="flex flex-col gap-2 text-sm text-[var(--color-text)]">
           <li>
@@ -39,14 +44,14 @@ export default function SettingsPage() {
             </span>
           </li>
           <li>
-            <span className="font-medium">Microsoft login</span>{" "}
+            <span className="font-medium">Microsoft Entra</span>{" "}
             <span className="text-[var(--color-text-muted)]">
-              is enabled through Cloudflare Access.
+              is the identity provider behind Cloudflare Access.
             </span>
           </li>
           <li className="text-xs text-[var(--color-text-muted)]">
-            Access policies, identity providers, and audit logs are managed in the
-            Cloudflare dashboard, not from inside this app.
+            Access policies, identity providers, and audit logs are managed in
+            the Cloudflare and Entra admin consoles, not inside this app.
           </li>
         </ul>
       </SectionPanel>
@@ -55,9 +60,14 @@ export default function SettingsPage() {
         title="Integrations"
         description="External services this workspace will connect to."
       >
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Integrations are coming later. None are connected yet.
-        </p>
+        <p className="text-sm text-[var(--color-text-muted)]">Coming later.</p>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Data Sources"
+        description="Market and property data providers."
+      >
+        <p className="text-sm text-[var(--color-text-muted)]">Coming later.</p>
       </SectionPanel>
     </>
   );

@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Walsh Co",
-  description: "Walsh Co workspace",
+  title: "J.G. Walsh & Co. Workspace",
+  description:
+    "Private portfolio, market intelligence, and renovation operations workspace for J.G. Walsh & Co.",
 };
 
 export const viewport = {
