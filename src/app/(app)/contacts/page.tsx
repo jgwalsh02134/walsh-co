@@ -357,7 +357,7 @@ function ContactsList({
             ) : null}
             <li
               className={`relative ${
-                active ? "bg-[var(--color-surface-soft)]" : ""
+                active ? "bg-[var(--color-primary-soft)]" : ""
               }`}
             >
               {active ? (
