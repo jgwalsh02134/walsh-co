@@ -1,106 +1,231 @@
 @import "tailwindcss";
 
 :root {
-  /* ---------- Adobe Fonts (loaded via Typekit kit jfb6hkb in layout.tsx) ---------- */
+  /* ========================================================================
+     Adobe Fonts (loaded via Typekit kit jfb6hkb in layout.tsx)
+     ====================================================================== */
   --font-display: "neue-haas-grotesk-display", "Helvetica Neue", Helvetica,
     Arial, sans-serif;
   --font-text: "neue-haas-grotesk-text", "Helvetica Neue", Helvetica, Arial,
     sans-serif;
   --font-data: "source-sans-3", "neue-haas-grotesk-text", monospace;
-
   /* Backwards-compat alias used by older callsites; maps to text. */
   --font-ui: var(--font-text);
 
-  /* ---------- Layer 1 — Core Workspace Light Mode ---------- */
-  --workspace-bg: #F8FAFC;
+  /* ========================================================================
+     1. Core Workspace — Light Mode (default)
+     Warm architectural neutrals. Default app palette.
+     ====================================================================== */
+  --workspace-bg: #F6F4EF;
   --workspace-surface: #FFFFFF;
-  --workspace-border: #E2E8F0;
-  --workspace-text: #0F172A;
-  --workspace-text-muted: #64748B;
-  --workspace-primary: #1E3A8A;
-  --workspace-link: #3B82F6;
-  --workspace-accent: #D97706;
+  --workspace-surface-soft: #FAF8F3;
+  --workspace-surface-raised: #FDFCF9;
+  --workspace-border: #DDD8CC;
+  --workspace-border-strong: #C6BFAF;
+  --workspace-text: #24231F;
+  --workspace-text-secondary: #666156;
+  --workspace-text-muted: #999286;
+  --workspace-primary: #0E6F68;
+  --workspace-primary-hover: #09544F;
+  --workspace-primary-soft: #DDEDEA;
+  --workspace-focus: #2A9D8F;
 
-  /* ---------- Layer 2 — Market Tracker Dark Mode ---------- */
-  --market-bg: #000000;
-  --market-surface: #1C1C1E;
-  --market-border: #38383A;
-  --market-text: #FFFFFF;
-  --market-text-muted: #8E8E93;
-  --market-bullish: #34C759;
-  --market-bearish: #FF3B30;
-  --market-focus: #0A84FF;
+  /* ========================================================================
+     1b. Core Workspace — Dark Mode (defined for future use; not toggled).
+     ====================================================================== */
+  --workspace-dark-bg: #151716;
+  --workspace-dark-surface: #1D201E;
+  --workspace-dark-surface-soft: #242824;
+  --workspace-dark-surface-raised: #2A2E2A;
+  --workspace-dark-border: #373C36;
+  --workspace-dark-border-strong: #4A5149;
+  --workspace-dark-text: #F0EEE8;
+  --workspace-dark-text-secondary: #B8B3A8;
+  --workspace-dark-text-muted: #837D72;
+  --workspace-dark-primary: #4DB6A9;
+  --workspace-dark-primary-hover: #72CCC2;
+  --workspace-dark-primary-soft: #183D39;
+  --workspace-dark-focus: #5DD6C7;
 
-  /* ---------- Layer 3 — Universal Semantic System ---------- */
-  --semantic-success: #10B981;
-  --semantic-warning: #F59E0B;
-  --semantic-error: #EF4444;
-  --semantic-info: #3B82F6;
+  /* ========================================================================
+     2. Market Tracker — Dark Palette (used inside .market-shell only).
+     Institutional finance feel.
+     ====================================================================== */
+  --market-bg: #080A0D;
+  --market-surface: #10141A;
+  --market-surface-raised: #171D25;
+  --market-surface-hover: #1F2732;
+  --market-border: #2A3340;
+  --market-border-strong: #3D4A5C;
+  --market-text: #F4F7FA;
+  --market-text-secondary: #AAB4C0;
+  --market-text-muted: #6F7B89;
+  --market-amber: #F5A623;
+  --market-cyan: #22C7D9;
+  --market-blue: #4B8DFF;
+  --market-purple: #8B5CF6;
 
-  /* Derived semantic backgrounds (~10%) and borders (~30%) */
-  --semantic-success-bg: color-mix(in srgb, var(--semantic-success) 10%, transparent);
-  --semantic-success-border: color-mix(in srgb, var(--semantic-success) 30%, transparent);
-  --semantic-warning-bg: color-mix(in srgb, var(--semantic-warning) 10%, transparent);
-  --semantic-warning-border: color-mix(in srgb, var(--semantic-warning) 30%, transparent);
-  --semantic-error-bg: color-mix(in srgb, var(--semantic-error) 10%, transparent);
-  --semantic-error-border: color-mix(in srgb, var(--semantic-error) 30%, transparent);
-  --semantic-info-bg: color-mix(in srgb, var(--semantic-info) 10%, transparent);
-  --semantic-info-border: color-mix(in srgb, var(--semantic-info) 30%, transparent);
+  /* ========================================================================
+     2b. Market Tracker — Light Palette (defined for future use; not toggled).
+     ====================================================================== */
+  --market-light-bg: #F3F5F7;
+  --market-light-surface: #FFFFFF;
+  --market-light-surface-raised: #F8FAFC;
+  --market-light-border: #D8DEE6;
+  --market-light-border-strong: #B8C2D0;
+  --market-light-text: #111827;
+  --market-light-text-secondary: #4B5563;
+  --market-light-text-muted: #7B8491;
+  --market-light-amber: #B86B00;
+  --market-light-cyan: #007C89;
+  --market-light-blue: #1E5EFF;
 
-  /* ---------- Legacy aliases — existing components consume these ---------- */
-  /* Backgrounds + surfaces */
+  /* ========================================================================
+     3. Universal Semantic System (shared across Workspace and Market).
+     ====================================================================== */
+  --status-success: #237A3B;
+  --status-warning: #B7791F;
+  --status-error: #B42318;
+  --status-info: #2563EB;
+  --status-neutral: #6B7280;
+
+  --status-success-dark: #4ADE80;
+  --status-warning-dark: #FBBF24;
+  --status-error-dark: #F87171;
+  --status-info-dark: #60A5FA;
+  --status-neutral-dark: #9CA3AF;
+
+  /* Soft (10% / token-mix) backgrounds for badges, pills, alerts. */
+  --status-success-soft: #EAF7EE;
+  --status-warning-soft: #FFF4D6;
+  --status-error-soft: #FDECEC;
+  --status-info-soft: #EAF1FF;
+  --status-neutral-soft: #F1F2F4;
+
+  --status-success-soft-dark: #12351F;
+  --status-warning-soft-dark: #3A2A0A;
+  --status-error-soft-dark: #3A1212;
+  --status-info-soft-dark: #10233F;
+  --status-neutral-soft-dark: #25282D;
+
+  /* Premium / featured highlight (used for callouts, premium CTAs). */
+  --status-premium: #7C3AED;
+  --status-premium-dark: #A78BFA;
+
+  /* Market movement (price up/down/flat). */
+  --market-positive: #16A34A;
+  --market-negative: #DC2626;
+  --market-flat: #737373;
+  --market-positive-dark: #22C55E;
+  --market-negative-dark: #EF4444;
+  --market-flat-dark: #A3A3A3;
+
+  /* ========================================================================
+     4. Real-estate workflow status colors.
+     Used across Properties, Renovation, Bids, Tasks, Documents, Vendors.
+     ====================================================================== */
+  --workflow-prospect: #64748B;
+  --workflow-under-review: #2563EB;
+  --workflow-active-project: #0E6F68;
+  --workflow-waiting: #B7791F;
+  --workflow-at-risk: #DC2626;
+  --workflow-completed: #237A3B;
+  --workflow-archived: #8A8178;
+
+  /* ========================================================================
+     5. Data visualization palette (charts, comps, ARV, costs, timelines).
+     ====================================================================== */
+  --chart-primary: #0E6F68;
+  --chart-market-highlight: #F5A623;
+  --chart-blue: #2563EB;
+  --chart-cyan: #22C7D9;
+  --chart-purple: #8B5CF6;
+  --chart-green: #16A34A;
+  --chart-red: #DC2626;
+  --chart-slate: #64748B;
+  --chart-sand: #C2A46D;
+
+  /* ========================================================================
+     6. Generic --color-* aliases.
+     Components consume these. Mapped to workspace tokens by default;
+     re-bound to market tokens inside .market-shell.
+     ====================================================================== */
   --color-bg: var(--workspace-bg);
   --color-bg-warm: var(--workspace-bg);
   --color-surface: var(--workspace-surface);
-  --color-surface-raised: var(--workspace-bg);
-  --color-surface-soft: #F1F5F9;
-
-  /* Borders */
+  --color-surface-soft: var(--workspace-surface-soft);
+  --color-surface-raised: var(--workspace-surface-raised);
   --color-border: var(--workspace-border);
-  --color-border-strong: #CBD5E1;
-
-  /* Text */
+  --color-border-strong: var(--workspace-border-strong);
   --color-text: var(--workspace-text);
+  --color-text-secondary: var(--workspace-text-secondary);
   --color-text-muted: var(--workspace-text-muted);
-  --color-text-faint: #94A3B8;
+  /* Legacy 4th tier alias; equal to --color-text-muted under the new
+     3-tier hierarchy so existing callsites keep rendering. */
+  --color-text-faint: var(--workspace-text-muted);
   --color-text-inverse: #FFFFFF;
-
-  /* Brand / interactive */
   --color-primary: var(--workspace-primary);
-  --color-primary-hover: #172554;
-  --color-primary-soft: #DBEAFE;
-  --color-link: var(--workspace-link);
-  --color-focus: var(--workspace-link);
-  --color-accent: var(--workspace-accent);
+  --color-primary-hover: var(--workspace-primary-hover);
+  --color-primary-soft: var(--workspace-primary-soft);
+  --color-focus: var(--workspace-focus);
+  /* Links use the universal info-blue so they stay distinct from the
+     teal primary action color. */
+  --color-link: var(--status-info);
+  /* Accent retained for star/favorite highlights; mapped to gold-amber. */
+  --color-accent: var(--status-warning);
 
-  /* Status tokens — re-routed to the universal semantic system.
-     Background = ~10% opacity, border = ~30% opacity, text = solid. */
-  --status-success-text: var(--semantic-success);
-  --status-success-bg: var(--semantic-success-bg);
-  --status-success-border: var(--semantic-success-border);
+  /* ========================================================================
+     7. Status alias bundle.
+     Existing components read --status-{tone}-{text,bg,border}; route
+     those through the universal semantic tokens.
+     ====================================================================== */
+  --status-success-text: var(--status-success);
+  --status-success-bg: var(--status-success-soft);
+  --status-success-border: color-mix(in srgb, var(--status-success) 30%, transparent);
 
-  --status-warning-text: var(--semantic-warning);
-  --status-warning-bg: var(--semantic-warning-bg);
-  --status-warning-border: var(--semantic-warning-border);
+  --status-warning-text: var(--status-warning);
+  --status-warning-bg: var(--status-warning-soft);
+  --status-warning-border: color-mix(in srgb, var(--status-warning) 30%, transparent);
 
-  --status-error-text: var(--semantic-error);
-  --status-error-bg: var(--semantic-error-bg);
-  --status-error-border: var(--semantic-error-border);
+  --status-error-text: var(--status-error);
+  --status-error-bg: var(--status-error-soft);
+  --status-error-border: color-mix(in srgb, var(--status-error) 30%, transparent);
 
-  --status-info-text: var(--semantic-info);
-  --status-info-bg: var(--semantic-info-bg);
-  --status-info-border: var(--semantic-info-border);
+  --status-info-text: var(--status-info);
+  --status-info-bg: var(--status-info-soft);
+  --status-info-border: color-mix(in srgb, var(--status-info) 30%, transparent);
 
-  /* Review + neutral are project-specific extras kept for compatibility.
-     They follow the same 10/30/solid pattern using slate neutrals. */
+  --status-neutral-text: var(--status-neutral);
+  --status-neutral-bg: var(--status-neutral-soft);
+  --status-neutral-border: color-mix(in srgb, var(--status-neutral) 30%, transparent);
+
+  /* Project-specific extra: review (purple). Kept for compatibility. */
   --status-review-text: #6D28D9;
-  --status-review-bg: rgba(109, 40, 217, 0.10);
-  --status-review-border: rgba(109, 40, 217, 0.30);
+  --status-review-bg: #F1EDFF;
+  --status-review-border: color-mix(in srgb, #6D28D9 30%, transparent);
 
-  --status-neutral-text: var(--workspace-text-muted);
-  --status-neutral-bg: rgba(100, 116, 139, 0.10);
-  --status-neutral-border: rgba(100, 116, 139, 0.30);
+  /* ========================================================================
+     8. Legacy --semantic-* aliases.
+     Some components still reference these directly (notably Market Tracker
+     status pills). Routed to the new --status-* tokens so behavior is
+     identical even though the underlying values changed.
+     ====================================================================== */
+  --semantic-success: var(--status-success);
+  --semantic-warning: var(--status-warning);
+  --semantic-error: var(--status-error);
+  --semantic-info: var(--status-info);
+  --semantic-success-bg: var(--status-success-bg);
+  --semantic-success-border: var(--status-success-border);
+  --semantic-warning-bg: var(--status-warning-bg);
+  --semantic-warning-border: var(--status-warning-border);
+  --semantic-error-bg: var(--status-error-bg);
+  --semantic-error-border: var(--status-error-border);
+  --semantic-info-bg: var(--status-info-bg);
+  --semantic-info-border: var(--status-info-border);
 
+  /* ========================================================================
+     9. Spacing, radius, shadow.
+     ====================================================================== */
   --space-1: 8px;
   --space-2: 12px;
   --space-3: 16px;
@@ -113,47 +238,84 @@
   --radius-lg: 14px;
   --radius-xl: 20px;
 
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-card-hover: 0 4px 12px rgba(15, 23, 42, 0.08),
-    0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-rail: 0 1px 0 rgba(15, 23, 42, 0.04);
+  /* Shadows tinted with the new warm text color so they read warmer. */
+  --shadow-card: 0 1px 2px rgba(36, 35, 31, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(36, 35, 31, 0.08),
+    0 1px 2px rgba(36, 35, 31, 0.04);
+  --shadow-rail: 0 1px 0 rgba(36, 35, 31, 0.04);
 }
 
 @theme inline {
   /* Workspace */
   --color-workspace-bg: var(--workspace-bg);
   --color-workspace-surface: var(--workspace-surface);
+  --color-workspace-surface-soft: var(--workspace-surface-soft);
+  --color-workspace-surface-raised: var(--workspace-surface-raised);
   --color-workspace-border: var(--workspace-border);
+  --color-workspace-border-strong: var(--workspace-border-strong);
   --color-workspace-text: var(--workspace-text);
+  --color-workspace-text-secondary: var(--workspace-text-secondary);
   --color-workspace-text-muted: var(--workspace-text-muted);
   --color-workspace-primary: var(--workspace-primary);
-  --color-workspace-link: var(--workspace-link);
-  --color-workspace-accent: var(--workspace-accent);
+  --color-workspace-primary-hover: var(--workspace-primary-hover);
+  --color-workspace-primary-soft: var(--workspace-primary-soft);
+  --color-workspace-focus: var(--workspace-focus);
 
   /* Market */
   --color-market-bg: var(--market-bg);
   --color-market-surface: var(--market-surface);
+  --color-market-surface-raised: var(--market-surface-raised);
+  --color-market-surface-hover: var(--market-surface-hover);
   --color-market-border: var(--market-border);
+  --color-market-border-strong: var(--market-border-strong);
   --color-market-text: var(--market-text);
+  --color-market-text-secondary: var(--market-text-secondary);
   --color-market-text-muted: var(--market-text-muted);
-  --color-market-bullish: var(--market-bullish);
-  --color-market-bearish: var(--market-bearish);
-  --color-market-focus: var(--market-focus);
+  --color-market-amber: var(--market-amber);
+  --color-market-cyan: var(--market-cyan);
+  --color-market-blue: var(--market-blue);
+  --color-market-purple: var(--market-purple);
+  --color-market-positive: var(--market-positive);
+  --color-market-negative: var(--market-negative);
+  --color-market-flat: var(--market-flat);
 
-  /* Semantic */
-  --color-semantic-success: var(--semantic-success);
-  --color-semantic-warning: var(--semantic-warning);
-  --color-semantic-error: var(--semantic-error);
-  --color-semantic-info: var(--semantic-info);
+  /* Status */
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-error: var(--status-error);
+  --color-status-info: var(--status-info);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-premium: var(--status-premium);
+
+  /* Workflow */
+  --color-workflow-prospect: var(--workflow-prospect);
+  --color-workflow-under-review: var(--workflow-under-review);
+  --color-workflow-active-project: var(--workflow-active-project);
+  --color-workflow-waiting: var(--workflow-waiting);
+  --color-workflow-at-risk: var(--workflow-at-risk);
+  --color-workflow-completed: var(--workflow-completed);
+  --color-workflow-archived: var(--workflow-archived);
+
+  /* Charts */
+  --color-chart-primary: var(--chart-primary);
+  --color-chart-market-highlight: var(--chart-market-highlight);
+  --color-chart-blue: var(--chart-blue);
+  --color-chart-cyan: var(--chart-cyan);
+  --color-chart-purple: var(--chart-purple);
+  --color-chart-green: var(--chart-green);
+  --color-chart-red: var(--chart-red);
+  --color-chart-slate: var(--chart-slate);
+  --color-chart-sand: var(--chart-sand);
 
   /* Legacy alias utilities (keep existing class names working) */
   --color-bg: var(--color-bg);
   --color-bg-warm: var(--color-bg-warm);
   --color-surface: var(--color-surface);
-  --color-surface-raised: var(--color-surface-raised);
   --color-surface-soft: var(--color-surface-soft);
+  --color-surface-raised: var(--color-surface-raised);
 
   --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
   --color-text-muted: var(--color-text-muted);
   --color-text-faint: var(--color-text-faint);
   --color-text-inverse: var(--color-text-inverse);
@@ -179,6 +341,9 @@
   --radius-xl: var(--radius-xl);
 }
 
+/* ============================================================================
+   Base elements
+   ========================================================================== */
 html {
   background: var(--workspace-bg);
 }
@@ -200,16 +365,6 @@ textarea {
   font-family: inherit;
 }
 
-.font-display {
-  font-family: var(--font-display);
-  font-feature-settings: "liga", "dlig", "kern";
-}
-
-.font-data {
-  font-family: var(--font-data);
-  font-variant-numeric: tabular-nums;
-}
-
 a {
   color: inherit;
 }
@@ -218,84 +373,6 @@ a {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
   border-radius: 4px;
-}
-
-/* ---------- Shell + card utilities ---------- */
-.workspace-shell {
-  background: var(--workspace-bg);
-  color: var(--workspace-text);
-}
-
-.workspace-card {
-  background: var(--workspace-surface);
-  border: 1px solid var(--workspace-border);
-}
-
-.market-shell {
-  background: var(--market-bg);
-  color: var(--market-text);
-
-  /* Inside the market region, descendants of legacy components automatically
-     render in dark mode by re-binding the alias tokens to market equivalents. */
-  --color-bg: var(--market-bg);
-  --color-bg-warm: var(--market-bg);
-  --color-surface: var(--market-surface);
-  --color-surface-raised: var(--market-surface);
-  --color-surface-soft: var(--market-surface);
-  --color-border: var(--market-border);
-  --color-border-strong: var(--market-border);
-  --color-text: var(--market-text);
-  --color-text-muted: var(--market-text-muted);
-  --color-text-faint: var(--market-text-muted);
-  --color-text-inverse: var(--market-text);
-  --color-primary: var(--market-focus);
-  --color-primary-hover: var(--market-focus);
-  --color-primary-soft: color-mix(in srgb, var(--market-focus) 15%, transparent);
-  --color-link: var(--market-focus);
-  --color-focus: var(--market-focus);
-  --color-accent: var(--workspace-accent);
-}
-
-.market-shell *:focus-visible {
-  outline-color: var(--market-focus);
-}
-
-.market-card {
-  background: var(--market-surface);
-  border: 1px solid var(--market-border);
-}
-
-.market-positive {
-  color: var(--market-bullish);
-}
-
-.market-negative {
-  color: var(--market-bearish);
-}
-
-/* ---------- Status badge utilities ---------- */
-.status-success {
-  color: var(--semantic-success);
-  background: var(--semantic-success-bg);
-  border: 1px solid var(--semantic-success-border);
-}
-
-.status-warning {
-  color: var(--semantic-warning);
-  background: var(--semantic-warning-bg);
-  border: 1px solid var(--semantic-warning-border);
-}
-
-.status-error {
-  color: var(--semantic-error);
-  background: var(--semantic-error-bg);
-  border: 1px solid var(--semantic-error-border);
-}
-
-.status-info {
-  color: var(--semantic-info);
-  background: var(--semantic-info-bg);
-  border: 1px solid var(--semantic-info-border);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -307,4 +384,123 @@ a {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-feature-settings: "liga", "dlig", "kern";
+}
+
+.font-data {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================
+   Shell + card utilities
+   ========================================================================== */
+.workspace-shell {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.workspace-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.market-shell {
+  background: var(--market-bg);
+  color: var(--market-text);
+
+  /* Inside the market region, descendants of legacy components automatically
+     render in dark mode by re-binding the alias tokens to market equivalents.
+     Per the design spec:
+       --color-bg              -> market-bg
+       --color-surface         -> market-surface
+       --color-surface-soft    -> market-surface-raised
+       --color-surface-raised  -> market-surface-hover
+       --color-border          -> market-border
+       --color-border-strong   -> market-border-strong
+       --color-text            -> market-text
+       --color-text-secondary  -> market-text-secondary
+       --color-text-muted      -> market-text-muted
+       --color-primary         -> market-blue
+       --color-primary-hover   -> market-cyan
+       --color-primary-soft    -> 16% market-blue
+       --color-focus           -> market-cyan
+     Amber stays a sparingly-used highlight, not a primary button color. */
+  --color-bg: var(--market-bg);
+  --color-bg-warm: var(--market-bg);
+  --color-surface: var(--market-surface);
+  --color-surface-soft: var(--market-surface-raised);
+  --color-surface-raised: var(--market-surface-hover);
+  --color-border: var(--market-border);
+  --color-border-strong: var(--market-border-strong);
+  --color-text: var(--market-text);
+  --color-text-secondary: var(--market-text-secondary);
+  --color-text-muted: var(--market-text-muted);
+  --color-text-faint: var(--market-text-muted);
+  --color-text-inverse: var(--market-text);
+  --color-primary: var(--market-blue);
+  --color-primary-hover: var(--market-cyan);
+  --color-primary-soft: rgba(75, 141, 255, 0.16);
+  --color-link: var(--market-blue);
+  --color-focus: var(--market-cyan);
+  --color-accent: var(--market-amber);
+}
+
+.market-shell *:focus-visible {
+  outline-color: var(--market-cyan);
+}
+
+.market-card {
+  background: var(--market-surface);
+  border: 1px solid var(--market-border);
+}
+
+.market-positive {
+  color: var(--market-positive);
+}
+
+.market-negative {
+  color: var(--market-negative);
+}
+
+.market-flat {
+  color: var(--market-flat);
+}
+
+/* ============================================================================
+   Status badge utilities
+   Soft background + 30%-mix border + solid text. Matches the spec.
+   ========================================================================== */
+.status-success {
+  color: var(--status-success);
+  background: var(--status-success-soft);
+  border: 1px solid color-mix(in srgb, var(--status-success) 30%, transparent);
+}
+
+.status-warning {
+  color: var(--status-warning);
+  background: var(--status-warning-soft);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 30%, transparent);
+}
+
+.status-error {
+  color: var(--status-error);
+  background: var(--status-error-soft);
+  border: 1px solid color-mix(in srgb, var(--status-error) 30%, transparent);
+}
+
+.status-info {
+  color: var(--status-info);
+  background: var(--status-info-soft);
+  border: 1px solid color-mix(in srgb, var(--status-info) 30%, transparent);
+}
+
+.status-neutral {
+  color: var(--status-neutral);
+  background: var(--status-neutral-soft);
+  border: 1px solid color-mix(in srgb, var(--status-neutral) 30%, transparent);
 }
