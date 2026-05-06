@@ -1,0 +1,287 @@
+/**
+ * Market Tracker placeholder data.
+ *
+ * Centralized so the market page renders without ad-hoc inline content.
+ * No external API calls, no fake live values — every numeric figure is null
+ * until a real data source is wired in. The UI shows em-dashes when null.
+ */
+
+export type AssetKind = "business" | "private";
+
+export type AssetRole =
+  | "Active Rental"
+  | "Active Renovation Project"
+  | "Private / Reference Only";
+
+export type TrackedProperty = {
+  id: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string | null; // null when zip needs verification
+  zipNeedsVerification: boolean;
+  assetRole: AssetRole;
+  kind: AssetKind;
+  /** Optional in-app workspace link, e.g. /renovation. */
+  workspaceHref?: string;
+  notes?: string;
+};
+
+export const trackedProperties: TrackedProperty[] = [
+  {
+    id: "loudonwood-51",
+    address: "51 Loudonwood E",
+    city: "Loudonville",
+    state: "NY",
+    zip: "12211",
+    zipNeedsVerification: false,
+    assetRole: "Active Rental",
+    kind: "business",
+    notes: "Cash-flowing investment property.",
+  },
+  {
+    id: "momrow-16",
+    address: "16 Momrow Ct",
+    city: "Menands",
+    state: "NY",
+    zip: "12204",
+    zipNeedsVerification: false,
+    assetRole: "Active Rental",
+    kind: "business",
+    notes: "Cash-flowing investment property.",
+  },
+  {
+    id: "osborne-322",
+    address: "322 Osborne Rd",
+    city: "Loudonville",
+    state: "NY",
+    zip: null,
+    zipNeedsVerification: true,
+    assetRole: "Active Renovation Project",
+    kind: "business",
+    workspaceHref: "/renovation",
+    notes: "Renovation in bidding & procurement. ZIP needs verification.",
+  },
+  {
+    id: "macaffer-14",
+    address: "14 MacAffer Dr",
+    city: "Menands",
+    state: "NY",
+    zip: "12204",
+    zipNeedsVerification: false,
+    assetRole: "Private / Reference Only",
+    kind: "private",
+    notes:
+      "Held outside the business structure. Excluded from business portfolio KPIs.",
+  },
+];
+
+/** Confidence on a 0-100 scale, or null if unknown. */
+export type ConfidencePct = number | null;
+
+export type PropertyMarketSnapshot = {
+  propertyId: string;
+  estimatedValue: number | null;
+  estimatedRent: number | null;
+  valueConfidence: ConfidencePct;
+  rentConfidence: ConfidencePct;
+  lastUpdated: string | null; // ISO date or null
+  /** "Not connected" until a real source is configured. */
+  sourceStatus: "Not connected" | "Pending" | "Live";
+};
+
+export const propertySnapshots: PropertyMarketSnapshot[] =
+  trackedProperties.map((p) => ({
+    propertyId: p.id,
+    estimatedValue: null,
+    estimatedRent: null,
+    valueConfidence: null,
+    rentConfidence: null,
+    lastUpdated: null,
+    sourceStatus: "Not connected",
+  }));
+
+export type DataSource = {
+  name: string;
+  purpose: string;
+  status: "Not connected" | "Pending" | "Connected";
+};
+
+export const dataSources: DataSource[] = [
+  {
+    name: "ATTOM",
+    purpose: "Property data, ownership, sales history",
+    status: "Not connected",
+  },
+  {
+    name: "RentCast",
+    purpose: "Rent estimates and rental comparables",
+    status: "Not connected",
+  },
+  {
+    name: "HouseCanary",
+    purpose: "Automated valuation and forecast models",
+    status: "Not connected",
+  },
+  {
+    name: "Google Maps / Mapbox",
+    purpose: "Geocoding and neighborhood maps",
+    status: "Not connected",
+  },
+  {
+    name: "Census / FRED",
+    purpose: "Demographic and macroeconomic indicators",
+    status: "Not connected",
+  },
+  {
+    name: "Climate / Hazard Data",
+    purpose: "Flood, wildfire, and climate-risk overlays",
+    status: "Not connected",
+  },
+];
+
+export type NeighborhoodSignal = {
+  category: string;
+  description: string;
+};
+
+export const neighborhoodSignalCategories: NeighborhoodSignal[] = [
+  {
+    category: "Demand",
+    description: "Buyer activity, days-on-market, list-to-sale ratios.",
+  },
+  {
+    category: "Schools",
+    description: "District ratings and school catchment changes.",
+  },
+  {
+    category: "Walkability",
+    description: "Walk, transit, and bike scores.",
+  },
+  {
+    category: "Demographics",
+    description: "Population, income, and household trends.",
+  },
+];
+
+export type ForecastHorizon = {
+  label: string;
+  description: string;
+};
+
+export const forecastHorizons: ForecastHorizon[] = [
+  { label: "12 months", description: "Short-term value and rent direction." },
+  { label: "3 years", description: "Medium-term hold scenario." },
+  { label: "5 years", description: "Refinance or exit horizon." },
+];
+
+export type RiskCategory = {
+  category: string;
+  description: string;
+};
+
+export const riskCategories: RiskCategory[] = [
+  {
+    category: "Climate",
+    description: "Flood, wildfire, and storm exposure.",
+  },
+  {
+    category: "Regulatory",
+    description: "Rent control, zoning, and permitting changes.",
+  },
+  {
+    category: "Market",
+    description: "Local price and rent volatility.",
+  },
+  {
+    category: "Concentration",
+    description: "Submarket concentration across the portfolio.",
+  },
+];
+
+/**
+ * Aggregate KPI inputs across BUSINESS portfolio assets only.
+ * 14 MacAffer Dr is intentionally excluded.
+ */
+export type PortfolioKpis = {
+  trackedAssets: number;
+  estimatedPortfolioValue: number | null;
+  estimatedMonthlyRent: number | null;
+  /** 0-100, share of fields populated across business assets. */
+  dataCompletenessPct: number;
+  lastUpdated: string | null;
+  connectedSources: number;
+  totalSources: number;
+};
+
+export function computeKpis(): PortfolioKpis {
+  const business = trackedProperties.filter((p) => p.kind === "business");
+  const businessIds = new Set(business.map((p) => p.id));
+  const snaps = propertySnapshots.filter((s) => businessIds.has(s.propertyId));
+
+  const fieldsPerAsset = 4; // value, rent, valueConfidence, rentConfidence
+  const totalFields = snaps.length * fieldsPerAsset;
+  const populated = snaps.reduce((acc, s) => {
+    let n = 0;
+    if (s.estimatedValue != null) n++;
+    if (s.estimatedRent != null) n++;
+    if (s.valueConfidence != null) n++;
+    if (s.rentConfidence != null) n++;
+    return acc + n;
+  }, 0);
+
+  const dataCompletenessPct =
+    totalFields === 0 ? 0 : Math.round((populated / totalFields) * 100);
+
+  const lastUpdated = snaps
+    .map((s) => s.lastUpdated)
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .pop() ?? null;
+
+  return {
+    trackedAssets: business.length,
+    estimatedPortfolioValue: null,
+    estimatedMonthlyRent: null,
+    dataCompletenessPct,
+    lastUpdated,
+    connectedSources: dataSources.filter((d) => d.status === "Connected").length,
+    totalSources: dataSources.length,
+  };
+}
+
+/**
+ * Format helpers — return em-dash when value is null so the UI never
+ * has to do "?? '—'" inline.
+ */
+export const dash = "—";
+
+export function formatCurrency(value: number | null): string {
+  if (value == null) return dash;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+export function formatRent(value: number | null): string {
+  if (value == null) return dash;
+  return `${formatCurrency(value)}/mo`;
+}
+
+export function formatPct(value: number | null): string {
+  if (value == null) return dash;
+  return `${Math.round(value)}%`;
+}
+
+export function formatDate(value: string | null): string {
+  if (!value) return dash;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return dash;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
