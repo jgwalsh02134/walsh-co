@@ -159,7 +159,7 @@ function PropertyMarketCard({
           Last updated {formatDate(snap?.lastUpdated ?? null)}
         </span>
         <div className="flex items-center gap-2">
-          {property.zipNeedsVerification ? (
+          {property.zipNeedsVerification || property.factsNeedVerification ? (
             <ToneTag label="Needs verification" tone="warning" />
           ) : null}
           <ToneTag
@@ -282,8 +282,16 @@ export default function MarketPage() {
           />
           <KpiTile
             label="Data completeness"
-            value={formatPct(kpis.dataCompletenessPct)}
-            sublabel="Across business assets"
+            value={
+              kpis.dataCompletenessPct === 0 && kpis.connectedSources === 0
+                ? "Not started"
+                : formatPct(kpis.dataCompletenessPct)
+            }
+            sublabel={
+              kpis.dataCompletenessPct === 0 && kpis.connectedSources === 0
+                ? "Pending data sources"
+                : "Across business assets"
+            }
           />
           <KpiTile
             label="Last updated"

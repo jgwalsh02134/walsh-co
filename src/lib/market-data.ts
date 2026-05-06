@@ -20,6 +20,13 @@ export type TrackedProperty = {
   state: string;
   zip: string | null; // null when zip needs verification
   zipNeedsVerification: boolean;
+  /**
+   * General "displayed facts are unverified / reference-only" flag.
+   * Distinct from `zipNeedsVerification`, which is specific to the ZIP field.
+   * Used for assets where address, ZIP, ownership, or other metadata
+   * should be treated as working notes until separately confirmed.
+   */
+  factsNeedVerification: boolean;
   assetRole: AssetRole;
   kind: AssetKind;
   /** Optional in-app workspace link, e.g. /renovation. */
@@ -35,6 +42,7 @@ export const trackedProperties: TrackedProperty[] = [
     state: "NY",
     zip: "12211",
     zipNeedsVerification: false,
+    factsNeedVerification: false,
     assetRole: "Active Rental",
     kind: "business",
     notes: "Cash-flowing investment property.",
@@ -46,6 +54,7 @@ export const trackedProperties: TrackedProperty[] = [
     state: "NY",
     zip: "12204",
     zipNeedsVerification: false,
+    factsNeedVerification: false,
     assetRole: "Active Rental",
     kind: "business",
     notes: "Cash-flowing investment property.",
@@ -57,6 +66,7 @@ export const trackedProperties: TrackedProperty[] = [
     state: "NY",
     zip: null,
     zipNeedsVerification: true,
+    factsNeedVerification: true,
     assetRole: "Active Renovation Project",
     kind: "business",
     workspaceHref: "/renovation",
@@ -69,10 +79,11 @@ export const trackedProperties: TrackedProperty[] = [
     state: "NY",
     zip: "12204",
     zipNeedsVerification: false,
+    factsNeedVerification: true,
     assetRole: "Private / Reference Only",
     kind: "private",
     notes:
-      "Held outside the business structure. Excluded from business portfolio KPIs.",
+      "Held outside the business structure. Excluded from business portfolio KPIs. Displayed facts are reference-only until separately confirmed.",
   },
 ];
 
