@@ -1,4 +1,36 @@
 import type { ReactNode } from "react";
+import {
+  ArrowRight,
+  BadgeCheck,
+  CalendarDays,
+  ChartCandlestick,
+  CircleDollarSign,
+  FolderOpen,
+  Handshake,
+  HardHat,
+  Home,
+  House,
+  Landmark,
+  ListTodo,
+  type LucideIcon,
+  type LucideProps,
+  Mail,
+  MapPin,
+  Menu,
+  Pencil,
+  Phone,
+  PlusCircle,
+  Search,
+  Settings,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+  Upload,
+  UsersRound,
+  WalletCards,
+  X,
+} from "lucide-react";
 
 export type NavItem = {
   label: string;
@@ -7,77 +39,90 @@ export type NavItem = {
   description?: string;
 };
 
-const iconProps = {
-  className: "h-5 w-5",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.7,
-  viewBox: "0 0 24 24",
+/**
+ * Centralized icon registry. Edit this map to swap icons across the app.
+ * Each entry returns a configured Lucide React component so a callsite
+ * can simply render {icons.portfolio} as a ReactNode.
+ *
+ * Sizes follow the project icon-system rules:
+ *   - sidebar/nav rows: 20px (preserves existing 9-row height)
+ *   - landing cards / section headers: 24px
+ *   - inline within text/inputs: 16px
+ *   - hero: 32px (caller must size explicitly)
+ *
+ * Stroke width is 1.75 for a calm, premium look.
+ */
+const baseProps: LucideProps = {
+  strokeWidth: 1.75,
   "aria-hidden": true,
-} as const;
+};
+
+function makeIcon(
+  Component: LucideIcon,
+  className: string,
+  extra: LucideProps = {}
+) {
+  return <Component {...baseProps} {...extra} className={className} />;
+}
+
+const NAV = "h-5 w-5"; // 20px — sidebar/nav rows
+const CARD = "h-6 w-6"; // 24px — landing cards / panel headers
+const INLINE = "h-4 w-4"; // 16px — inline within text/inputs
 
 export const icons = {
-  home: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12 12 3l9 9M5 10v10h4v-6h6v6h4V10" />
-    </svg>
-  ),
-  portfolio: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18v12H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" />
-    </svg>
-  ),
-  market: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l5-5 4 4 7-8M14 8h6v6" />
-    </svg>
-  ),
-  properties: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10v10h6v-6h6v6h6V10L12 3 3 10Z" />
-    </svg>
-  ),
-  renovation: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-7h6v7" />
-    </svg>
-  ),
-  contractors: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0ZM4 20a8 8 0 0 1 16 0" />
-    </svg>
-  ),
-  bids: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h12M3 12h9M3 18h7M16 14h6M16 14l3-3M16 14l3 3" />
-    </svg>
-  ),
-  tasks: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
-    </svg>
-  ),
-  documents: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7 4h7l4 4v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM14 4v4h4" />
-    </svg>
-  ),
-  budget: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M6 19v-7m4 7V8m4 11v-5m4 5V5" />
-    </svg>
-  ),
-  settings: (
-    <svg {...iconProps}>
-      <circle cx="12" cy="12" r="3" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8L4.2 7a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.7 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-    </svg>
-  ),
-  arrowRight: (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
-    </svg>
-  ),
+  // Navigation
+  home: makeIcon(Home, NAV),
+  portfolio: makeIcon(Landmark, NAV),
+  market: makeIcon(ChartCandlestick, NAV),
+  properties: makeIcon(House, NAV),
+  renovation: makeIcon(HardHat, NAV),
+  contractors: makeIcon(UsersRound, NAV),
+  bids: makeIcon(Handshake, NAV),
+  documents: makeIcon(FolderOpen, NAV),
+  budget: makeIcon(CircleDollarSign, NAV),
+  tasks: makeIcon(ListTodo, NAV),
+  settings: makeIcon(Settings, NAV),
+
+  // Inline / utility
+  arrowRight: makeIcon(ArrowRight, INLINE),
+  search: makeIcon(Search, INLINE),
+  menu: makeIcon(Menu, NAV),
+  close: makeIcon(X, NAV),
+} as const;
+
+/**
+ * Larger card-sized variants for the landing page where icons sit inside
+ * a 44px badge. Re-uses the same registry but at CARD size.
+ */
+export const cardIcons = {
+  portfolio: makeIcon(Landmark, CARD),
+  market: makeIcon(ChartCandlestick, CARD),
+  properties: makeIcon(House, CARD),
+  renovation: makeIcon(HardHat, CARD),
+  contractors: makeIcon(UsersRound, CARD),
+  documents: makeIcon(FolderOpen, CARD),
+  budget: makeIcon(CircleDollarSign, CARD),
+  tasks: makeIcon(ListTodo, CARD),
+} as const;
+
+/**
+ * General-purpose icon registry for ad-hoc use across pages.
+ * Pre-sized (mostly inline). Callers can override className when needed.
+ */
+export const utilityIcons = {
+  add: (className = INLINE) => makeIcon(PlusCircle, className),
+  edit: (className = INLINE) => makeIcon(Pencil, className),
+  delete: (className = INLINE) => makeIcon(Trash2, className),
+  warning: (className = INLINE) => makeIcon(TriangleAlert, className),
+  verified: (className = INLINE) => makeIcon(BadgeCheck, className),
+  calendar: (className = INLINE) => makeIcon(CalendarDays, className),
+  phone: (className = INLINE) => makeIcon(Phone, className),
+  email: (className = INLINE) => makeIcon(Mail, className),
+  upload: (className = INLINE) => makeIcon(Upload, className),
+  location: (className = INLINE) => makeIcon(MapPin, className),
+  wallet: (className = INLINE) => makeIcon(WalletCards, className),
+  marketUp: (className = INLINE) => makeIcon(TrendingUp, className),
+  marketDown: (className = INLINE) => makeIcon(TrendingDown, className),
 } as const;
 
 export const sidebarNav: NavItem[] = [
@@ -110,55 +155,55 @@ export const landingCards: LandingCard[] = [
     description:
       "View company holdings, property status, and portfolio-level summaries.",
     href: "/portfolio",
-    icon: icons.portfolio,
+    icon: cardIcons.portfolio,
   },
   {
     title: "Market Tracker",
     description:
       "Track values, rent estimates, comps, market trends, and data sources.",
     href: "/market",
-    icon: icons.market,
+    icon: cardIcons.market,
   },
   {
     title: "Properties",
     description:
       "Open individual property records, documents, tasks, and financial details.",
     href: "/properties",
-    icon: icons.properties,
+    icon: cardIcons.properties,
   },
   {
     title: "322 Osborne Workspace",
     description:
       "Manage renovation scope, contractors, bids, tasks, budget, and documents.",
     href: "/renovation",
-    icon: icons.renovation,
+    icon: cardIcons.renovation,
   },
   {
     title: "Contractors & Bids",
     description: "Source trades, compare proposals, and track award decisions.",
     href: "/contractors",
-    icon: icons.contractors,
+    icon: cardIcons.contractors,
   },
   {
     title: "Documents",
     description:
       "Organize deeds, insurance, permits, contracts, COIs, bids, and photos.",
     href: "/documents",
-    icon: icons.documents,
+    icon: cardIcons.documents,
   },
   {
     title: "Budget & Financials",
     description:
       "Track estimates, committed costs, actuals, variance, and exposure.",
     href: "/budget",
-    icon: icons.budget,
+    icon: cardIcons.budget,
   },
   {
     title: "Tasks & Follow-ups",
     description:
       "Manage project work, punch items, deadlines, and open decisions.",
     href: "/tasks",
-    icon: icons.tasks,
+    icon: cardIcons.tasks,
   },
 ];
 

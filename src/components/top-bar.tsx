@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  icons,
   isActiveHref,
   productName,
   settingsNav,
@@ -34,9 +35,7 @@ export function TopBar() {
           aria-expanded={open}
           className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)] lg:hidden"
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} viewBox="0 0 24 24" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
+          {icons.menu}
         </button>
         <Link
           href="/"
@@ -97,9 +96,7 @@ export function TopBar() {
                 aria-label="Close menu"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-soft)] hover:text-[var(--color-text)]"
               >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" d="M6 6l12 12M18 6 6 18" />
-                </svg>
+                {icons.close}
               </button>
             </div>
             <nav className="flex flex-col gap-1" aria-label="Sections">
