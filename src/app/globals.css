@@ -1,10 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --font-ui: "source-sans-3", system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
-  --font-display: "freight-text-pro", Georgia, Cambria, "Times New Roman",
-    serif;
+  /* ---------- Adobe Fonts (loaded via Typekit kit jfb6hkb in layout.tsx) ---------- */
+  --font-display: "neue-haas-grotesk-display", "Helvetica Neue", Helvetica,
+    Arial, sans-serif;
+  --font-text: "neue-haas-grotesk-text", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-data: "source-sans-3", "neue-haas-grotesk-text", monospace;
+
+  /* Backwards-compat alias used by older callsites; maps to text. */
+  --font-ui: var(--font-text);
 
   /* ---------- Layer 1 — Core Workspace Light Mode ---------- */
   --workspace-bg: #F8FAFC;
@@ -163,8 +168,11 @@
   --color-focus: var(--color-focus);
   --color-accent: var(--color-accent);
 
-  --font-sans: var(--font-ui);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: var(--font-text);
+  /* `font-mono` Tailwind utility is repurposed for tabular numeric data
+     across the workspace (phone numbers, prices, KPIs). Source Sans 3
+     carries good tabular figures; system monospace is the final fallback. */
+  --font-mono: var(--font-data);
 
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
@@ -178,15 +186,28 @@ html {
 body {
   background: var(--workspace-bg);
   color: var(--workspace-text);
-  font-family: var(--font-ui);
+  font-family: var(--font-text);
   font-feature-settings: "kern", "liga";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Form controls don't inherit font-family by default in most browsers. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 .font-display {
   font-family: var(--font-display);
   font-feature-settings: "liga", "dlig", "kern";
+}
+
+.font-data {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
 }
 
 a {
