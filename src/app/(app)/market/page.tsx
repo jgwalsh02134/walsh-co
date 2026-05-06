@@ -86,7 +86,7 @@ const sections = [
 
 export default function MarketPage() {
   return (
-    <>
+    <div className="market-shell -mx-4 -my-6 flex flex-col gap-8 px-4 py-6 sm:-mx-6 sm:-my-8 sm:px-6 sm:py-8 lg:-mx-8 lg:-my-10 lg:px-8 lg:py-10">
       <PageHeader
         eyebrow="Market Tracker"
         title="Market intelligence"
@@ -131,6 +131,6 @@ export default function MarketPage() {
           ))}
         </ul>
       </SectionPanel>
-    </>
+    </div>
   );
 }

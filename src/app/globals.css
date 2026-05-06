@@ -6,52 +6,95 @@
   --font-display: "freight-text-pro", Georgia, Cambria, "Times New Roman",
     serif;
 
-  --color-bg: #F4F7F7;
-  --color-bg-warm: #F8F5EF;
-  --color-surface: #FFFFFF;
-  --color-surface-raised: #F9FBFA;
-  --color-surface-soft: #EEF3F1;
+  /* ---------- Layer 1 — Core Workspace Light Mode ---------- */
+  --workspace-bg: #F8FAFC;
+  --workspace-surface: #FFFFFF;
+  --workspace-border: #E2E8F0;
+  --workspace-text: #0F172A;
+  --workspace-text-muted: #64748B;
+  --workspace-primary: #1E3A8A;
+  --workspace-link: #3B82F6;
+  --workspace-accent: #D97706;
 
-  --color-border: #D9E1DE;
-  --color-border-strong: #A6B3AE;
+  /* ---------- Layer 2 — Market Tracker Dark Mode ---------- */
+  --market-bg: #000000;
+  --market-surface: #1C1C1E;
+  --market-border: #38383A;
+  --market-text: #FFFFFF;
+  --market-text-muted: #8E8E93;
+  --market-bullish: #34C759;
+  --market-bearish: #FF3B30;
+  --market-focus: #0A84FF;
 
-  --color-text: #111827;
-  --color-text-muted: #52615B;
-  --color-text-faint: #7B8983;
+  /* ---------- Layer 3 — Universal Semantic System ---------- */
+  --semantic-success: #10B981;
+  --semantic-warning: #F59E0B;
+  --semantic-error: #EF4444;
+  --semantic-info: #3B82F6;
+
+  /* Derived semantic backgrounds (~10%) and borders (~30%) */
+  --semantic-success-bg: color-mix(in srgb, var(--semantic-success) 10%, transparent);
+  --semantic-success-border: color-mix(in srgb, var(--semantic-success) 30%, transparent);
+  --semantic-warning-bg: color-mix(in srgb, var(--semantic-warning) 10%, transparent);
+  --semantic-warning-border: color-mix(in srgb, var(--semantic-warning) 30%, transparent);
+  --semantic-error-bg: color-mix(in srgb, var(--semantic-error) 10%, transparent);
+  --semantic-error-border: color-mix(in srgb, var(--semantic-error) 30%, transparent);
+  --semantic-info-bg: color-mix(in srgb, var(--semantic-info) 10%, transparent);
+  --semantic-info-border: color-mix(in srgb, var(--semantic-info) 30%, transparent);
+
+  /* ---------- Legacy aliases — existing components consume these ---------- */
+  /* Backgrounds + surfaces */
+  --color-bg: var(--workspace-bg);
+  --color-bg-warm: var(--workspace-bg);
+  --color-surface: var(--workspace-surface);
+  --color-surface-raised: var(--workspace-bg);
+  --color-surface-soft: #F1F5F9;
+
+  /* Borders */
+  --color-border: var(--workspace-border);
+  --color-border-strong: #CBD5E1;
+
+  /* Text */
+  --color-text: var(--workspace-text);
+  --color-text-muted: var(--workspace-text-muted);
+  --color-text-faint: #94A3B8;
   --color-text-inverse: #FFFFFF;
 
-  --color-primary: #155E63;
-  --color-primary-hover: #0F474A;
-  --color-primary-soft: #E2F2F1;
-  --color-link: #2563A8;
-  --color-focus: #2B7FFF;
+  /* Brand / interactive */
+  --color-primary: var(--workspace-primary);
+  --color-primary-hover: #172554;
+  --color-primary-soft: #DBEAFE;
+  --color-link: var(--workspace-link);
+  --color-focus: var(--workspace-link);
+  --color-accent: var(--workspace-accent);
 
-  --color-heritage-green: #244C3A;
-  --color-heritage-brick: #8B4A3B;
+  /* Status tokens — re-routed to the universal semantic system.
+     Background = ~10% opacity, border = ~30% opacity, text = solid. */
+  --status-success-text: var(--semantic-success);
+  --status-success-bg: var(--semantic-success-bg);
+  --status-success-border: var(--semantic-success-border);
 
-  --status-success-text: #166534;
-  --status-success-bg: #EAF7EE;
-  --status-success-border: #B8DEC4;
+  --status-warning-text: var(--semantic-warning);
+  --status-warning-bg: var(--semantic-warning-bg);
+  --status-warning-border: var(--semantic-warning-border);
 
-  --status-warning-text: #92400E;
-  --status-warning-bg: #FFF7E0;
-  --status-warning-border: #F0D28A;
+  --status-error-text: var(--semantic-error);
+  --status-error-bg: var(--semantic-error-bg);
+  --status-error-border: var(--semantic-error-border);
 
-  --status-review-text: #5B3FA4;
-  --status-review-bg: #F1EDFF;
-  --status-review-border: #CFC4F6;
+  --status-info-text: var(--semantic-info);
+  --status-info-bg: var(--semantic-info-bg);
+  --status-info-border: var(--semantic-info-border);
 
-  --status-info-text: #1D5D8F;
-  --status-info-bg: #EAF4FF;
-  --status-info-border: #BBD8F0;
+  /* Review + neutral are project-specific extras kept for compatibility.
+     They follow the same 10/30/solid pattern using slate neutrals. */
+  --status-review-text: #6D28D9;
+  --status-review-bg: rgba(109, 40, 217, 0.10);
+  --status-review-border: rgba(109, 40, 217, 0.30);
 
-  --status-error-text: #A12A2A;
-  --status-error-bg: #FDECEC;
-  --status-error-border: #E8B5B5;
-
-  --status-neutral-text: #475569;
-  --status-neutral-bg: #F1F5F9;
-  --status-neutral-border: #CBD5E1;
+  --status-neutral-text: var(--workspace-text-muted);
+  --status-neutral-bg: rgba(100, 116, 139, 0.10);
+  --status-neutral-border: rgba(100, 116, 139, 0.30);
 
   --space-1: 8px;
   --space-2: 12px;
@@ -65,13 +108,40 @@
   --radius-lg: 14px;
   --radius-xl: 20px;
 
-  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04);
-  --shadow-card-hover: 0 4px 12px rgba(17, 24, 39, 0.08),
-    0 1px 2px rgba(17, 24, 39, 0.04);
-  --shadow-rail: 0 1px 0 rgba(17, 24, 39, 0.04);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(15, 23, 42, 0.08),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-rail: 0 1px 0 rgba(15, 23, 42, 0.04);
 }
 
 @theme inline {
+  /* Workspace */
+  --color-workspace-bg: var(--workspace-bg);
+  --color-workspace-surface: var(--workspace-surface);
+  --color-workspace-border: var(--workspace-border);
+  --color-workspace-text: var(--workspace-text);
+  --color-workspace-text-muted: var(--workspace-text-muted);
+  --color-workspace-primary: var(--workspace-primary);
+  --color-workspace-link: var(--workspace-link);
+  --color-workspace-accent: var(--workspace-accent);
+
+  /* Market */
+  --color-market-bg: var(--market-bg);
+  --color-market-surface: var(--market-surface);
+  --color-market-border: var(--market-border);
+  --color-market-text: var(--market-text);
+  --color-market-text-muted: var(--market-text-muted);
+  --color-market-bullish: var(--market-bullish);
+  --color-market-bearish: var(--market-bearish);
+  --color-market-focus: var(--market-focus);
+
+  /* Semantic */
+  --color-semantic-success: var(--semantic-success);
+  --color-semantic-warning: var(--semantic-warning);
+  --color-semantic-error: var(--semantic-error);
+  --color-semantic-info: var(--semantic-info);
+
+  /* Legacy alias utilities (keep existing class names working) */
   --color-bg: var(--color-bg);
   --color-bg-warm: var(--color-bg-warm);
   --color-surface: var(--color-surface);
@@ -91,9 +161,7 @@
   --color-primary-soft: var(--color-primary-soft);
   --color-link: var(--color-link);
   --color-focus: var(--color-focus);
-
-  --color-heritage-green: var(--color-heritage-green);
-  --color-heritage-brick: var(--color-heritage-brick);
+  --color-accent: var(--color-accent);
 
   --font-sans: var(--font-ui);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -104,12 +172,12 @@
 }
 
 html {
-  background: var(--color-bg);
+  background: var(--workspace-bg);
 }
 
 body {
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--workspace-bg);
+  color: var(--workspace-text);
   font-family: var(--font-ui);
   font-feature-settings: "kern", "liga";
   -webkit-font-smoothing: antialiased;
@@ -129,6 +197,84 @@ a {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* ---------- Shell + card utilities ---------- */
+.workspace-shell {
+  background: var(--workspace-bg);
+  color: var(--workspace-text);
+}
+
+.workspace-card {
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-border);
+}
+
+.market-shell {
+  background: var(--market-bg);
+  color: var(--market-text);
+
+  /* Inside the market region, descendants of legacy components automatically
+     render in dark mode by re-binding the alias tokens to market equivalents. */
+  --color-bg: var(--market-bg);
+  --color-bg-warm: var(--market-bg);
+  --color-surface: var(--market-surface);
+  --color-surface-raised: var(--market-surface);
+  --color-surface-soft: var(--market-surface);
+  --color-border: var(--market-border);
+  --color-border-strong: var(--market-border);
+  --color-text: var(--market-text);
+  --color-text-muted: var(--market-text-muted);
+  --color-text-faint: var(--market-text-muted);
+  --color-text-inverse: var(--market-text);
+  --color-primary: var(--market-focus);
+  --color-primary-hover: var(--market-focus);
+  --color-primary-soft: color-mix(in srgb, var(--market-focus) 15%, transparent);
+  --color-link: var(--market-focus);
+  --color-focus: var(--market-focus);
+  --color-accent: var(--workspace-accent);
+}
+
+.market-shell *:focus-visible {
+  outline-color: var(--market-focus);
+}
+
+.market-card {
+  background: var(--market-surface);
+  border: 1px solid var(--market-border);
+}
+
+.market-positive {
+  color: var(--market-bullish);
+}
+
+.market-negative {
+  color: var(--market-bearish);
+}
+
+/* ---------- Status badge utilities ---------- */
+.status-success {
+  color: var(--semantic-success);
+  background: var(--semantic-success-bg);
+  border: 1px solid var(--semantic-success-border);
+}
+
+.status-warning {
+  color: var(--semantic-warning);
+  background: var(--semantic-warning-bg);
+  border: 1px solid var(--semantic-warning-border);
+}
+
+.status-error {
+  color: var(--semantic-error);
+  background: var(--semantic-error-bg);
+  border: 1px solid var(--semantic-error-border);
+}
+
+.status-info {
+  color: var(--semantic-info);
+  background: var(--semantic-info-bg);
+  border: 1px solid var(--semantic-info-border);
 }
 
 @media (prefers-reduced-motion: reduce) {
