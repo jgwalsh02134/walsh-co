@@ -113,44 +113,36 @@ export const propertySnapshots: PropertyMarketSnapshot[] =
     sourceStatus: "Not connected",
   }));
 
+/**
+ * Legacy "data source" list. Kept only as a derived view of the canonical
+ * registry in src/lib/market-sources.ts so existing KPI counts continue
+ * to work without a refactor of computeKpis().
+ *
+ * New code should consume `marketSources` from src/lib/market-sources.ts
+ * directly.
+ *
+ * @deprecated Use marketSources from src/lib/market-sources.ts.
+ */
 export type DataSource = {
   name: string;
   purpose: string;
   status: "Not connected" | "Pending" | "Connected";
 };
 
-export const dataSources: DataSource[] = [
-  {
-    name: "ATTOM",
-    purpose: "Property data, ownership, sales history",
-    status: "Not connected",
-  },
-  {
-    name: "RentCast",
-    purpose: "Rent estimates and rental comparables",
-    status: "Not connected",
-  },
-  {
-    name: "HouseCanary",
-    purpose: "Automated valuation and forecast models",
-    status: "Not connected",
-  },
-  {
-    name: "Google Maps / Mapbox",
-    purpose: "Geocoding and neighborhood maps",
-    status: "Not connected",
-  },
-  {
-    name: "Census / FRED",
-    purpose: "Demographic and macroeconomic indicators",
-    status: "Not connected",
-  },
-  {
-    name: "Climate / Hazard Data",
-    purpose: "Flood, wildfire, and climate-risk overlays",
-    status: "Not connected",
-  },
-];
+import { marketSources } from "./market-sources";
+
+export const dataSources: DataSource[] = marketSources.map((s) => ({
+  name: s.name,
+  purpose: s.intendedUse,
+  // Map registry status into the legacy 3-value shape used by computeKpis.
+  // "Manual" and "Planned" both surface as "Pending" for back-compat.
+  status:
+    s.status === "Connected"
+      ? "Connected"
+      : s.status === "Not connected"
+      ? "Not connected"
+      : "Pending",
+}));
 
 export type NeighborhoodSignal = {
   category: string;

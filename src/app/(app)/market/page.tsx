@@ -5,7 +5,6 @@ import { SectionPanel } from "@/components/section-panel";
 import {
   computeKpis,
   dash,
-  dataSources,
   forecastHorizons,
   formatCurrency,
   formatDate,
@@ -17,6 +16,16 @@ import {
   trackedProperties,
   type TrackedProperty,
 } from "@/lib/market-data";
+import {
+  type MarketSection,
+  type MarketSource,
+  type SourceStatus,
+  countConnected,
+  getSectionSources,
+  getSectionStatus,
+  marketSources,
+  NEXT_INTEGRATION,
+} from "@/lib/market-sources";
 import { statusTokens } from "@/lib/status";
 
 function ToneTag({
@@ -212,14 +221,69 @@ function EstimateRow({
   );
 }
 
-function SourceStatusTag({ status }: { status: string }) {
-  const tone =
-    status === "Connected"
-      ? "success"
-      : status === "Pending"
-      ? "warning"
-      : "neutral";
-  return <ToneTag label={status} tone={tone} />;
+function statusTone(status: SourceStatus): keyof typeof statusTokens {
+  switch (status) {
+    case "Connected":
+      return "success";
+    case "Manual":
+      return "info";
+    case "Planned":
+      return "warning";
+    case "Not connected":
+    default:
+      return "neutral";
+  }
+}
+
+function SourceStatusTag({ status }: { status: SourceStatus }) {
+  return <ToneTag label={status} tone={statusTone(status)} />;
+}
+
+/**
+ * Compact in-panel badge row: shows the section's effective status plus
+ * each intended source name. Designed to sit under a section description
+ * without dominating the panel header.
+ */
+function SourceBadges({
+  section,
+  sources,
+}: {
+  section: MarketSection;
+  sources: MarketSource[];
+}) {
+  const status = getSectionStatus(section);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <SourceStatusTag status={status} />
+      <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+        Intended:
+      </span>
+      {sources.map((s) => (
+        <span
+          key={s.id}
+          className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+          style={{
+            background: "transparent",
+            borderColor: "var(--market-border)",
+            color: "var(--market-text-secondary)",
+          }}
+          title={s.intendedUse}
+        >
+          {s.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PanelSources({ section }: { section: MarketSection }) {
+  const sources = getSectionSources(section);
+  if (sources.length === 0) return null;
+  return (
+    <div className="mb-3 -mt-1">
+      <SourceBadges section={section} sources={sources} />
+    </div>
+  );
 }
 
 export default function MarketPage() {
@@ -228,6 +292,7 @@ export default function MarketPage() {
     (p) => p.kind === "business"
   );
   const privateProperty = trackedProperties.find((p) => p.kind === "private");
+  const counts = countConnected();
 
   return (
     <div className="market-shell -mx-4 -my-6 flex flex-col gap-8 px-4 py-6 sm:-mx-6 sm:-my-8 sm:px-6 sm:py-8 lg:-mx-8 lg:-my-10 lg:px-8 lg:py-10">
@@ -335,6 +400,7 @@ export default function MarketPage() {
           title="Property Value Estimates"
           description="Automated valuations vs. acquisition basis. Placeholder until a source is connected."
         >
+          <PanelSources section="propertyValueEstimates" />
           <div className="flex flex-col">
             {businessProperties.map((p) => (
               <EstimateRow key={p.id} property={p} kind="value" />
@@ -346,6 +412,7 @@ export default function MarketPage() {
           title="Rent Estimates"
           description="Rent ranges and current rent vs. market. Placeholder until a source is connected."
         >
+          <PanelSources section="rentEstimates" />
           <div className="flex flex-col">
             {businessProperties.map((p) => (
               <EstimateRow key={p.id} property={p} kind="rent" />
@@ -359,6 +426,7 @@ export default function MarketPage() {
           title="Sales Comparables"
           description="Recent sold properties relevant to portfolio assets."
         >
+          <PanelSources section="salesComparables" />
           <DataPlaceholder>
             Comp sets will appear here once a sales-data source (e.g. ATTOM) is
             connected.
@@ -369,6 +437,7 @@ export default function MarketPage() {
           title="Rental Comparables"
           description="Active and recently leased rentals in the same submarkets."
         >
+          <PanelSources section="rentalComparables" />
           <DataPlaceholder>
             Rental comps will appear here once a rental-data source (e.g.
             RentCast) is connected.
@@ -380,6 +449,7 @@ export default function MarketPage() {
         title="Neighborhood Signals"
         description="Demand, schools, walkability, and other locality factors."
       >
+        <PanelSources section="neighborhoodSignals" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {neighborhoodSignalCategories.map((s) => (
             <div
@@ -405,6 +475,7 @@ export default function MarketPage() {
           title="Forecasts"
           description="Forward-looking value and rent projections."
         >
+          <PanelSources section="forecasts" />
           <div className="flex flex-col">
             {forecastHorizons.map((h) => (
               <div
@@ -431,6 +502,7 @@ export default function MarketPage() {
           title="Tax / Assessment Watch"
           description="Assessed values, tax bills, and reassessment history to monitor."
         >
+          <PanelSources section="taxAssessment" />
           <div className="flex flex-col">
             {trackedProperties
               .filter((p) => p.kind === "business")
@@ -456,6 +528,7 @@ export default function MarketPage() {
         title="Risk Indicators"
         description="Climate, regulatory, and market-level risks that could affect value or rentability."
       >
+        <PanelSources section="riskIndicators" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {riskCategories.map((r) => (
             <div
@@ -478,26 +551,64 @@ export default function MarketPage() {
 
       <SectionPanel
         title="Data Sources"
-        description="Integration placeholders. Nothing here calls an external service yet."
+        description={`${counts.connected} connected · ${counts.manual} manual · ${counts.total} total`}
       >
         <ul className="flex flex-col divide-y divide-[var(--market-border)]">
-          {dataSources.map((d) => (
+          {marketSources.map((s) => (
             <li
-              key={d.name}
-              className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+              key={s.id}
+              className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
             >
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold text-[var(--market-text)]">
-                  {d.name}
-                </span>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-[var(--market-text)]">
+                    {s.name}
+                  </span>
+                  <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                    {s.category}
+                  </span>
+                </div>
                 <span className="text-xs text-[var(--market-text-muted)]">
-                  {d.purpose}
+                  {s.intendedUse}
                 </span>
+                {s.envVarName ? (
+                  <span className="text-[11px] text-[var(--market-text-muted)]">
+                    Env:{" "}
+                    <code className="font-mono text-[var(--market-text-secondary)]">
+                      {s.envVarName}
+                    </code>{" "}
+                    {s.requiresApiKey ? "(required)" : "(optional)"}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-[var(--market-text-muted)]">
+                    No API key required.
+                  </span>
+                )}
+                {s.notes ? (
+                  <span className="text-[11px] italic text-[var(--market-text-muted)]">
+                    {s.notes}
+                  </span>
+                ) : null}
               </div>
-              <SourceStatusTag status={d.status} />
+              <SourceStatusTag status={s.status} />
             </li>
           ))}
         </ul>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Next integration"
+        description={`Recommended: ${NEXT_INTEGRATION.recommendedFirstLiveSource}`}
+      >
+        <p className="text-sm text-[var(--market-text-secondary)]">
+          {NEXT_INTEGRATION.reason}
+        </p>
+        <p className="mt-3 text-xs text-[var(--market-text-muted)]">
+          No API calls are wired in this pass. Connecting RentCast will require
+          adding the <code className="font-mono">RENTCAST_API_KEY</code>{" "}
+          environment variable to the Railway service and a server-side fetch
+          action — both deferred to a future task.
+        </p>
       </SectionPanel>
     </div>
   );
