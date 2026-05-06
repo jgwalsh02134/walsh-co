@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -oE \"\\(^|[^a-zA-Z]\\)\\(X|XIcon\\)\\([^a-zA-Z]|$\\)\" /Users/j-gregory-walsh/Documents/projects-2/walsh-co-llc/node_modules/lucide-react/dist/esm/lucide-react.mjs)"
+      "Bash(grep -oE \"\\(^|[^a-zA-Z]\\)\\(X|XIcon\\)\\([^a-zA-Z]|$\\)\" /Users/j-gregory-walsh/Documents/projects-2/walsh-co-llc/node_modules/lucide-react/dist/esm/lucide-react.mjs)",
+      "Bash(npx prisma *)",
+      "Bash(npm uninstall *)"
     ]
   }
 }

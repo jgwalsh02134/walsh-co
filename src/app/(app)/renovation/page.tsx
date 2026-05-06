@@ -205,10 +205,10 @@ export default function RenovationPage() {
         description="Qualification gaps or open requests."
         action={
           <Link
-            href="/contractors"
+            href="/contacts?category=CONTRACTORS_TRADES"
             className="text-xs font-semibold text-[var(--color-primary)] hover:underline"
           >
-            All contractors
+            All contacts
           </Link>
         }
         padded={false}

@@ -1,0 +1,80 @@
+// J.G. Walsh & Co. Workspace — Prisma schema
+// Postgres on Railway. See README.md for setup, migrations, and seed steps.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Contact ----------
+// First editable module. relatedProperty / relatedProject are kept as plain
+// strings for now to avoid premature relations; promote to FKs once the
+// Property table is real.
+
+enum ContactCategory {
+  CONTRACTORS_TRADES
+  LEGAL
+  INSURANCE
+  MUNICIPAL
+  UTILITIES
+  FINANCE_ACCOUNTING
+  REAL_ESTATE_LEASING
+  PROPERTY_MANAGEMENT
+  TENANTS_OCCUPANTS
+  SUPPLIERS
+  INSPECTORS_TESTING
+  OTHER
+}
+
+enum ContactStatus {
+  ACTIVE
+  PROSPECT
+  PREFERRED
+  BACKUP
+  NEEDS_FOLLOWUP
+  INACTIVE
+  DO_NOT_USE
+}
+
+enum ComplianceStatus {
+  UNKNOWN
+  MISSING
+  REQUESTED
+  CURRENT
+  EXPIRED
+  NOT_REQUIRED
+}
+
+model Contact {
+  id              String           @id @default(cuid())
+  firstName       String?
+  lastName        String?
+  displayName     String
+  company         String?
+  role            String?
+  category        ContactCategory
+  phone           String?
+  email           String?
+  website         String?
+  address         String?
+  notes           String?          @db.Text
+  isFavorite      Boolean          @default(false)
+  status          ContactStatus    @default(ACTIVE)
+  relatedProperty String?
+  relatedProject  String?
+  insuranceStatus ComplianceStatus @default(UNKNOWN)
+  licenseStatus   ComplianceStatus @default(UNKNOWN)
+  w9Status        ComplianceStatus @default(UNKNOWN)
+  lastContactedAt DateTime?
+  followUpAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([category])
+  @@index([status])
+  @@index([displayName])
+}

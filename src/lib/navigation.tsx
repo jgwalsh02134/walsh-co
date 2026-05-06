@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   ArrowRight,
   BadgeCheck,
+  BookUser,
   CalendarDays,
   ChartCandlestick,
   CircleDollarSign,
@@ -27,7 +28,6 @@ import {
   TrendingUp,
   TriangleAlert,
   Upload,
-  UsersRound,
   WalletCards,
   X,
 } from "lucide-react";
@@ -76,7 +76,7 @@ export const icons = {
   market: makeIcon(ChartCandlestick, NAV),
   properties: makeIcon(House, NAV),
   renovation: makeIcon(HardHat, NAV),
-  contractors: makeIcon(UsersRound, NAV),
+  contacts: makeIcon(BookUser, NAV),
   bids: makeIcon(Handshake, NAV),
   documents: makeIcon(FolderOpen, NAV),
   budget: makeIcon(CircleDollarSign, NAV),
@@ -99,7 +99,7 @@ export const cardIcons = {
   market: makeIcon(ChartCandlestick, CARD),
   properties: makeIcon(House, CARD),
   renovation: makeIcon(HardHat, CARD),
-  contractors: makeIcon(UsersRound, CARD),
+  contacts: makeIcon(BookUser, CARD),
   documents: makeIcon(FolderOpen, CARD),
   budget: makeIcon(CircleDollarSign, CARD),
   tasks: makeIcon(ListTodo, CARD),
@@ -131,7 +131,7 @@ export const sidebarNav: NavItem[] = [
   { label: "Market Tracker", href: "/market", icon: icons.market },
   { label: "Properties", href: "/properties", icon: icons.properties },
   { label: "322 Osborne Workspace", href: "/renovation", icon: icons.renovation },
-  { label: "Contractors", href: "/contractors", icon: icons.contractors },
+  { label: "Contacts", href: "/contacts", icon: icons.contacts },
   { label: "Bids", href: "/bids", icon: icons.bids },
   { label: "Documents", href: "/documents", icon: icons.documents },
   { label: "Budget", href: "/budget", icon: icons.budget },
@@ -179,10 +179,11 @@ export const landingCards: LandingCard[] = [
     icon: cardIcons.renovation,
   },
   {
-    title: "Contractors & Bids",
-    description: "Source trades, compare proposals, and track award decisions.",
-    href: "/contractors",
-    icon: cardIcons.contractors,
+    title: "Contacts",
+    description:
+      "Organize contractors, professionals, municipal contacts, vendors, and key relationships.",
+    href: "/contacts",
+    icon: cardIcons.contacts,
   },
   {
     title: "Documents",
