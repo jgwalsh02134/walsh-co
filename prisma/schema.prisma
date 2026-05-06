@@ -69,6 +69,19 @@ model Contact {
   insuranceStatus ComplianceStatus @default(UNKNOWN)
   licenseStatus   ComplianceStatus @default(UNKNOWN)
   w9Status        ComplianceStatus @default(UNKNOWN)
+  // Lightweight avatar customization. Validated against allowlists in
+  // src/lib/contact-format.ts; no arbitrary HTML, no uploads.
+  avatarMode      String?          // "INITIALS" | "ICON"
+  avatarColor     String?          // a name from the avatar palette
+  avatarIcon      String?          // a key from the avatar icon registry
+  // Company-wide relationship taxonomy. Designed to apply across other
+  // modules later (Bids, Documents, Tasks, etc.) — not Contacts-only.
+  // Validated against allowlists in src/lib/contact-taxonomy.ts.
+  entityType        String?
+  relationshipType  String?
+  functionalDomain  String?
+  specialty         String?
+  contextRole       String?
   lastContactedAt DateTime?
   followUpAt      DateTime?
   archivedAt      DateTime?
