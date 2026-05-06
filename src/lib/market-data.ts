@@ -64,13 +64,14 @@ export const trackedProperties: TrackedProperty[] = [
     address: "322 Osborne Rd",
     city: "Loudonville",
     state: "NY",
-    zip: null,
-    zipNeedsVerification: true,
+    zip: "12211",
+    zipNeedsVerification: false,
     factsNeedVerification: true,
     assetRole: "Active Renovation Project",
     kind: "business",
     workspaceHref: "/renovation",
-    notes: "Renovation in bidding & procurement. ZIP needs verification.",
+    notes:
+      "Renovation in bidding & procurement. Address records pending official-source verification.",
   },
   {
     id: "macaffer-14",
