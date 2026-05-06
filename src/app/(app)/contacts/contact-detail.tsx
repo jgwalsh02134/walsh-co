@@ -7,7 +7,7 @@ import {
   formatPhoneLink,
 } from "@/lib/contacts";
 import { statusTokens } from "@/lib/status";
-import { deleteContact, toggleFavorite } from "./actions";
+import { archiveContact, toggleFavorite } from "./actions";
 
 function ToneTag({
   label,
@@ -208,20 +208,21 @@ export function ContactDetail({ contact }: { contact: Contact }) {
         <form
           action={async () => {
             "use server";
-            await deleteContact(contact.id);
+            await archiveContact(contact.id);
           }}
           className="ml-auto"
         >
           <button
             type="submit"
+            title="Hide from the active list. Record is preserved."
             className="inline-flex items-center justify-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-sm font-medium hover:opacity-90"
             style={{
-              borderColor: "var(--semantic-error-border)",
-              background: "var(--semantic-error-bg)",
-              color: "var(--semantic-error)",
+              borderColor: "var(--semantic-warning-border)",
+              background: "var(--semantic-warning-bg)",
+              color: "var(--semantic-warning)",
             }}
           >
-            Delete
+            Archive contact
           </button>
         </form>
       </footer>

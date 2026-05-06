@@ -65,7 +65,12 @@ export default async function ContactsPage({
   let selected: Awaited<ReturnType<typeof prisma.contact.findUnique>> = null;
 
   try {
-    const where: Prisma.ContactWhereInput = {};
+    // Archived contacts are excluded from the main list and from all
+    // overview counts. They remain in the database and can be surfaced via
+    // a future archived-only view if needed.
+    const activeOnly: Prisma.ContactWhereInput = { archivedAt: null };
+
+    const where: Prisma.ContactWhereInput = { ...activeOnly };
     if (categoryParam) where.category = categoryParam;
     if (favoritesOnly) where.isFavorite = true;
     if (q) {
@@ -85,12 +90,15 @@ export default async function ContactsPage({
         orderBy: [{ isFavorite: "desc" }, { displayName: "asc" }],
         take: 500,
       }),
-      prisma.contact.count(),
-      prisma.contact.count({ where: { isFavorite: true } }),
+      prisma.contact.count({ where: activeOnly }),
+      prisma.contact.count({
+        where: { ...activeOnly, isFavorite: true },
+      }),
     ]);
 
     const grouped = await prisma.contact.groupBy({
       by: ["category"],
+      where: activeOnly,
       _count: { _all: true },
     });
     for (const g of grouped) {

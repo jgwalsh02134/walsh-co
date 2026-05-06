@@ -93,8 +93,16 @@ export async function updateContact(id: string, form: FormData) {
   redirect(`/contacts?id=${id}`);
 }
 
-export async function deleteContact(id: string) {
-  await prisma.contact.delete({ where: { id } });
+/**
+ * Archive a contact (soft delete) by setting `archivedAt`. Records are
+ * preserved so historical references (notes, related projects) remain
+ * resolvable. Hard delete is intentionally not exposed in this pass.
+ */
+export async function archiveContact(id: string) {
+  await prisma.contact.update({
+    where: { id },
+    data: { archivedAt: new Date() },
+  });
   revalidatePath("/contacts");
   redirect("/contacts");
 }
