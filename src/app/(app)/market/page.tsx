@@ -49,7 +49,7 @@ import { ZillowRefreshButton } from "./zillow-refresh-button";
 export const dynamic = "force-dynamic";
 
 // =============================================================
-// Helpers
+// Snapshot accessors
 // =============================================================
 
 function getAttomFacts(snap: MarketSourceSnapshot | null): AttomFacts | null {
@@ -81,6 +81,10 @@ function getZhviSeries(
   );
 }
 
+// =============================================================
+// Format helpers
+// =============================================================
+
 function formatPctChange(v: number | null): string {
   if (v == null) return dash;
   const pct = v * 100;
@@ -109,13 +113,6 @@ function formatFredValue(obs: FredObservation | null): string {
   }
 }
 
-function confidenceToPct(c: string | null | undefined): number | null {
-  if (c === "HIGH") return 90;
-  if (c === "MEDIUM") return 60;
-  if (c === "LOW") return 30;
-  return null;
-}
-
 function statusTone(status: SourceStatus): keyof typeof statusTokens {
   switch (status) {
     case "Connected":
@@ -130,7 +127,6 @@ function statusTone(status: SourceStatus): keyof typeof statusTokens {
   }
 }
 
-/** "X days ago" / "today" / em-dash. Used in the freshness header line. */
 function relativeAge(d: Date | null | undefined): string {
   if (!d) return dash;
   const ms = Date.now() - new Date(d).getTime();
@@ -152,53 +148,206 @@ function isStale(d: Date | null | undefined, daysThreshold: number): boolean {
 }
 
 // =============================================================
-// Resolution helpers
+// Pipelines
 // =============================================================
 
-type Resolved = {
-  estimatedValue: number | null;
-  estimatedRent: number | null;
-  source: "RentCast" | "Manual Internal" | "None";
+/**
+ * Pipeline A — Current House Market Value.
+ * Order of preference:
+ *   1. ATTOM AVM (market value from the assessment block)
+ *   2. RentCast /avm/value
+ *   3. Manual underwriting value (MarketManualEntry.estimatedValue)
+ *   4. em-dash
+ *
+ * House value is NEVER derived from rent. Rent is a separate pipeline.
+ */
+type HouseValue = {
+  value: number | null;
+  source: "ATTOM AVM" | "RentCast" | "Manual" | "None";
   asOfDate: Date | null;
-  valueLow: number | null;
-  valueHigh: number | null;
-  rentLow: number | null;
-  rentHigh: number | null;
-  compsCount: number | null;
+  rangeLow: number | null;
+  rangeHigh: number | null;
 };
 
-function resolveEstimate(
+function resolveHouseValue(
+  attom: MarketSourceSnapshot | null,
   rentCast: MarketSourceSnapshot | null,
   manual: MarketManualEntry | null
-): Resolved {
+): HouseValue {
+  const facts = getAttomFacts(attom);
+  if (facts?.marketValue != null) {
+    return {
+      value: facts.marketValue,
+      source: "ATTOM AVM",
+      asOfDate: attom?.asOfDate ?? attom?.fetchedAt ?? null,
+      rangeLow: null,
+      rangeHigh: null,
+    };
+  }
   const rc = rentCast?.status === "SUCCESS" ? rentCast : null;
   const rcValue = rc ? decimalToNumber(rc.estimatedValue) : null;
-  const rcRent = rc ? decimalToNumber(rc.estimatedRent) : null;
-  const mValue = manual ? decimalToNumber(manual.estimatedValue) : null;
-  const mRent = manual ? decimalToNumber(manual.estimatedRent) : null;
-
-  const estimatedValue = rcValue ?? mValue;
-  const estimatedRent = rcRent ?? mRent;
-
-  const source: Resolved["source"] =
-    rcValue != null || rcRent != null
-      ? "RentCast"
-      : mValue != null || mRent != null
-      ? "Manual Internal"
-      : "None";
-
-  const asOfDate = rc?.asOfDate ?? rc?.fetchedAt ?? manual?.asOfDate ?? null;
-
+  if (rcValue != null) {
+    return {
+      value: rcValue,
+      source: "RentCast",
+      asOfDate: rc?.asOfDate ?? rc?.fetchedAt ?? null,
+      rangeLow: rc ? decimalToNumber(rc.valueLow) : null,
+      rangeHigh: rc ? decimalToNumber(rc.valueHigh) : null,
+    };
+  }
+  const manualValue = manual ? decimalToNumber(manual.estimatedValue) : null;
+  if (manualValue != null) {
+    return {
+      value: manualValue,
+      source: "Manual",
+      asOfDate: manual?.asOfDate ?? null,
+      rangeLow: null,
+      rangeHigh: null,
+    };
+  }
   return {
-    estimatedValue,
-    estimatedRent,
-    source,
-    asOfDate,
-    valueLow: rc ? decimalToNumber(rc.valueLow) : null,
-    valueHigh: rc ? decimalToNumber(rc.valueHigh) : null,
-    rentLow: rc ? decimalToNumber(rc.rentLow) : null,
-    rentHigh: rc ? decimalToNumber(rc.rentHigh) : null,
-    compsCount: rc?.compsCount ?? null,
+    value: null,
+    source: "None",
+    asOfDate: null,
+    rangeLow: null,
+    rangeHigh: null,
+  };
+}
+
+/**
+ * Pipeline B — Current Market Rent.
+ * Order of preference:
+ *   1. RentCast /avm/rent/long-term
+ *   2. Manual target rent (MarketManualEntry.targetRent)
+ *   3. em-dash
+ */
+type MarketRent = {
+  rent: number | null;
+  source: "RentCast" | "Manual target" | "None";
+  asOfDate: Date | null;
+  rangeLow: number | null;
+  rangeHigh: number | null;
+};
+
+function resolveMarketRent(
+  rentCast: MarketSourceSnapshot | null,
+  manual: MarketManualEntry | null
+): MarketRent {
+  const rc = rentCast?.status === "SUCCESS" ? rentCast : null;
+  const rcRent = rc ? decimalToNumber(rc.estimatedRent) : null;
+  if (rcRent != null) {
+    return {
+      rent: rcRent,
+      source: "RentCast",
+      asOfDate: rc?.asOfDate ?? rc?.fetchedAt ?? null,
+      rangeLow: rc ? decimalToNumber(rc.rentLow) : null,
+      rangeHigh: rc ? decimalToNumber(rc.rentHigh) : null,
+    };
+  }
+  const manualTarget = manual ? decimalToNumber(manual.targetRent) : null;
+  if (manualTarget != null) {
+    return {
+      rent: manualTarget,
+      source: "Manual target",
+      asOfDate: manual?.asOfDate ?? null,
+      rangeLow: null,
+      rangeHigh: null,
+    };
+  }
+  return {
+    rent: null,
+    source: "None",
+    asOfDate: null,
+    rangeLow: null,
+    rangeHigh: null,
+  };
+}
+
+/**
+ * Pipeline C — Historical House Value Trend (ZIP-level).
+ * Currently sourced exclusively from Zillow ZHVI ZIP. FHFA HPI / Redfin
+ * remain unwired.
+ *
+ * Returns the same ZhviSeries shape from the Zillow client, plus a
+ * derived annualized growth rate that's used by the projection pipeline.
+ */
+type ValueTrend = {
+  zhvi: ZhviSeries | null;
+  /** Annualized growth rate, decimal (0.05 = +5%/yr). null if unknown. */
+  annualizedRate: number | null;
+};
+
+function resolveValueTrend(
+  property: TrackedProperty,
+  zhvi: Record<ZillowTargetZip, ZhviSeries | null> | null
+): ValueTrend {
+  const zip = property.zip as ZillowTargetZip | null | undefined;
+  const series = zip && zhvi ? zhvi[zip] ?? null : null;
+  if (!series) return { zhvi: null, annualizedRate: null };
+
+  // Prefer 1Y for annualized rate. Fall back to (1+3y)^(1/3)-1 then
+  // (1+5y)^(1/5)-1 when shorter horizons are missing.
+  let rate: number | null = null;
+  if (series.yoyChange != null) {
+    rate = series.yoyChange;
+  } else if (series.threeYearChange != null) {
+    rate = Math.pow(1 + series.threeYearChange, 1 / 3) - 1;
+  } else if (series.fiveYearChange != null) {
+    rate = Math.pow(1 + series.fiveYearChange, 1 / 5) - 1;
+  }
+  return { zhvi: series, annualizedRate: rate };
+}
+
+/**
+ * Pipeline E — Internal value projection.
+ * No provider forecast is wired today, so we synthesize a simple
+ * compounded projection from the current house market value plus the
+ * annualized ZIP value trend. Only emits values when BOTH inputs exist.
+ *
+ * formula: value × (1 + annualRate)^(monthsAhead / 12)
+ *
+ * The label on the page is explicit: "Internal projection — based on
+ * current AVM + ZIP trend". Never presented as a guaranteed forecast.
+ */
+type ValueProjection = {
+  m12: number | null;
+  m24: number | null;
+  m36: number | null;
+  /** Source of the growth rate used; null when no projection. */
+  rateSource: "Zillow ZHVI 1Y" | "Zillow ZHVI 3Y annualized" | "Zillow ZHVI 5Y annualized" | null;
+  rate: number | null;
+};
+
+function resolveValueProjection(
+  currentValue: number | null,
+  zhvi: ZhviSeries | null
+): ValueProjection {
+  if (currentValue == null || zhvi == null) {
+    return { m12: null, m24: null, m36: null, rateSource: null, rate: null };
+  }
+  let rate: number | null = null;
+  let rateSource: ValueProjection["rateSource"] = null;
+  if (zhvi.yoyChange != null) {
+    rate = zhvi.yoyChange;
+    rateSource = "Zillow ZHVI 1Y";
+  } else if (zhvi.threeYearChange != null) {
+    rate = Math.pow(1 + zhvi.threeYearChange, 1 / 3) - 1;
+    rateSource = "Zillow ZHVI 3Y annualized";
+  } else if (zhvi.fiveYearChange != null) {
+    rate = Math.pow(1 + zhvi.fiveYearChange, 1 / 5) - 1;
+    rateSource = "Zillow ZHVI 5Y annualized";
+  }
+  if (rate == null) {
+    return { m12: null, m24: null, m36: null, rateSource: null, rate: null };
+  }
+  const project = (months: number): number =>
+    currentValue * Math.pow(1 + rate!, months / 12);
+  return {
+    m12: project(12),
+    m24: project(24),
+    m36: project(36),
+    rateSource,
+    rate,
   };
 }
 
@@ -254,6 +403,37 @@ function KpiTile({
   );
 }
 
+function MetricCell({
+  label,
+  value,
+  sub,
+  valueColor,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+  valueColor?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+        {label}
+      </span>
+      <span
+        className="font-mono text-sm font-semibold tabular-nums"
+        style={{ color: valueColor ?? "var(--market-text)" }}
+      >
+        {value}
+      </span>
+      {sub != null ? (
+        <span className="text-[10px] text-[var(--market-text-muted)]">
+          {sub}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 // =============================================================
 // Page
 // =============================================================
@@ -264,7 +444,6 @@ export default async function MarketPage() {
     (p) => p.kind === "business"
   );
   const privateProperty = trackedProperties.find((p) => p.kind === "private");
-  // Keep static count helpers exposed for tests / scripts.
   const _staticCounts = countConnected();
   void _staticCounts;
 
@@ -312,7 +491,8 @@ export default async function MarketPage() {
     latestZillowSnapshot = zillowLatest;
     for (const snap of recentSnapshots) {
       if (rentCastByProperty.has(snap.propertyId)) continue;
-      if (snap.status === "SUCCESS") rentCastByProperty.set(snap.propertyId, snap);
+      if (snap.status === "SUCCESS")
+        rentCastByProperty.set(snap.propertyId, snap);
     }
     for (const snap of attomSnapshots) {
       if (attomByProperty.has(snap.propertyId)) continue;
@@ -329,10 +509,8 @@ export default async function MarketPage() {
     rentCastByProperty.get(id) ?? null;
   const attomFor = (id: string): MarketSourceSnapshot | null =>
     attomByProperty.get(id) ?? null;
-  const resolvedFor = (id: string): Resolved =>
-    resolveEstimate(rentCastFor(id), entryFor(id));
 
-  // ----- Provider key/URL state -----
+  // ----- Provider key/URL state + dynamic registry -----
   const keyConfigured = hasRentCastKey();
   const attomKeyConfigured = hasAttomKey();
   const fredKeyConfigured = hasFredKey();
@@ -340,7 +518,6 @@ export default async function MarketPage() {
   const fredObservations = getFredObservations(latestFredSnapshot);
   const zhviSeries = getZhviSeries(latestZillowSnapshot);
 
-  // ----- Per-source latest fetched timestamps -----
   const rentCastLatestFetchedAt =
     allRecentSnapshots.length > 0 ? allRecentSnapshots[0].fetchedAt : null;
   const attomLatestFetchedAt =
@@ -348,7 +525,98 @@ export default async function MarketPage() {
   const fredLatestFetchedAt = latestFredSnapshot?.fetchedAt ?? null;
   const zillowLatestFetchedAt = latestZillowSnapshot?.fetchedAt ?? null;
 
-  // ----- Tax resolver: ATTOM first, manual fallback -----
+  const rentCastSnapshotsExist = rentCastByProperty.size > 0;
+  const attomSnapshotsExist = attomByProperty.size > 0;
+  const fredSnapshotExists =
+    !!latestFredSnapshot && latestFredSnapshot.status === "SUCCESS";
+  const zillowSnapshotExists =
+    !!latestZillowSnapshot && latestZillowSnapshot.status === "SUCCESS";
+  const dynamicSources: typeof marketSources = marketSources.map((s) => {
+    if (s.id === "rentcast")
+      return {
+        ...s,
+        status: rentCastSnapshotsExist
+          ? "Connected"
+          : keyConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    if (s.id === "attom")
+      return {
+        ...s,
+        status: attomSnapshotsExist
+          ? "Connected"
+          : attomKeyConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    if (s.id === "fred")
+      return {
+        ...s,
+        status: fredSnapshotExists
+          ? "Connected"
+          : fredKeyConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    if (s.id === "zillow-research")
+      return {
+        ...s,
+        status: zillowSnapshotExists
+          ? "Connected"
+          : zillowUrlConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    return s;
+  });
+  const dynamicCounts = {
+    connected: dynamicSources.filter((s) => s.status === "Connected").length,
+    manual: dynamicSources.filter((s) => s.status === "Manual").length,
+    total: dynamicSources.length,
+  };
+
+  // ----- Per-property pipelines -----
+  type PropertyAnalysis = {
+    property: TrackedProperty;
+    house: HouseValue;
+    rent: MarketRent;
+    trend: ValueTrend;
+    projection: ValueProjection;
+    verifiedByAttom: boolean;
+    rentCastLastFetched: Date | null;
+    attomLastFetched: Date | null;
+    yieldPct: number | null;
+  };
+  function analyze(property: TrackedProperty): PropertyAnalysis {
+    const m = entryFor(property.id);
+    const rc = rentCastFor(property.id);
+    const a = attomFor(property.id);
+    const house = resolveHouseValue(a, rc, m);
+    const rent = resolveMarketRent(rc, m);
+    const trend = resolveValueTrend(property, zhviSeries);
+    const projection = resolveValueProjection(house.value, trend.zhvi);
+    const annualRent = rent.rent != null ? rent.rent * 12 : null;
+    const yieldPct =
+      house.value != null && annualRent != null && house.value > 0
+        ? (annualRent / house.value) * 100
+        : null;
+    return {
+      property,
+      house,
+      rent,
+      trend,
+      projection,
+      verifiedByAttom: !!getAttomFacts(a),
+      rentCastLastFetched: rc?.fetchedAt ?? null,
+      attomLastFetched: a?.fetchedAt ?? null,
+      yieldPct,
+    };
+  }
+  const businessAnalyses = businessProperties.map(analyze);
+  const privateAnalysis = privateProperty ? analyze(privateProperty) : null;
+
+  // ----- Tax resolver (ATTOM-first, manual fallback) -----
   type TaxResolved = {
     assessedValue: number | null;
     annualTaxes: number | null;
@@ -372,84 +640,24 @@ export default async function MarketPage() {
     return { assessedValue, annualTaxes, source };
   }
 
-  // ----- Dynamic source registry -----
-  const rentCastSnapshotsExist = rentCastByProperty.size > 0;
-  const attomSnapshotsExist = attomByProperty.size > 0;
-  const fredSnapshotExists =
-    !!latestFredSnapshot && latestFredSnapshot.status === "SUCCESS";
-  const zillowSnapshotExists =
-    !!latestZillowSnapshot && latestZillowSnapshot.status === "SUCCESS";
-  const dynamicSources: typeof marketSources = marketSources.map((s) => {
-    if (s.id === "rentcast") {
-      return {
-        ...s,
-        status: rentCastSnapshotsExist
-          ? "Connected"
-          : keyConfigured
-          ? "Planned"
-          : "Not connected",
-      };
-    }
-    if (s.id === "attom") {
-      return {
-        ...s,
-        status: attomSnapshotsExist
-          ? "Connected"
-          : attomKeyConfigured
-          ? "Planned"
-          : "Not connected",
-      };
-    }
-    if (s.id === "fred") {
-      return {
-        ...s,
-        status: fredSnapshotExists
-          ? "Connected"
-          : fredKeyConfigured
-          ? "Planned"
-          : "Not connected",
-      };
-    }
-    if (s.id === "zillow-research") {
-      return {
-        ...s,
-        status: zillowSnapshotExists
-          ? "Connected"
-          : zillowUrlConfigured
-          ? "Planned"
-          : "Not connected",
-      };
-    }
-    return s;
-  });
-  const dynamicCounts = {
-    connected: dynamicSources.filter((s) => s.status === "Connected").length,
-    manual: dynamicSources.filter((s) => s.status === "Manual").length,
-    total: dynamicSources.length,
-  };
-
   // ----- KPIs (business-only; 14 MacAffer excluded) -----
-  const businessResolved = businessProperties.map((p) => resolvedFor(p.id));
-  const valuedCount = businessResolved.filter(
-    (r) => r.estimatedValue != null
+  const valuedCount = businessAnalyses.filter(
+    (a) => a.house.value != null
   ).length;
-  const rentedCount = businessResolved.filter(
-    (r) => r.estimatedRent != null
+  const rentedCount = businessAnalyses.filter(
+    (a) => a.rent.rent != null
   ).length;
-  const portfolioValue = businessResolved.reduce<number | null>((acc, r) => {
-    if (r.estimatedValue == null) return acc;
-    return (acc ?? 0) + r.estimatedValue;
+  const portfolioValue = businessAnalyses.reduce<number | null>((acc, a) => {
+    if (a.house.value == null) return acc;
+    return (acc ?? 0) + a.house.value;
   }, null);
-  const portfolioMonthlyRent = businessResolved.reduce<number | null>(
-    (acc, r) => {
-      if (r.estimatedRent == null) return acc;
-      return (acc ?? 0) + r.estimatedRent;
+  const portfolioMonthlyRent = businessAnalyses.reduce<number | null>(
+    (acc, a) => {
+      if (a.rent.rent == null) return acc;
+      return (acc ?? 0) + a.rent.rent;
     },
     null
   );
-  // Gross rent yield: only meaningful when both portfolio totals exist
-  // AND every business asset has both values (otherwise the ratio is
-  // misleading). Formula: annualized rent / value.
   const grossRentYield =
     portfolioValue != null &&
     portfolioMonthlyRent != null &&
@@ -459,8 +667,6 @@ export default async function MarketPage() {
       ? (portfolioMonthlyRent * 12) / portfolioValue
       : null;
 
-  // Data freshness (a single human-readable label for the KPI strip):
-  // pick the most recent provider snapshot timestamp.
   const newestSourceTimestamp = [
     rentCastLatestFetchedAt,
     attomLatestFetchedAt,
@@ -471,16 +677,13 @@ export default async function MarketPage() {
     .sort((a, b) => a.getTime() - b.getTime())
     .pop();
 
-  // Data completeness — same model as before but compressed to a single
-  // headline metric for the KPI strip.
   const FIELDS_PER_ASSET = 4;
   const totalCells = businessProperties.length * FIELDS_PER_ASSET;
-  const populatedCells = businessProperties.reduce((acc, p) => {
-    const r = resolvedFor(p.id);
-    const t = resolveTax(p.id);
+  const populatedCells = businessAnalyses.reduce((acc, a) => {
+    const t = resolveTax(a.property.id);
     let n = 0;
-    if (r.estimatedValue != null) n++;
-    if (r.estimatedRent != null) n++;
+    if (a.house.value != null) n++;
+    if (a.rent.rent != null) n++;
     if (t.assessedValue != null) n++;
     if (t.annualTaxes != null) n++;
     return acc + n;
@@ -489,108 +692,72 @@ export default async function MarketPage() {
     totalCells === 0 ? 0 : Math.round((populatedCells / totalCells) * 100);
 
   // ----- Needs-attention flags -----
-  type Flag = { property: string; level: "warning" | "error"; text: string };
+  type Flag = { property: string; text: string };
   const flags: Flag[] = [];
-  for (const p of businessProperties) {
-    const r = resolvedFor(p.id);
-    const m = entryFor(p.id);
-    const a = attomFor(p.id);
-    const rc = rentCastFor(p.id);
-    const t = resolveTax(p.id);
-    const verifiedByAttom = !!getAttomFacts(a);
+  for (const a of businessAnalyses) {
+    const m = entryFor(a.property.id);
+    const t = resolveTax(a.property.id);
     if (
-      !verifiedByAttom &&
-      (p.factsNeedVerification || p.zipNeedsVerification)
+      !a.verifiedByAttom &&
+      (a.property.factsNeedVerification || a.property.zipNeedsVerification)
     ) {
       flags.push({
-        property: p.address,
-        level: "warning",
+        property: a.property.address,
         text: "Official records pending verification",
       });
     }
-    if (r.estimatedValue == null) {
+    if (a.house.value == null) {
       flags.push({
-        property: p.address,
-        level: "warning",
-        text: "No value estimate available",
+        property: a.property.address,
+        text: "No house value available",
       });
     }
-    if (r.estimatedRent == null) {
+    if (a.rent.rent == null) {
       flags.push({
-        property: p.address,
-        level: "warning",
+        property: a.property.address,
         text: "No rent estimate available",
       });
     }
     if (m == null || decimalToNumber(m.purchaseBasis) == null) {
       flags.push({
-        property: p.address,
-        level: "warning",
+        property: a.property.address,
         text: "Acquisition basis not captured",
       });
     }
-    if (rc && isStale(rc.fetchedAt, 30)) {
+    if (a.rentCastLastFetched && isStale(a.rentCastLastFetched, 30)) {
       flags.push({
-        property: p.address,
-        level: "warning",
+        property: a.property.address,
         text: `RentCast data stale (last refreshed ${relativeAge(
-          rc.fetchedAt
+          a.rentCastLastFetched
         )})`,
       });
     }
     if (t.source === "None") {
       flags.push({
-        property: p.address,
-        level: "warning",
+        property: a.property.address,
         text: "Tax / assessment data missing",
       });
     }
   }
 
-  // ----- Tax / assessment availability gate -----
   const businessTaxRows = businessProperties.map((p) => ({
     property: p,
     tax: resolveTax(p.id),
   }));
-  const hasAnyTaxData = businessTaxRows.some(
-    (r) => r.tax.source !== "None"
-  );
-
-  // ----- Property comparison rows (private last, separated below) -----
-  const businessRows = businessProperties.map((p) => {
-    const r = resolvedFor(p.id);
-    const a = attomFor(p.id);
-    const rc = rentCastFor(p.id);
-    const verified = !!getAttomFacts(a);
-    const annualRent =
-      r.estimatedRent != null ? r.estimatedRent * 12 : null;
-    const yieldPct =
-      r.estimatedValue != null && annualRent != null && r.estimatedValue > 0
-        ? (annualRent / r.estimatedValue) * 100
-        : null;
-    return {
-      property: p,
-      resolved: r,
-      attom: a,
-      rentCast: rc,
-      verified,
-      yieldPct,
-    };
-  });
+  const hasAnyTaxData = businessTaxRows.some((r) => r.tax.source !== "None");
 
   return (
     <div className="market-shell -mx-4 -my-6 flex flex-col gap-6 px-4 py-6 sm:-mx-6 sm:-my-8 sm:px-6 sm:py-8 lg:-mx-8 lg:-my-10 lg:px-8 lg:py-10">
       {/* ============================================================
-           1. Header
+           Header: title, freshness chips, refresh menu
          ============================================================ */}
       <div className="flex flex-col gap-3">
         <PageHeader
           eyebrow="Market Tracker"
           title="Market intelligence"
-          description="Values, rents, and macro context across J.G. Walsh & Co. assets. Not investment advice."
+          description="House market value, market rent, historical trends, and forward projections across J.G. Walsh & Co. assets. Not investment advice."
         />
 
-        {/* Freshness line — compact source health */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--market-text-muted)]">
           <FreshnessChip
             label="RentCast"
@@ -626,7 +793,6 @@ export default async function MarketPage() {
           ) : null}
         </div>
 
-        {/* Refresh menu — collapsed by default to avoid the tall stack. */}
         <details className="group flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
             <span className="flex items-center gap-2">
@@ -658,7 +824,7 @@ export default async function MarketPage() {
       </div>
 
       {/* ============================================================
-           2. Portfolio Summary
+           Portfolio Summary
          ============================================================ */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiTile
@@ -671,7 +837,7 @@ export default async function MarketPage() {
           value={formatCurrency(portfolioValue)}
           sublabel={
             valuedCount === businessProperties.length
-              ? "RentCast estimate + manual fallback"
+              ? "ATTOM AVM → RentCast → manual"
               : `${valuedCount} of ${businessProperties.length} valued`
           }
         />
@@ -680,7 +846,7 @@ export default async function MarketPage() {
           value={formatRent(portfolioMonthlyRent)}
           sublabel={
             rentedCount === businessProperties.length
-              ? "RentCast estimate + manual fallback"
+              ? "RentCast → manual target"
               : `${rentedCount} of ${businessProperties.length} rent estimates`
           }
         />
@@ -709,180 +875,45 @@ export default async function MarketPage() {
       </div>
 
       {/* ============================================================
-           3. Property comparison
+           Property valuations — value / rent / trend / projection
          ============================================================ */}
       <SectionPanel
-        title="Business properties"
-        description="Per-property estimates, verification, and yield."
-        padded={false}
+        title="Property valuations"
+        description="Current house value and market rent today, ZIP-level historical trend, and an internal forward projection."
       >
-        {/* Header row — md+ only */}
-        <div className="hidden border-b border-[var(--market-border)] px-5 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--market-text-muted)] md:grid md:grid-cols-[2fr_1.2fr_1.2fr_0.9fr_1fr_1fr] md:gap-4">
-          <span>Property</span>
-          <span className="text-right">Est. value</span>
-          <span className="text-right">Est. rent</span>
-          <span className="text-right">Yield</span>
-          <span>Verified</span>
-          <span className="text-right">Source · Updated</span>
+        <div className="flex flex-col gap-3">
+          {businessAnalyses.map((a) => (
+            <PropertyValuationCard
+              key={a.property.id}
+              analysis={a}
+              isPrivate={false}
+            />
+          ))}
         </div>
-        <ul className="divide-y divide-[var(--market-border)]">
-          {businessRows.map(
-            ({ property, resolved, verified, rentCast, yieldPct }) => (
-              <li
-                key={property.id}
-                className="grid grid-cols-1 gap-2 px-5 py-3 md:grid-cols-[2fr_1.2fr_1.2fr_0.9fr_1fr_1fr] md:items-center md:gap-4"
-              >
-                {/* Property */}
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-[var(--market-text)]">
-                    {property.address}
-                  </span>
-                  <span className="text-[11px] text-[var(--market-text-muted)]">
-                    {property.city}
-                    {property.zip ? ` · ${property.zip}` : ""}
-                    {property.workspaceHref ? (
-                      <>
-                        {" · "}
-                        <Link
-                          href={property.workspaceHref}
-                          className="text-[var(--market-cyan)] hover:underline"
-                        >
-                          workspace
-                        </Link>
-                      </>
-                    ) : null}
-                  </span>
-                </div>
-
-                {/* Est. value */}
-                <div className="flex flex-col text-right">
-                  <span className="font-mono text-sm font-semibold tabular-nums text-[var(--market-text)]">
-                    {formatCurrency(resolved.estimatedValue)}
-                  </span>
-                  {resolved.valueLow != null && resolved.valueHigh != null ? (
-                    <span className="text-[10px] text-[var(--market-text-muted)]">
-                      {formatCurrency(resolved.valueLow)}–
-                      {formatCurrency(resolved.valueHigh)}
-                    </span>
-                  ) : null}
-                </div>
-
-                {/* Est. rent */}
-                <div className="flex flex-col text-right">
-                  <span className="font-mono text-sm font-semibold tabular-nums text-[var(--market-text)]">
-                    {formatRent(resolved.estimatedRent)}
-                  </span>
-                  {resolved.rentLow != null && resolved.rentHigh != null ? (
-                    <span className="text-[10px] text-[var(--market-text-muted)]">
-                      {formatCurrency(resolved.rentLow)}–
-                      {formatCurrency(resolved.rentHigh)}/mo
-                    </span>
-                  ) : null}
-                </div>
-
-                {/* Yield */}
-                <span className="font-mono text-sm tabular-nums text-[var(--market-text)] md:text-right">
-                  {yieldPct != null ? `${yieldPct.toFixed(2)}%` : dash}
-                </span>
-
-                {/* Verified */}
-                <span>
-                  {verified ? (
-                    <ToneTag label="ATTOM" tone="success" />
-                  ) : property.factsNeedVerification ||
-                    property.zipNeedsVerification ? (
-                    <ToneTag label="Pending" tone="warning" />
-                  ) : (
-                    <ToneTag label="—" tone="neutral" />
-                  )}
-                </span>
-
-                {/* Source · Updated */}
-                <div className="flex flex-col text-[11px] md:text-right">
-                  <span className="text-[var(--market-text-muted)]">
-                    {resolved.source === "None"
-                      ? "Not connected"
-                      : resolved.source}
-                  </span>
-                  <span className="text-[var(--market-text-muted)]">
-                    {rentCast
-                      ? relativeAge(rentCast.fetchedAt)
-                      : resolved.asOfDate
-                      ? relativeAge(resolved.asOfDate)
-                      : dash}
-                  </span>
-                </div>
-              </li>
-            )
-          )}
-        </ul>
       </SectionPanel>
 
       {/* ============================================================
            Private / Reference Only
          ============================================================ */}
-      {privateProperty
-        ? (() => {
-            const r = resolvedFor(privateProperty.id);
-            const a = attomFor(privateProperty.id);
-            const verified = !!getAttomFacts(a);
-            return (
-              <div
-                className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--market-border)] p-4"
-                style={{ background: "transparent" }}
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-[var(--market-text)]">
-                      {privateProperty.address}
-                    </span>
-                    <span className="text-[11px] text-[var(--market-text-muted)]">
-                      {privateProperty.city}
-                      {privateProperty.zip ? ` · ${privateProperty.zip}` : ""}{" "}
-                      · Held outside the business structure.
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <ToneTag
-                      label="Private / Reference Only"
-                      tone="neutral"
-                    />
-                    <ToneTag label="Excluded from KPIs" tone="warning" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:gap-4">
-                  <ReferenceCell
-                    label="Est. value"
-                    value={formatCurrency(r.estimatedValue)}
-                  />
-                  <ReferenceCell
-                    label="Est. rent"
-                    value={formatRent(r.estimatedRent)}
-                  />
-                  <ReferenceCell
-                    label="Verified"
-                    value={
-                      verified ? "ATTOM" : "Reference only"
-                    }
-                  />
-                  <ReferenceCell
-                    label="Source"
-                    value={
-                      r.source === "None" ? "Not connected" : r.source
-                    }
-                  />
-                </div>
-                <p className="text-[11px] text-[var(--market-text-muted)]">
-                  Values shown for reference only. Not part of business
-                  portfolio KPIs.
-                </p>
-              </div>
-            );
-          })()
-        : null}
+      {privateAnalysis ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--market-text-muted)]">
+              Private / Reference Only
+            </span>
+            <ToneTag label="Excluded from KPIs" tone="warning" />
+          </div>
+          <PropertyValuationCard analysis={privateAnalysis} isPrivate />
+          <p className="text-[11px] text-[var(--market-text-muted)]">
+            14 MacAffer Dr is held outside the J.G. Walsh & Co. business
+            structure. Values shown for reference only and do not contribute to
+            portfolio KPIs.
+          </p>
+        </div>
+      ) : null}
 
       {/* ============================================================
-           4. Needs attention
+           Needs attention
          ============================================================ */}
       <SectionPanel
         title="Needs attention"
@@ -918,58 +949,74 @@ export default async function MarketPage() {
       </SectionPanel>
 
       {/* ============================================================
-           5. Macro & Rate Context (compact)
+           Macro & Rate Context (collapsed by default)
          ============================================================ */}
-      <SectionPanel
-        title="Macro & Rate Context"
-        description={
-          fredLatestFetchedAt
-            ? `FRED · ${relativeAge(fredLatestFetchedAt)}`
-            : "FRED supplies portfolio-wide macro context."
-        }
-      >
-        {fredObservations ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {FRED_SERIES.map((id) => {
-              const obs = fredObservations[id];
-              return (
-                <div
-                  key={id}
-                  className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-2.5"
-                >
-                  <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-                    {FRED_SERIES_LABELS[id]}
-                  </span>
-                  <span className="font-mono text-base font-semibold tabular-nums text-[var(--market-text)]">
-                    {formatFredValue(obs)}
-                  </span>
-                  <span className="text-[10px] text-[var(--market-text-muted)]">
-                    {obs?.date ? formatDate(obs.date) : dash}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-[var(--market-text-muted)]">
-            {fredKeyConfigured
-              ? "Use the Refresh data menu above to fetch the first FRED snapshot."
-              : "FRED key not configured."}
-          </p>
-        )}
-      </SectionPanel>
+      <details className="group rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+          <span>
+            Macro & rate context{" "}
+            <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
+              · FRED ·{" "}
+              {fredLatestFetchedAt ? relativeAge(fredLatestFetchedAt) : "no data"}
+            </span>
+          </span>
+          <span aria-hidden className="text-[var(--market-text-muted)]">
+            ▾
+          </span>
+        </summary>
+        <div className="border-t border-[var(--market-border)] p-4">
+          {fredObservations ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {FRED_SERIES.map((id) => {
+                const obs = fredObservations[id];
+                return (
+                  <div
+                    key={id}
+                    className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-2.5"
+                  >
+                    <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                      {FRED_SERIES_LABELS[id]}
+                    </span>
+                    <span className="font-mono text-base font-semibold tabular-nums text-[var(--market-text)]">
+                      {formatFredValue(obs)}
+                    </span>
+                    <span className="text-[10px] text-[var(--market-text-muted)]">
+                      {obs?.date ? formatDate(obs.date) : dash}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--market-text-muted)]">
+              {fredKeyConfigured
+                ? "Use the Refresh data menu above to fetch the first FRED snapshot."
+                : "FRED key not configured."}
+            </p>
+          )}
+        </div>
+      </details>
 
       {/* ============================================================
-           6. Zillow ZIP trend context — only when present
+           ZIP value trend (collapsed by default; hidden if no data)
          ============================================================ */}
       {zhviSeries ? (
-        <SectionPanel
-          title="ZIP Home Value Trends"
-          description={`Zillow ZHVI · ${relativeAge(
-            zillowLatestFetchedAt
-          )} · Trend context only — not a property estimate.`}
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <details className="group rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+            <span>
+              ZIP value trend{" "}
+              <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
+                · Zillow ZHVI ·{" "}
+                {zillowLatestFetchedAt
+                  ? relativeAge(zillowLatestFetchedAt)
+                  : "no data"}
+              </span>
+            </span>
+            <span aria-hidden className="text-[var(--market-text-muted)]">
+              ▾
+            </span>
+          </summary>
+          <div className="grid grid-cols-1 gap-3 border-t border-[var(--market-border)] p-4 sm:grid-cols-2">
             {ZILLOW_TARGET_ZIPS.map((zip) => {
               const s = zhviSeries[zip];
               const properties = trackedProperties
@@ -985,42 +1032,59 @@ export default async function MarketPage() {
                       ZIP {zip}
                     </span>
                     <span className="text-[10px] text-[var(--market-text-muted)]">
-                      {properties.length > 0
-                        ? properties.join(", ")
-                        : "No tracked properties"}
+                      {properties.length > 0 ? properties.join(", ") : ""}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                    <span className="font-mono text-xl font-semibold tabular-nums text-[var(--market-text)]">
-                      {formatCurrency(s?.latestValue ?? null)}
+                  <span className="font-mono text-xl font-semibold tabular-nums text-[var(--market-text)]">
+                    {formatCurrency(s?.latestValue ?? null)}
+                  </span>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                    <span style={{ color: pctChangeColor(s?.yoyChange ?? null) }}>
+                      1y {formatPctChange(s?.yoyChange ?? null)}
                     </span>
                     <span
-                      className="font-mono text-sm tabular-nums"
-                      style={{ color: pctChangeColor(s?.yoyChange ?? null) }}
+                      style={{
+                        color: pctChangeColor(s?.threeYearChange ?? null),
+                      }}
                     >
-                      {formatPctChange(s?.yoyChange ?? null)} 1y
+                      3y {formatPctChange(s?.threeYearChange ?? null)}
                     </span>
-                    <span className="text-[10px] text-[var(--market-text-muted)]">
-                      as of {s?.latestDate ? formatDate(s.latestDate) : dash}
+                    <span
+                      style={{
+                        color: pctChangeColor(s?.fiveYearChange ?? null),
+                      }}
+                    >
+                      5y {formatPctChange(s?.fiveYearChange ?? null)}
                     </span>
                   </div>
+                  <span className="text-[10px] text-[var(--market-text-muted)]">
+                    as of {s?.latestDate ? formatDate(s.latestDate) : dash} ·
+                    Trend context only — not a property estimate.
+                  </span>
                 </div>
               );
             })}
           </div>
-        </SectionPanel>
+        </details>
       ) : null}
 
       {/* ============================================================
-           7. Tax / Assessment — only when present
+           Tax & Assessment (collapsed; hidden if no data)
          ============================================================ */}
       {hasAnyTaxData ? (
-        <SectionPanel
-          title="Tax & Assessment"
-          description="Latest assessed value and annual tax per property."
-          padded={false}
-        >
-          <ul className="divide-y divide-[var(--market-border)]">
+        <details className="group rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+            <span>
+              Tax & assessment{" "}
+              <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
+                · ATTOM-first · manual fallback
+              </span>
+            </span>
+            <span aria-hidden className="text-[var(--market-text-muted)]">
+              ▾
+            </span>
+          </summary>
+          <ul className="divide-y divide-[var(--market-border)] border-t border-[var(--market-border)]">
             {businessTaxRows.map(({ property, tax }) => (
               <li
                 key={property.id}
@@ -1060,15 +1124,11 @@ export default async function MarketPage() {
               </li>
             ))}
           </ul>
-        </SectionPanel>
-      ) : (
-        <p className="text-[11px] text-[var(--market-text-muted)]">
-          No tax / assessment data yet. Connect ATTOM or add manual entries.
-        </p>
-      )}
+        </details>
+      ) : null}
 
       {/* ============================================================
-           8. Source diagnostics — collapsed
+           Source diagnostics (collapsed)
          ============================================================ */}
       <details className="group rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
@@ -1116,11 +1176,235 @@ export default async function MarketPage() {
           ))}
         </div>
         <p className="border-t border-[var(--market-border)] px-4 py-2.5 text-[11px] text-[var(--market-text-muted)]">
-          Comparables, forecasts, neighborhood signals, and risk indicators
-          are deferred until additional data sources are connected.
+          Comparables, neighborhood signals, and risk indicators remain
+          deferred until additional data sources are connected.
         </p>
       </details>
     </div>
+  );
+}
+
+// =============================================================
+// Property valuation card
+// =============================================================
+
+type PropertyAnalysis = {
+  property: TrackedProperty;
+  house: HouseValue;
+  rent: MarketRent;
+  trend: ValueTrend;
+  projection: ValueProjection;
+  verifiedByAttom: boolean;
+  rentCastLastFetched: Date | null;
+  attomLastFetched: Date | null;
+  yieldPct: number | null;
+};
+
+function PropertyValuationCard({
+  analysis,
+  isPrivate,
+}: {
+  analysis: PropertyAnalysis;
+  isPrivate: boolean;
+}) {
+  const { property, house, rent, trend, projection, verifiedByAttom } =
+    analysis;
+
+  return (
+    <article
+      className={`flex flex-col gap-4 rounded-[var(--radius-md)] p-4 ${
+        isPrivate
+          ? "border border-dashed border-[var(--market-border)] bg-transparent"
+          : "market-card"
+      }`}
+    >
+      {/* Header */}
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col">
+          <h3 className="text-base font-semibold text-[var(--market-text)]">
+            {property.address}
+          </h3>
+          <span className="text-[11px] text-[var(--market-text-muted)]">
+            {property.city}
+            {property.zip ? ` · ${property.zip}` : ""}
+            {property.workspaceHref ? (
+              <>
+                {" · "}
+                <Link
+                  href={property.workspaceHref}
+                  className="text-[var(--market-cyan)] hover:underline"
+                >
+                  workspace
+                </Link>
+              </>
+            ) : null}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {verifiedByAttom ? (
+            <ToneTag label="ATTOM verified" tone="success" />
+          ) : property.factsNeedVerification || property.zipNeedsVerification ? (
+            <ToneTag label="Records pending" tone="warning" />
+          ) : null}
+          {isPrivate ? (
+            <ToneTag label="Reference only" tone="warning" />
+          ) : null}
+        </div>
+      </header>
+
+      {/* Today: value + rent + yield */}
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <MetricCell
+          label="House market value"
+          value={
+            <span className="text-base">
+              {formatCurrency(house.value)}
+            </span>
+          }
+          sub={
+            <>
+              {house.source === "None"
+                ? "No source connected"
+                : `Source · ${house.source}`}
+              {house.asOfDate ? ` · ${relativeAge(house.asOfDate)}` : ""}
+              {house.rangeLow != null && house.rangeHigh != null ? (
+                <>
+                  {" · "}
+                  Range {formatCurrency(house.rangeLow)}–
+                  {formatCurrency(house.rangeHigh)}
+                </>
+              ) : null}
+            </>
+          }
+        />
+        <MetricCell
+          label="Market rent"
+          value={
+            <span className="text-base">
+              {formatRent(rent.rent)}
+            </span>
+          }
+          sub={
+            <>
+              {rent.source === "None"
+                ? "No source connected"
+                : `Source · ${rent.source}`}
+              {rent.asOfDate ? ` · ${relativeAge(rent.asOfDate)}` : ""}
+              {rent.rangeLow != null && rent.rangeHigh != null ? (
+                <>
+                  {" · "}
+                  Range {formatCurrency(rent.rangeLow)}–
+                  {formatCurrency(rent.rangeHigh)}/mo
+                </>
+              ) : null}
+            </>
+          }
+        />
+        <MetricCell
+          label="Gross rent yield"
+          value={
+            <span className="text-base">
+              {analysis.yieldPct != null
+                ? `${analysis.yieldPct.toFixed(2)}%`
+                : dash}
+            </span>
+          }
+          sub="Annualized rent ÷ value"
+        />
+      </section>
+
+      {/* ZIP historical trend */}
+      <section className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+            ZIP value trend
+            {property.zip ? ` · ZIP ${property.zip}` : ""}
+          </span>
+          <span className="text-[10px] text-[var(--market-text-muted)]">
+            {trend.zhvi?.latestDate
+              ? `Zillow ZHVI as of ${formatDate(trend.zhvi.latestDate)}`
+              : "Zillow ZHVI · no data"}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm tabular-nums">
+          <span
+            style={{ color: pctChangeColor(trend.zhvi?.yoyChange ?? null) }}
+          >
+            1y {formatPctChange(trend.zhvi?.yoyChange ?? null)}
+          </span>
+          <span
+            style={{
+              color: pctChangeColor(trend.zhvi?.threeYearChange ?? null),
+            }}
+          >
+            3y {formatPctChange(trend.zhvi?.threeYearChange ?? null)}
+          </span>
+          <span
+            style={{
+              color: pctChangeColor(trend.zhvi?.fiveYearChange ?? null),
+            }}
+          >
+            5y {formatPctChange(trend.zhvi?.fiveYearChange ?? null)}
+          </span>
+          <span className="text-[var(--market-text-muted)]">
+            Latest ZHVI{" "}
+            {formatCurrency(trend.zhvi?.latestValue ?? null)}
+          </span>
+        </div>
+        <span className="text-[10px] text-[var(--market-text-muted)]">
+          ZIP-level home value index. Trend context only — not a property
+          estimate.
+        </span>
+      </section>
+
+      {/* Internal value projection */}
+      <section className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+            Internal value projection
+          </span>
+          <span className="text-[10px] text-[var(--market-text-muted)]">
+            {projection.rateSource
+              ? `Compounded at ${formatPctChange(projection.rate)}/yr · ${
+                  projection.rateSource
+                }`
+              : "Provider forecast pending"}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <MetricCell
+            label="12 mo"
+            value={formatCurrency(projection.m12)}
+          />
+          <MetricCell
+            label="24 mo"
+            value={formatCurrency(projection.m24)}
+          />
+          <MetricCell
+            label="36 mo"
+            value={formatCurrency(projection.m36)}
+          />
+        </div>
+        <span className="text-[10px] text-[var(--market-text-muted)]">
+          Internal projection — based on current AVM + ZIP trend. Not a
+          provider forecast. Not a guarantee.
+        </span>
+      </section>
+
+      {/* Rent trend / forecast — currently always pending */}
+      <section className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+        <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+          Rent trend / forecast
+        </span>
+        <span className="text-sm text-[var(--market-text-secondary)]">
+          Rent forecast pending
+        </span>
+        <span className="text-[10px] text-[var(--market-text-muted)]">
+          A rent-trend source (Zillow ZORI or RentCast market trends) is not
+          wired today. Rent forecasts are not invented from home-value trend.
+        </span>
+      </section>
+    </article>
   );
 }
 
@@ -1162,24 +1446,5 @@ function FreshnessChip({
       />
       {label}: {ts ? relativeAge(ts) : "no snapshot"}
     </span>
-  );
-}
-
-function ReferenceCell({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-        {label}
-      </span>
-      <span className="font-mono text-sm font-semibold tabular-nums text-[var(--market-text)]">
-        {value}
-      </span>
-    </div>
   );
 }
