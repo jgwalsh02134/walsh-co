@@ -6,7 +6,12 @@ import type {
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
-import { type AttomFacts, hasAttomKey } from "@/lib/attom";
+import {
+  type AttomAvmHistoryPoint,
+  type AttomAvmValue,
+  type AttomFacts,
+  hasAttomKey,
+} from "@/lib/attom";
 import {
   FRED_SERIES,
   FRED_SERIES_LABELS,
@@ -28,7 +33,12 @@ import {
   getManualEntryMap,
 } from "@/lib/market-manual";
 import { prisma } from "@/lib/prisma";
-import { hasRentCastKey } from "@/lib/rentcast";
+import {
+  type RentCastComp,
+  type RentCastListing,
+  extractRentCastComps,
+  hasRentCastKey,
+} from "@/lib/rentcast";
 import {
   countConnected,
   marketSources,
@@ -41,8 +51,10 @@ import {
   ZILLOW_TARGET_ZIPS,
   hasZillowZhviUrl,
 } from "@/lib/zillow-research";
+import { AttomAvmRefreshButton } from "./attom-avm-refresh-button";
 import { AttomRefreshButton } from "./attom-refresh-button";
 import { FredRefreshButton } from "./fred-refresh-button";
+import { RentCastListingsRefreshButton } from "./rentcast-listings-refresh-button";
 import { RentCastRefreshButton } from "./rentcast-refresh-button";
 import { ZillowRefreshButton } from "./zillow-refresh-button";
 
@@ -56,6 +68,49 @@ function getAttomFacts(snap: MarketSourceSnapshot | null): AttomFacts | null {
   if (!snap || snap.status !== "SUCCESS") return null;
   const raw = snap.raw as { facts?: unknown } | null;
   return (raw?.facts as AttomFacts | undefined) ?? null;
+}
+
+/**
+ * Accessor for the ATTOM AVM_VALUE snapshot's normalized payload.
+ * `raw` written by attom-avm-actions.ts as
+ * `{ sourceName, avm, unavailableForPlan, response }`.
+ * Returns the avm sub-object only on SUCCESS; null otherwise.
+ */
+function getAttomAvm(snap: MarketSourceSnapshot | null): AttomAvmValue | null {
+  if (!snap || snap.status !== "SUCCESS") return null;
+  const raw = snap.raw as { avm?: unknown } | null;
+  return (raw?.avm as AttomAvmValue | undefined) ?? null;
+}
+
+/**
+ * Whether the latest ATTOM AVM snapshot indicates the endpoint is
+ * forbidden by the current plan/key — used to surface a clear notice
+ * instead of treating it as a transient error.
+ */
+function isAvmUnavailableForPlan(snap: MarketSourceSnapshot | null): boolean {
+  if (!snap || snap.status !== "ERROR") return false;
+  const raw = snap.raw as { unavailableForPlan?: unknown } | null;
+  return raw?.unavailableForPlan === true;
+}
+
+function getAttomAvmHistory(
+  snap: MarketSourceSnapshot | null
+): AttomAvmHistoryPoint[] | null {
+  if (!snap || snap.status !== "SUCCESS") return null;
+  const raw = snap.raw as { history?: unknown } | null;
+  const arr = raw?.history;
+  if (!Array.isArray(arr)) return null;
+  return arr as AttomAvmHistoryPoint[];
+}
+
+function getRentCastListings(
+  snap: MarketSourceSnapshot | null
+): RentCastListing[] | null {
+  if (!snap || snap.status !== "SUCCESS") return null;
+  const raw = snap.raw as { listings?: unknown } | null;
+  return Array.isArray(raw?.listings)
+    ? (raw!.listings as RentCastListing[])
+    : null;
 }
 
 function getFredObservations(
@@ -167,21 +222,38 @@ type HouseValue = {
   asOfDate: Date | null;
   rangeLow: number | null;
   rangeHigh: number | null;
+  /** 0–100 confidence when the source provides one. */
+  confidence: number | null;
 };
 
 function resolveHouseValue(
-  attom: MarketSourceSnapshot | null,
+  attomAvm: MarketSourceSnapshot | null,
+  attomFacts: MarketSourceSnapshot | null,
   rentCast: MarketSourceSnapshot | null,
   manual: MarketManualEntry | null
 ): HouseValue {
-  const facts = getAttomFacts(attom);
+  // 1. ATTOM dedicated AVM endpoint (most authoritative when available).
+  const avm = getAttomAvm(attomAvm);
+  if (avm?.estimatedValue != null) {
+    return {
+      value: avm.estimatedValue,
+      source: "ATTOM AVM",
+      asOfDate: avm.asOfDate ?? attomAvm?.fetchedAt ?? null,
+      rangeLow: avm.valueLow,
+      rangeHigh: avm.valueHigh,
+      confidence: avm.confidence,
+    };
+  }
+  // 2. ATTOM expandedprofile market value (legacy property-record source).
+  const facts = getAttomFacts(attomFacts);
   if (facts?.marketValue != null) {
     return {
       value: facts.marketValue,
       source: "ATTOM AVM",
-      asOfDate: attom?.asOfDate ?? attom?.fetchedAt ?? null,
+      asOfDate: attomFacts?.asOfDate ?? attomFacts?.fetchedAt ?? null,
       rangeLow: null,
       rangeHigh: null,
+      confidence: null,
     };
   }
   const rc = rentCast?.status === "SUCCESS" ? rentCast : null;
@@ -193,6 +265,7 @@ function resolveHouseValue(
       asOfDate: rc?.asOfDate ?? rc?.fetchedAt ?? null,
       rangeLow: rc ? decimalToNumber(rc.valueLow) : null,
       rangeHigh: rc ? decimalToNumber(rc.valueHigh) : null,
+      confidence: null,
     };
   }
   const manualValue = manual ? decimalToNumber(manual.estimatedValue) : null;
@@ -203,6 +276,7 @@ function resolveHouseValue(
       asOfDate: manual?.asOfDate ?? null,
       rangeLow: null,
       rangeHigh: null,
+      confidence: null,
     };
   }
   return {
@@ -211,6 +285,7 @@ function resolveHouseValue(
     asOfDate: null,
     rangeLow: null,
     rangeHigh: null,
+    confidence: null,
   };
 }
 
@@ -451,6 +526,10 @@ export default async function MarketPage() {
   let manualEntries = new Map<string, MarketManualEntry>();
   let rentCastByProperty = new Map<string, MarketSourceSnapshot>();
   let attomByProperty = new Map<string, MarketSourceSnapshot>();
+  let attomAvmByProperty = new Map<string, MarketSourceSnapshot>();
+  let attomAvmHistoryByProperty = new Map<string, MarketSourceSnapshot>();
+  let listingsByZipSale = new Map<string, MarketSourceSnapshot>();
+  let listingsByZipRental = new Map<string, MarketSourceSnapshot>();
   let allRecentSnapshots: MarketSourceSnapshot[] = [];
   let allAttomSnapshots: MarketSourceSnapshot[] = [];
   let latestFredSnapshot: MarketSourceSnapshot | null = null;
@@ -461,6 +540,9 @@ export default async function MarketPage() {
       manualMap,
       recentSnapshots,
       attomSnapshots,
+      attomAvmSnapshots,
+      attomAvmHistorySnapshots,
+      listingsSnapshots,
       fredLatest,
       zillowLatest,
     ] = await Promise.all([
@@ -471,7 +553,25 @@ export default async function MarketPage() {
         take: 100,
       }),
       prisma.marketSourceSnapshot.findMany({
-        where: { provider: "ATTOM" },
+        where: { provider: "ATTOM", sourceType: "PROPERTY_RECORD" },
+        orderBy: { fetchedAt: "desc" },
+        take: 100,
+      }),
+      prisma.marketSourceSnapshot.findMany({
+        where: { provider: "ATTOM", sourceType: "AVM_VALUE" },
+        orderBy: { fetchedAt: "desc" },
+        take: 100,
+      }),
+      prisma.marketSourceSnapshot.findMany({
+        where: { provider: "ATTOM", sourceType: "AVM_HISTORY" },
+        orderBy: { fetchedAt: "desc" },
+        take: 100,
+      }),
+      prisma.marketSourceSnapshot.findMany({
+        where: {
+          provider: "RentCast",
+          sourceType: { in: ["SALE_LISTINGS", "RENTAL_LISTINGS"] },
+        },
         orderBy: { fetchedAt: "desc" },
         take: 100,
       }),
@@ -498,6 +598,27 @@ export default async function MarketPage() {
       if (attomByProperty.has(snap.propertyId)) continue;
       if (snap.status === "SUCCESS") attomByProperty.set(snap.propertyId, snap);
     }
+    // ATTOM AVM: keep the latest row per property regardless of status
+    // so the UI can show "unavailable for plan" when applicable.
+    for (const snap of attomAvmSnapshots) {
+      if (!attomAvmByProperty.has(snap.propertyId)) {
+        attomAvmByProperty.set(snap.propertyId, snap);
+      }
+    }
+    for (const snap of attomAvmHistorySnapshots) {
+      if (!attomAvmHistoryByProperty.has(snap.propertyId)) {
+        attomAvmHistoryByProperty.set(snap.propertyId, snap);
+      }
+    }
+    // Listings keyed by `zip:<zip>` propertyId. Latest SUCCESS per (zip, type).
+    for (const snap of listingsSnapshots) {
+      if (snap.status !== "SUCCESS") continue;
+      const map =
+        snap.sourceType === "SALE_LISTINGS"
+          ? listingsByZipSale
+          : listingsByZipRental;
+      if (!map.has(snap.propertyId)) map.set(snap.propertyId, snap);
+    }
   } catch (err) {
     dbAvailable = false;
     console.error("[/market] data unavailable:", err);
@@ -509,6 +630,10 @@ export default async function MarketPage() {
     rentCastByProperty.get(id) ?? null;
   const attomFor = (id: string): MarketSourceSnapshot | null =>
     attomByProperty.get(id) ?? null;
+  const attomAvmFor = (id: string): MarketSourceSnapshot | null =>
+    attomAvmByProperty.get(id) ?? null;
+  const attomAvmHistoryFor = (id: string): MarketSourceSnapshot | null =>
+    attomAvmHistoryByProperty.get(id) ?? null;
 
   // ----- Provider key/URL state + dynamic registry -----
   const keyConfigured = hasRentCastKey();
@@ -586,13 +711,22 @@ export default async function MarketPage() {
     verifiedByAttom: boolean;
     rentCastLastFetched: Date | null;
     attomLastFetched: Date | null;
+    /** Comparables extracted from RentCast AVM responses. */
+    saleComps: RentCastComp[];
+    rentalComps: RentCastComp[];
+    /** ATTOM AVM history points (oldest → newest). null when unavailable. */
+    avmHistory: AttomAvmHistoryPoint[] | null;
+    /** True when the latest ATTOM AVM snapshot was refused by plan/key. */
+    avmUnavailableForPlan: boolean;
     yieldPct: number | null;
   };
   function analyze(property: TrackedProperty): PropertyAnalysis {
     const m = entryFor(property.id);
     const rc = rentCastFor(property.id);
     const a = attomFor(property.id);
-    const house = resolveHouseValue(a, rc, m);
+    const aAvm = attomAvmFor(property.id);
+    const aAvmHistory = attomAvmHistoryFor(property.id);
+    const house = resolveHouseValue(aAvm, a, rc, m);
     const rent = resolveMarketRent(rc, m);
     const trend = resolveValueTrend(property, zhviSeries);
     const projection = resolveValueProjection(house.value, trend.zhvi);
@@ -601,6 +735,9 @@ export default async function MarketPage() {
       house.value != null && annualRent != null && house.value > 0
         ? (annualRent / house.value) * 100
         : null;
+    const { saleComps, rentalComps } = rc?.status === "SUCCESS"
+      ? extractRentCastComps(rc.raw)
+      : { saleComps: [], rentalComps: [] };
     return {
       property,
       house,
@@ -610,6 +747,10 @@ export default async function MarketPage() {
       verifiedByAttom: !!getAttomFacts(a),
       rentCastLastFetched: rc?.fetchedAt ?? null,
       attomLastFetched: a?.fetchedAt ?? null,
+      saleComps,
+      rentalComps,
+      avmHistory: getAttomAvmHistory(aAvmHistory),
+      avmUnavailableForPlan: isAvmUnavailableForPlan(aAvm),
       yieldPct,
     };
   }
@@ -807,7 +948,9 @@ export default async function MarketPage() {
           </summary>
           <div className="flex flex-wrap items-start gap-2 border-t border-[var(--market-border)] px-4 py-3">
             <RentCastRefreshButton keyConfigured={keyConfigured} />
+            <RentCastListingsRefreshButton keyConfigured={keyConfigured} />
             <AttomRefreshButton keyConfigured={attomKeyConfigured} />
+            <AttomAvmRefreshButton keyConfigured={attomKeyConfigured} />
             <FredRefreshButton keyConfigured={fredKeyConfigured} />
             <ZillowRefreshButton urlConfigured={zillowUrlConfigured} />
             <Link
@@ -910,6 +1053,71 @@ export default async function MarketPage() {
             portfolio KPIs.
           </p>
         </div>
+      ) : null}
+
+      {/* ============================================================
+           Area listings (collapsed; hidden when nothing is wired)
+         ============================================================ */}
+      {listingsByZipSale.size > 0 || listingsByZipRental.size > 0 ? (
+        <details className="group rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+            <span>
+              Area listings{" "}
+              <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
+                · RentCast · sale + rental, by ZIP
+              </span>
+            </span>
+            <span aria-hidden className="text-[var(--market-text-muted)]">
+              ▾
+            </span>
+          </summary>
+          <div className="grid grid-cols-1 gap-3 border-t border-[var(--market-border)] p-4 lg:grid-cols-2">
+            {Array.from(
+              new Set([
+                ...Array.from(listingsByZipSale.keys()),
+                ...Array.from(listingsByZipRental.keys()),
+              ])
+            ).map((key) => {
+              const sale = listingsByZipSale.get(key) ?? null;
+              const rental = listingsByZipRental.get(key) ?? null;
+              const saleListings = getRentCastListings(sale);
+              const rentalListings = getRentCastListings(rental);
+              const zip = key.replace(/^zip:/, "");
+              return (
+                <div
+                  key={key}
+                  className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--market-border)] p-3"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold text-[var(--market-text)]">
+                      ZIP {zip}
+                    </span>
+                    <span className="text-[10px] text-[var(--market-text-muted)]">
+                      Sale: {saleListings?.length ?? 0} · Rental:{" "}
+                      {rentalListings?.length ?? 0}
+                      {sale ? ` · sale ${relativeAge(sale.fetchedAt)}` : ""}
+                      {rental ? ` · rental ${relativeAge(rental.fetchedAt)}` : ""}
+                    </span>
+                  </div>
+                  <ListingPreview
+                    title="Sale"
+                    kind="sale"
+                    listings={saleListings ?? []}
+                  />
+                  <ListingPreview
+                    title="Rental"
+                    kind="rent"
+                    listings={rentalListings ?? []}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <p className="border-t border-[var(--market-border)] px-4 py-2.5 text-[11px] text-[var(--market-text-muted)]">
+            Listings are area-wide context (per-ZIP). Use Refresh data → Refresh
+            RentCast listings to fetch.
+          </p>
+        </details>
       ) : null}
 
       {/* ============================================================
@@ -1197,6 +1405,10 @@ type PropertyAnalysis = {
   verifiedByAttom: boolean;
   rentCastLastFetched: Date | null;
   attomLastFetched: Date | null;
+  saleComps: RentCastComp[];
+  rentalComps: RentCastComp[];
+  avmHistory: AttomAvmHistoryPoint[] | null;
+  avmUnavailableForPlan: boolean;
   yieldPct: number | null;
 };
 
@@ -1267,11 +1479,25 @@ function PropertyValuationCard({
                 ? "No source connected"
                 : `Source · ${house.source}`}
               {house.asOfDate ? ` · ${relativeAge(house.asOfDate)}` : ""}
+              {house.confidence != null ? (
+                <>
+                  {" · "}
+                  Confidence {house.confidence}
+                </>
+              ) : null}
               {house.rangeLow != null && house.rangeHigh != null ? (
                 <>
                   {" · "}
                   Range {formatCurrency(house.rangeLow)}–
                   {formatCurrency(house.rangeHigh)}
+                </>
+              ) : null}
+              {analysis.avmUnavailableForPlan && house.source !== "ATTOM AVM" ? (
+                <>
+                  {" · "}
+                  <span className="text-[var(--semantic-warning)]">
+                    ATTOM AVM unavailable for current plan/key
+                  </span>
                 </>
               ) : null}
             </>
@@ -1391,6 +1617,64 @@ function PropertyValuationCard({
         </span>
       </section>
 
+      {/* RentCast comparables (sale + rental) */}
+      {analysis.saleComps.length > 0 || analysis.rentalComps.length > 0 ? (
+        <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
+            <span>
+              RentCast comparables ·{" "}
+              <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
+                {analysis.saleComps.length}
+              </span>{" "}
+              sale ·{" "}
+              <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
+                {analysis.rentalComps.length}
+              </span>{" "}
+              rental
+            </span>
+            <span aria-hidden className="text-[var(--market-text-muted)]">
+              ▾
+            </span>
+          </summary>
+          <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {analysis.saleComps.length > 0 ? (
+              <CompsList title="Sale comps" kind="sale" comps={analysis.saleComps} />
+            ) : null}
+            {analysis.rentalComps.length > 0 ? (
+              <CompsList title="Rental comps" kind="rent" comps={analysis.rentalComps} />
+            ) : null}
+          </div>
+        </details>
+      ) : null}
+
+      {/* ATTOM AVM history */}
+      {analysis.avmHistory && analysis.avmHistory.length > 0 ? (
+        <section className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+              ATTOM AVM history
+            </span>
+            <span className="text-[10px] text-[var(--market-text-muted)]">
+              {analysis.avmHistory.length} point
+              {analysis.avmHistory.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <AvmHistoryList points={analysis.avmHistory} />
+          <span className="text-[10px] text-[var(--market-text-muted)]">
+            Past ATTOM AVM observations. Provider-published; not invented.
+          </span>
+        </section>
+      ) : analysis.avmUnavailableForPlan ? (
+        <section className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+          <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+            ATTOM AVM history
+          </span>
+          <span className="text-sm text-[var(--market-text-secondary)]">
+            ATTOM AVM history unavailable for current plan/key.
+          </span>
+        </section>
+      ) : null}
+
       {/* Rent trend / forecast — currently always pending */}
       <section className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
         <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
@@ -1411,6 +1695,168 @@ function PropertyValuationCard({
 // =============================================================
 // Local sub-components
 // =============================================================
+
+function CompsList({
+  title,
+  kind,
+  comps,
+}: {
+  title: string;
+  kind: "sale" | "rent";
+  comps: RentCastComp[];
+}) {
+  // Cap to 8 to keep the section compact; full list lives in raw.
+  const slice = comps.slice(0, 8);
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+        {title}
+      </span>
+      <ul className="flex flex-col divide-y divide-[var(--market-border)]">
+        {slice.map((c, i) => (
+          <li
+            key={`${c.address}-${i}`}
+            className="grid grid-cols-1 gap-x-3 py-1.5 text-[11px] sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-baseline"
+          >
+            <span className="truncate text-[var(--market-text)]">
+              {c.address ?? dash}
+            </span>
+            <span className="font-mono tabular-nums text-[var(--market-text)] sm:text-right">
+              {c.amount != null
+                ? kind === "sale"
+                  ? formatCurrency(c.amount)
+                  : `${formatCurrency(c.amount)}/mo`
+                : dash}
+            </span>
+            <span className="text-[var(--market-text-muted)] sm:text-right">
+              {[
+                c.beds != null ? `${c.beds}bd` : null,
+                c.baths != null ? `${c.baths}ba` : null,
+                c.sqft != null
+                  ? `${c.sqft.toLocaleString()} sqft`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || dash}
+            </span>
+            <span className="text-[var(--market-text-muted)] sm:text-right">
+              {c.distanceMiles != null
+                ? `${c.distanceMiles.toFixed(1)} mi`
+                : c.date
+                ? formatDate(c.date)
+                : dash}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {comps.length > slice.length ? (
+        <span className="text-[10px] text-[var(--market-text-muted)]">
+          + {comps.length - slice.length} more in raw response
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function AvmHistoryList({ points }: { points: AttomAvmHistoryPoint[] }) {
+  // Show a compact table of the most recent 8 points (newest first).
+  const ordered = [...points].sort((a, b) => {
+    const ad = a.date ? new Date(a.date).getTime() : 0;
+    const bd = b.date ? new Date(b.date).getTime() : 0;
+    return bd - ad;
+  });
+  const slice = ordered.slice(0, 8);
+  return (
+    <ul className="flex flex-col divide-y divide-[var(--market-border)]">
+      {slice.map((p, i) => (
+        <li
+          key={`${p.date ?? i}`}
+          className="grid grid-cols-1 gap-x-3 py-1.5 text-[11px] sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-baseline"
+        >
+          <span className="text-[var(--market-text)]">
+            {p.date ? formatDate(p.date) : dash}
+          </span>
+          <span className="font-mono tabular-nums text-[var(--market-text)] sm:text-right">
+            {formatCurrency(p.estimatedValue)}
+          </span>
+          <span className="text-[var(--market-text-muted)] sm:text-right">
+            {p.valueLow != null && p.valueHigh != null
+              ? `${formatCurrency(p.valueLow)}–${formatCurrency(p.valueHigh)}`
+              : dash}
+          </span>
+          <span className="text-[var(--market-text-muted)] sm:text-right">
+            {p.confidence != null ? `conf ${p.confidence}` : dash}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ListingPreview({
+  title,
+  kind,
+  listings,
+}: {
+  title: string;
+  kind: "sale" | "rent";
+  listings: RentCastListing[];
+}) {
+  const slice = listings.slice(0, 5);
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+        {title}
+      </span>
+      {slice.length === 0 ? (
+        <span className="text-[11px] text-[var(--market-text-muted)]">
+          No {title.toLowerCase()} listings yet.
+        </span>
+      ) : (
+        <ul className="flex flex-col divide-y divide-[var(--market-border)]">
+          {slice.map((l, i) => (
+            <li
+              key={`${l.id ?? l.formattedAddress ?? i}`}
+              className="grid grid-cols-1 gap-x-3 py-1.5 text-[11px] sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-baseline"
+            >
+              <span className="truncate text-[var(--market-text)]">
+                {l.formattedAddress ?? dash}
+              </span>
+              <span className="font-mono tabular-nums text-[var(--market-text)] sm:text-right">
+                {l.amount != null
+                  ? kind === "sale"
+                    ? formatCurrency(l.amount)
+                    : `${formatCurrency(l.amount)}/mo`
+                  : dash}
+              </span>
+              <span className="text-[var(--market-text-muted)] sm:text-right">
+                {[
+                  l.beds != null ? `${l.beds}bd` : null,
+                  l.baths != null ? `${l.baths}ba` : null,
+                  l.sqft != null ? `${l.sqft.toLocaleString()} sqft` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || dash}
+              </span>
+              <span className="text-[var(--market-text-muted)] sm:text-right">
+                {l.daysOnMarket != null
+                  ? `${l.daysOnMarket}d on market`
+                  : l.date
+                  ? formatDate(l.date)
+                  : (l.status ?? dash)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {listings.length > slice.length ? (
+        <span className="text-[10px] text-[var(--market-text-muted)]">
+          + {listings.length - slice.length} more in raw response
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 function FreshnessChip({
   label,
