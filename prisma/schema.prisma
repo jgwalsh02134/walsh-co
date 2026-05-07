@@ -93,3 +93,93 @@ model Contact {
   @@index([displayName])
   @@index([archivedAt])
 }
+
+// ----------------------------------------------------------------------
+// MarketManualEntry — manually-captured market values used by /market
+// before live integrations (RentCast, ATTOM, etc.) are wired in.
+//
+// Source attribution defaults to "Manual Internal" — matches the entry
+// in the Market Source Registry (src/lib/market-sources.ts). Decimal is
+// used for money so currency math stays exact across reads/writes.
+// ----------------------------------------------------------------------
+model MarketManualEntry {
+  id                 String    @id @default(cuid())
+  propertyId         String    @unique // one current entry per property
+  propertyLabel      String
+
+  estimatedValue     Decimal?  @db.Decimal(14, 2)
+  estimatedRent      Decimal?  @db.Decimal(10, 2)
+  assessedValue      Decimal?  @db.Decimal(14, 2)
+  annualTaxes        Decimal?  @db.Decimal(12, 2)
+  purchaseBasis      Decimal?  @db.Decimal(14, 2)
+  renovationBudget   Decimal?  @db.Decimal(14, 2)
+  targetRent         Decimal?  @db.Decimal(10, 2)
+
+  sourceName         String?   @default("Manual Internal")
+  sourceNote         String?   @db.Text
+  asOfDate           DateTime?
+  // "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" — validated in app code.
+  confidence         String?
+
+  // Mirrors TrackedProperty.kind === "private". Used to keep 14 MacAffer
+  // Dr out of business KPIs even when manual data exists for it.
+  isPrivateReference Boolean   @default(false)
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([propertyId])
+}
+
+// ----------------------------------------------------------------------
+// MarketSourceSnapshot — one row per external-provider fetch attempt.
+// First consumer is RentCast (provider = "RentCast"). Each refresh
+// inserts a new row so we keep history; "latest snapshot" is computed
+// per property via fetchedAt desc.
+//
+// status:
+//   "SUCCESS" — provider returned data we could parse
+//   "NO_DATA" — provider returned 200 with no value/rent populated
+//   "ERROR"   — non-200, network failure, or parse error (errorMessage set)
+// sourceType:
+//   "SNAPSHOT" — combined value + rent fetched in one refresh
+//   "VALUE_ESTIMATE" — value only (reserved for future granular fetches)
+//   "RENT_ESTIMATE"  — rent only  (reserved for future granular fetches)
+// ----------------------------------------------------------------------
+model MarketSourceSnapshot {
+  id                 String    @id @default(cuid())
+  propertyId         String
+  propertyLabel      String
+  provider           String
+  sourceType         String
+
+  estimatedValue     Decimal?  @db.Decimal(14, 2)
+  estimatedRent      Decimal?  @db.Decimal(10, 2)
+  valueLow           Decimal?  @db.Decimal(14, 2)
+  valueHigh          Decimal?  @db.Decimal(14, 2)
+  rentLow            Decimal?  @db.Decimal(10, 2)
+  rentHigh           Decimal?  @db.Decimal(10, 2)
+
+  /// Number of comparable properties returned in the raw response, if
+  /// the provider includes them (RentCast AVM endpoints commonly do).
+  compsCount         Int?
+  confidence         String?
+
+  /// Untyped raw provider response, kept for traceability + debugging.
+  raw                Json?
+
+  status             String
+  errorMessage       String?
+
+  fetchedAt          DateTime  @default(now())
+  asOfDate           DateTime?
+
+  isPrivateReference Boolean   @default(false)
+
+  createdAt          DateTime  @default(now())
+
+  @@index([propertyId])
+  @@index([provider])
+  @@index([sourceType])
+  @@index([fetchedAt])
+}

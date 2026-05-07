@@ -1,9 +1,12 @@
 import Link from "next/link";
+import type {
+  MarketManualEntry,
+  MarketSourceSnapshot,
+} from "@prisma/client";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 import {
-  computeKpis,
   dash,
   forecastHorizons,
   formatCurrency,
@@ -11,11 +14,19 @@ import {
   formatPct,
   formatRent,
   neighborhoodSignalCategories,
-  propertySnapshots,
   riskCategories,
   trackedProperties,
   type TrackedProperty,
 } from "@/lib/market-data";
+import {
+  confidenceLabel,
+  decimalToNumber,
+  formatDecimalCurrency,
+  formatDecimalRent,
+  getManualEntryMap,
+} from "@/lib/market-manual";
+import { prisma } from "@/lib/prisma";
+import { hasRentCastKey } from "@/lib/rentcast";
 import {
   type MarketSection,
   type MarketSource,
@@ -27,6 +38,71 @@ import {
   NEXT_INTEGRATION,
 } from "@/lib/market-sources";
 import { statusTokens } from "@/lib/status";
+import { RentCastRefreshButton } from "./rentcast-refresh-button";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Resolved per-property estimate. Consumers read this without caring
+ * which provider produced the data — `source` makes the provenance
+ * explicit so the UI can label it.
+ */
+type Resolved = {
+  estimatedValue: number | null;
+  estimatedRent: number | null;
+  /** "RentCast" | "Manual Internal" | "None" */
+  source: "RentCast" | "Manual Internal" | "None";
+  asOfDate: Date | null;
+  /** RentCast value range high - low when available. */
+  valueLow: number | null;
+  valueHigh: number | null;
+  rentLow: number | null;
+  rentHigh: number | null;
+  compsCount: number | null;
+};
+
+/**
+ * Resolve display-priority order for a single property:
+ *   1. Latest successful RentCast snapshot
+ *   2. Manual Internal entry
+ *   3. em-dash (None)
+ * Each field is resolved independently so a property with a successful
+ * RentCast value but no rent will fall back to manual rent.
+ */
+function resolveEstimate(
+  rentCast: MarketSourceSnapshot | null,
+  manual: MarketManualEntry | null
+): Resolved {
+  const rc = rentCast?.status === "SUCCESS" ? rentCast : null;
+  const rcValue = rc ? decimalToNumber(rc.estimatedValue) : null;
+  const rcRent = rc ? decimalToNumber(rc.estimatedRent) : null;
+  const mValue = manual ? decimalToNumber(manual.estimatedValue) : null;
+  const mRent = manual ? decimalToNumber(manual.estimatedRent) : null;
+
+  const estimatedValue = rcValue ?? mValue;
+  const estimatedRent = rcRent ?? mRent;
+
+  const source: Resolved["source"] =
+    rcValue != null || rcRent != null
+      ? "RentCast"
+      : mValue != null || mRent != null
+      ? "Manual Internal"
+      : "None";
+
+  const asOfDate = rc?.asOfDate ?? rc?.fetchedAt ?? manual?.asOfDate ?? null;
+
+  return {
+    estimatedValue,
+    estimatedRent,
+    source,
+    asOfDate,
+    valueLow: rc ? decimalToNumber(rc.valueLow) : null,
+    valueHigh: rc ? decimalToNumber(rc.valueHigh) : null,
+    rentLow: rc ? decimalToNumber(rc.rentLow) : null,
+    rentHigh: rc ? decimalToNumber(rc.rentHigh) : null,
+    compsCount: rc?.compsCount ?? null,
+  };
+}
 
 function ToneTag({
   label,
@@ -104,13 +180,46 @@ function DataPlaceholder({ children }: { children?: ReactNode }) {
   );
 }
 
+/**
+ * Convert a saved confidence enum to the 0-100 range used by the existing
+ * dark-mode confidence bar component. Tightly coupled to the manual-form
+ * dropdown values (UNKNOWN/LOW/MEDIUM/HIGH).
+ */
+function confidenceToPct(c: string | null | undefined): number | null {
+  if (c === "HIGH") return 90;
+  if (c === "MEDIUM") return 60;
+  if (c === "LOW") return 30;
+  return null;
+}
+
 function PropertyMarketCard({
   property,
+  resolved,
+  manual,
+  rentCast,
 }: {
   property: TrackedProperty;
+  resolved: Resolved;
+  manual: MarketManualEntry | null;
+  rentCast: MarketSourceSnapshot | null;
 }) {
-  const snap = propertySnapshots.find((s) => s.propertyId === property.id);
   const isPrivate = property.kind === "private";
+  // Confidence: prefer manual confidence when manual is the chosen source;
+  // RentCast snapshots don't carry an explicit 0-100 confidence so the
+  // bar sits at 0 (empty) when RentCast is the source. Visual range shown
+  // below as low/high if RentCast returned them.
+  const confidencePct =
+    resolved.source === "Manual Internal"
+      ? confidenceToPct(manual?.confidence)
+      : null;
+  const sourceTone =
+    resolved.source === "RentCast"
+      ? "success"
+      : resolved.source === "Manual Internal"
+      ? "info"
+      : "neutral";
+  const sourceLabel =
+    resolved.source === "None" ? "Not connected" : resolved.source;
 
   return (
     <article
@@ -142,11 +251,17 @@ function PropertyMarketCard({
             Est. value
           </dt>
           <dd className="font-mono text-base font-semibold tabular-nums text-[var(--market-text)]">
-            {formatCurrency(snap?.estimatedValue ?? null)}
+            {formatCurrency(resolved.estimatedValue)}
           </dd>
-          <ConfidenceBar value={snap?.valueConfidence ?? null} />
+          <ConfidenceBar value={confidencePct} />
           <span className="text-[11px] text-[var(--market-text-muted)]">
-            Confidence {formatPct(snap?.valueConfidence ?? null)}
+            {resolved.source === "RentCast" &&
+            resolved.valueLow != null &&
+            resolved.valueHigh != null
+              ? `Range ${formatCurrency(resolved.valueLow)} – ${formatCurrency(
+                  resolved.valueHigh
+                )}`
+              : `Confidence ${confidenceLabel(manual?.confidence)}`}
           </span>
         </div>
         <div className="flex flex-col gap-1">
@@ -154,27 +269,50 @@ function PropertyMarketCard({
             Est. rent
           </dt>
           <dd className="font-mono text-base font-semibold tabular-nums text-[var(--market-text)]">
-            {formatRent(snap?.estimatedRent ?? null)}
+            {formatRent(resolved.estimatedRent)}
           </dd>
-          <ConfidenceBar value={snap?.rentConfidence ?? null} />
+          <ConfidenceBar value={confidencePct} />
           <span className="text-[11px] text-[var(--market-text-muted)]">
-            Confidence {formatPct(snap?.rentConfidence ?? null)}
+            {resolved.source === "RentCast" &&
+            resolved.rentLow != null &&
+            resolved.rentHigh != null
+              ? `Range ${formatCurrency(resolved.rentLow)} – ${formatCurrency(
+                  resolved.rentHigh
+                )}/mo`
+              : `Confidence ${confidenceLabel(manual?.confidence)}`}
           </span>
         </div>
       </dl>
 
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--market-border)] pt-3 text-[11px]">
         <span className="text-[var(--market-text-muted)]">
-          Last updated {formatDate(snap?.lastUpdated ?? null)}
+          As of{" "}
+          {formatDate(
+            resolved.asOfDate
+              ? new Date(resolved.asOfDate).toISOString()
+              : null
+          )}
+          {rentCast?.compsCount ? (
+            <>
+              {" "}
+              ·{" "}
+              <span className="text-[var(--market-text-secondary)]">
+                {rentCast.compsCount} comps
+              </span>
+            </>
+          ) : null}
         </span>
         <div className="flex items-center gap-2">
           {property.zipNeedsVerification || property.factsNeedVerification ? (
             <ToneTag label="Needs verification" tone="warning" />
           ) : null}
-          <ToneTag
-            label={snap?.sourceStatus ?? "Not connected"}
-            tone="neutral"
-          />
+          <ToneTag label={sourceLabel} tone={sourceTone} />
+          <Link
+            href={`/market/manual?propertyId=${property.id}`}
+            className="font-semibold text-[var(--market-cyan)] hover:underline"
+          >
+            {manual ? "Edit" : "Add"} manual
+          </Link>
           {property.workspaceHref ? (
             <Link
               href={property.workspaceHref}
@@ -191,20 +329,29 @@ function PropertyMarketCard({
 
 function EstimateRow({
   property,
+  resolved,
+  manual,
   kind,
 }: {
   property: TrackedProperty;
+  resolved: Resolved;
+  manual: MarketManualEntry | null;
   kind: "value" | "rent";
 }) {
-  const snap = propertySnapshots.find((s) => s.propertyId === property.id);
   const amount =
     kind === "value"
-      ? formatCurrency(snap?.estimatedValue ?? null)
-      : formatRent(snap?.estimatedRent ?? null);
-  const confidence =
-    kind === "value"
-      ? snap?.valueConfidence ?? null
-      : snap?.rentConfidence ?? null;
+      ? formatCurrency(resolved.estimatedValue)
+      : formatRent(resolved.estimatedRent);
+  const confidencePct =
+    resolved.source === "Manual Internal"
+      ? confidenceToPct(manual?.confidence)
+      : null;
+  const meta =
+    resolved.source === "RentCast"
+      ? "RentCast"
+      : resolved.source === "Manual Internal"
+      ? `Manual · ${confidenceLabel(manual?.confidence)}`
+      : dash;
   return (
     <div className="grid grid-cols-1 items-center gap-2 border-b border-[var(--market-border)] py-3 last:border-b-0 sm:grid-cols-[2fr_1fr_2fr_1fr] sm:gap-4">
       <span className="text-sm font-medium text-[var(--market-text)]">
@@ -213,9 +360,9 @@ function EstimateRow({
       <span className="font-mono text-sm font-semibold tabular-nums text-[var(--market-text)] sm:text-right">
         {amount}
       </span>
-      <ConfidenceBar value={confidence} />
+      <ConfidenceBar value={confidencePct} />
       <span className="text-xs text-[var(--market-text-muted)] sm:text-right">
-        Confidence {formatPct(confidence)}
+        {meta}
       </span>
     </div>
   );
@@ -286,13 +433,135 @@ function PanelSources({ section }: { section: MarketSection }) {
   );
 }
 
-export default function MarketPage() {
-  const kpis = computeKpis();
+export default async function MarketPage() {
   const businessProperties = trackedProperties.filter(
     (p) => p.kind === "business"
   );
   const privateProperty = trackedProperties.find((p) => p.kind === "private");
-  const counts = countConnected();
+  // `counts` from the static registry is shadowed by the dynamic count
+  // computed below; we still call countConnected() so the import stays
+  // referenced and the static side stays exposed for tests/scripts.
+  const _staticCounts = countConnected();
+  void _staticCounts;
+
+  // ---- Load both data sources in parallel ----
+  let manualEntries = new Map<string, MarketManualEntry>();
+  let rentCastByProperty = new Map<string, MarketSourceSnapshot>();
+  let dbAvailable = true;
+  try {
+    const [manualMap, recentSnapshots] = await Promise.all([
+      getManualEntryMap(),
+      // Pull recent RentCast snapshots and dedupe to the latest SUCCESS
+      // per property in JS — small N, simple query.
+      prisma.marketSourceSnapshot.findMany({
+        where: { provider: "RentCast" },
+        orderBy: { fetchedAt: "desc" },
+        take: 100,
+      }),
+    ]);
+    manualEntries = manualMap;
+    for (const snap of recentSnapshots) {
+      if (rentCastByProperty.has(snap.propertyId)) continue;
+      // Only consider SUCCESS rows for resolved estimates. NO_DATA / ERROR
+      // rows are still inserted for traceability, but don't drive display.
+      if (snap.status === "SUCCESS") {
+        rentCastByProperty.set(snap.propertyId, snap);
+      }
+    }
+  } catch (err) {
+    dbAvailable = false;
+    console.error("[/market] data unavailable:", err);
+  }
+  const entryFor = (propertyId: string): MarketManualEntry | null =>
+    manualEntries.get(propertyId) ?? null;
+  const rentCastFor = (propertyId: string): MarketSourceSnapshot | null =>
+    rentCastByProperty.get(propertyId) ?? null;
+  const resolvedFor = (propertyId: string): Resolved =>
+    resolveEstimate(rentCastFor(propertyId), entryFor(propertyId));
+
+  const keyConfigured = hasRentCastKey();
+  const rentCastSnapshotsExist = rentCastByProperty.size > 0;
+  // Dynamic source-registry status for RentCast on this page only — does
+  // NOT mutate the registry export (no key reads on the client).
+  const dynamicSources: typeof marketSources = marketSources.map((s) =>
+    s.id === "rentcast"
+      ? {
+          ...s,
+          status: rentCastSnapshotsExist
+            ? "Connected"
+            : keyConfigured
+            ? "Planned"
+            : "Not connected",
+        }
+      : s
+  );
+  const dynamicCounts = {
+    connected: dynamicSources.filter((s) => s.status === "Connected").length,
+    manual: dynamicSources.filter((s) => s.status === "Manual").length,
+    total: dynamicSources.length,
+  };
+
+  // ---- KPIs (business-only, RentCast-first then manual fallback) ----
+  const businessResolved = businessProperties.map((p) => resolvedFor(p.id));
+
+  const valuedCount = businessResolved.filter(
+    (r) => r.estimatedValue != null
+  ).length;
+  const rentedCount = businessResolved.filter(
+    (r) => r.estimatedRent != null
+  ).length;
+
+  const portfolioValue = businessResolved.reduce<number | null>((acc, r) => {
+    if (r.estimatedValue == null) return acc;
+    return (acc ?? 0) + r.estimatedValue;
+  }, null);
+  const portfolioMonthlyRent = businessResolved.reduce<number | null>(
+    (acc, r) => {
+      if (r.estimatedRent == null) return acc;
+      return (acc ?? 0) + r.estimatedRent;
+    },
+    null
+  );
+
+  // Data completeness: 4 cells per business asset.
+  //   1. value (RentCast or manual)
+  //   2. rent  (RentCast or manual)
+  //   3. assessed (manual only — RentCast doesn't provide this)
+  //   4. annual taxes (manual only)
+  const FIELDS_PER_ASSET = 4;
+  const totalCells = businessProperties.length * FIELDS_PER_ASSET;
+  const populatedCells = businessProperties.reduce((acc, p) => {
+    const r = resolvedFor(p.id);
+    const m = entryFor(p.id);
+    let n = 0;
+    if (r.estimatedValue != null) n++;
+    if (r.estimatedRent != null) n++;
+    if (m && decimalToNumber(m.assessedValue) != null) n++;
+    if (m && decimalToNumber(m.annualTaxes) != null) n++;
+    return acc + n;
+  }, 0);
+  const dataCompletenessPct =
+    totalCells === 0 ? 0 : Math.round((populatedCells / totalCells) * 100);
+
+  // Latest asOfDate across resolved entries (RentCast or manual).
+  const lastUpdatedISO = businessResolved
+    .map((r) => (r.asOfDate ? new Date(r.asOfDate).toISOString() : null))
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .pop() ?? null;
+
+  const partialValueLabel =
+    portfolioValue != null && valuedCount < businessProperties.length
+      ? `${valuedCount} of ${businessProperties.length} valued`
+      : valuedCount === businessProperties.length && businessProperties.length > 0
+      ? "Sum of latest estimates"
+      : "Sum of estimates";
+  const partialRentLabel =
+    portfolioMonthlyRent != null && rentedCount < businessProperties.length
+      ? `${rentedCount} of ${businessProperties.length} rent estimates`
+      : rentedCount === businessProperties.length && businessProperties.length > 0
+      ? "Sum of latest estimates"
+      : "Potential, not actual";
 
   return (
     <div className="market-shell -mx-4 -my-6 flex flex-col gap-8 px-4 py-6 sm:-mx-6 sm:-my-8 sm:px-6 sm:py-8 lg:-mx-8 lg:-my-10 lg:px-8 lg:py-10">
@@ -301,8 +570,31 @@ export default function MarketPage() {
           eyebrow="Market Tracker"
           title="Market intelligence"
           description="Track values, rents, comps, and market signals across J.G. Walsh & Co. assets."
+          primaryAction={
+            <div className="flex flex-col items-end gap-2">
+              <RentCastRefreshButton keyConfigured={keyConfigured} />
+              <Link
+                href="/market/manual"
+                className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--radius-md)] border border-[var(--market-border)] bg-transparent px-3 py-2 text-sm font-medium text-[var(--market-text)] hover:border-[var(--market-border-strong)]"
+              >
+                {manualEntries.size > 0 ? "Edit manual data" : "Add manual data"}
+              </Link>
+            </div>
+          }
         />
         <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--market-text-muted)]">
+          {!dbAvailable ? (
+            <span
+              className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+              style={{
+                background: "var(--semantic-error-bg)",
+                borderColor: "var(--semantic-error-border)",
+                color: "var(--semantic-error)",
+              }}
+            >
+              Manual entries database not reachable
+            </span>
+          ) : null}
           <span
             className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
             style={{
@@ -332,41 +624,41 @@ export default function MarketPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <KpiTile
             label="Tracked assets"
-            value={kpis.trackedAssets}
+            value={businessProperties.length}
             sublabel="Business portfolio"
           />
           <KpiTile
             label="Est. portfolio value"
-            value={formatCurrency(kpis.estimatedPortfolioValue)}
-            sublabel="Sum of estimates"
+            value={formatCurrency(portfolioValue)}
+            sublabel={partialValueLabel}
           />
           <KpiTile
             label="Est. monthly rent"
-            value={formatRent(kpis.estimatedMonthlyRent)}
-            sublabel="Potential, not actual"
+            value={formatRent(portfolioMonthlyRent)}
+            sublabel={partialRentLabel}
           />
           <KpiTile
             label="Data completeness"
             value={
-              kpis.dataCompletenessPct === 0 && kpis.connectedSources === 0
+              dataCompletenessPct === 0
                 ? "Not started"
-                : formatPct(kpis.dataCompletenessPct)
+                : formatPct(dataCompletenessPct)
             }
             sublabel={
-              kpis.dataCompletenessPct === 0 && kpis.connectedSources === 0
-                ? "Pending data sources"
-                : "Across business assets"
+              dataCompletenessPct === 0
+                ? "Add manual data to begin"
+                : `${populatedCells} of ${totalCells} cells filled`
             }
           />
           <KpiTile
             label="Last updated"
-            value={formatDate(kpis.lastUpdated)}
-            sublabel="Most recent snapshot"
+            value={formatDate(lastUpdatedISO)}
+            sublabel="Most recent manual entry"
           />
           <KpiTile
             label="Connected sources"
-            value={`${kpis.connectedSources} / ${kpis.totalSources}`}
-            sublabel="Active integrations"
+            value={`${dynamicCounts.connected} / ${dynamicCounts.total}`}
+            sublabel={`${dynamicCounts.manual} manual`}
           />
         </div>
       </SectionPanel>
@@ -377,7 +669,13 @@ export default function MarketPage() {
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {businessProperties.map((p) => (
-            <PropertyMarketCard key={p.id} property={p} />
+            <PropertyMarketCard
+              key={p.id}
+              property={p}
+              resolved={resolvedFor(p.id)}
+              manual={entryFor(p.id)}
+              rentCast={rentCastFor(p.id)}
+            />
           ))}
         </div>
         {privateProperty ? (
@@ -389,7 +687,12 @@ export default function MarketPage() {
               <ToneTag label="Excluded from KPIs" tone="neutral" />
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <PropertyMarketCard property={privateProperty} />
+              <PropertyMarketCard
+                property={privateProperty}
+                resolved={resolvedFor(privateProperty.id)}
+                manual={entryFor(privateProperty.id)}
+                rentCast={rentCastFor(privateProperty.id)}
+              />
             </div>
           </div>
         ) : null}
@@ -403,7 +706,13 @@ export default function MarketPage() {
           <PanelSources section="propertyValueEstimates" />
           <div className="flex flex-col">
             {businessProperties.map((p) => (
-              <EstimateRow key={p.id} property={p} kind="value" />
+              <EstimateRow
+                key={p.id}
+                property={p}
+                resolved={resolvedFor(p.id)}
+                manual={entryFor(p.id)}
+                kind="value"
+              />
             ))}
           </div>
         </SectionPanel>
@@ -415,7 +724,13 @@ export default function MarketPage() {
           <PanelSources section="rentEstimates" />
           <div className="flex flex-col">
             {businessProperties.map((p) => (
-              <EstimateRow key={p.id} property={p} kind="rent" />
+              <EstimateRow
+                key={p.id}
+                property={p}
+                resolved={resolvedFor(p.id)}
+                manual={entryFor(p.id)}
+                kind="rent"
+              />
             ))}
           </div>
         </SectionPanel>
@@ -506,20 +821,31 @@ export default function MarketPage() {
           <div className="flex flex-col">
             {trackedProperties
               .filter((p) => p.kind === "business")
-              .map((p) => (
-                <div
-                  key={p.id}
-                  className="grid grid-cols-[2fr_1fr_1fr] items-center gap-3 border-b border-[var(--market-border)] py-2.5 last:border-b-0 text-sm"
-                >
-                  <span className="text-[var(--market-text)]">{p.address}</span>
-                  <span className="text-right font-mono tabular-nums text-[var(--market-text-muted)]">
-                    Assessed {dash}
-                  </span>
-                  <span className="text-right font-mono tabular-nums text-[var(--market-text-muted)]">
-                    Last bill {dash}
-                  </span>
-                </div>
-              ))}
+              .map((p) => {
+                const e = entryFor(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    className="grid grid-cols-[2fr_1fr_1fr] items-center gap-3 border-b border-[var(--market-border)] py-2.5 last:border-b-0 text-sm"
+                  >
+                    <span className="text-[var(--market-text)]">
+                      {p.address}
+                    </span>
+                    <span className="text-right font-mono tabular-nums text-[var(--market-text)]">
+                      <span className="mr-1 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                        Assessed
+                      </span>
+                      {formatDecimalCurrency(e?.assessedValue)}
+                    </span>
+                    <span className="text-right font-mono tabular-nums text-[var(--market-text)]">
+                      <span className="mr-1 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                        Annual taxes
+                      </span>
+                      {formatDecimalCurrency(e?.annualTaxes)}
+                    </span>
+                  </div>
+                );
+              })}
           </div>
         </SectionPanel>
       </div>
@@ -551,10 +877,10 @@ export default function MarketPage() {
 
       <SectionPanel
         title="Data Sources"
-        description={`${counts.connected} connected · ${counts.manual} manual · ${counts.total} total`}
+        description={`${dynamicCounts.connected} connected · ${dynamicCounts.manual} manual · ${dynamicCounts.total} total`}
       >
         <ul className="flex flex-col divide-y divide-[var(--market-border)]">
-          {marketSources.map((s) => (
+          {dynamicSources.map((s) => (
             <li
               key={s.id}
               className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
