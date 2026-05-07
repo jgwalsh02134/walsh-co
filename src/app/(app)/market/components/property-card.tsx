@@ -29,6 +29,7 @@ import {
   PropertyValuationChart,
   type ValuationPoint,
 } from "./property-valuation-chart";
+import { AiResponseCard } from "./ai-response-card";
 
 // =============================================================
 // Public types
@@ -227,6 +228,7 @@ export function PropertyCard({
   const tablistId = useId();
 
   const { property, house, rent, trend, verification } = data;
+  const accent = propertyAccent(property.id);
 
   const lastRefreshedIso =
     [house.asOfDate, rent.asOfDate, data.rentCastLastFetched, data.attomLastFetched]
@@ -249,6 +251,7 @@ export function PropertyCard({
           ? "border-dashed border-[var(--market-amber)]"
           : "border-[var(--market-border)]"
       } bg-[var(--market-surface)]`}
+      style={{ borderLeft: `4px solid ${accent}` }}
     >
       <header className="flex flex-col gap-3 border-b border-[var(--market-border)] px-4 py-4 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -256,7 +259,7 @@ export function PropertyCard({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <h3
                 id={titleId}
-                className="font-display text-lg font-semibold leading-tight text-[var(--market-text)] sm:text-xl"
+                className="font-display text-xl font-semibold leading-tight text-[#f8fbff] sm:text-2xl"
               >
                 {property.address}
               </h3>
@@ -283,6 +286,24 @@ export function PropertyCard({
                 </>
               ) : null}
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--market-text-muted)]">
+              <span>
+                Zillow ZHVI{" "}
+                <span className="font-data text-[var(--market-text)]">
+                  {trend.zip ? `ZIP ${trend.zip}` : dash}
+                </span>
+              </span>
+              <span className="font-data tabular-nums text-[var(--market-text)]">
+                {formatCurrency(trend.latestValue)}
+              </span>
+              <span
+                className="font-data tabular-nums"
+                style={{ color: pctChangeColor(trend.yoyChange) }}
+              >
+                1Y {formatPctChange(trend.yoyChange)}
+              </span>
+              <span>Trend context only</span>
+            </div>
           </div>
           <div className="flex flex-col items-end gap-1 text-right">
             <span
@@ -711,8 +732,10 @@ function ChartPanel({ data }: { data: PropertyCardData }) {
 // =============================================================
 
 function CompsPanel({ data }: { data: PropertyCardData }) {
-  const sale = data.saleComps.slice(0, 5);
-  const rental = data.rentalComps.slice(0, 5);
+  const [showAllSale, setShowAllSale] = useState(false);
+  const [showAllRental, setShowAllRental] = useState(false);
+  const sale = showAllSale ? data.saleComps : data.saleComps.slice(0, 5);
+  const rental = showAllRental ? data.rentalComps : data.rentalComps.slice(0, 5);
   const moreSale = Math.max(0, data.saleComps.length - sale.length);
   const moreRental = Math.max(0, data.rentalComps.length - rental.length);
 
@@ -724,6 +747,12 @@ function CompsPanel({ data }: { data: PropertyCardData }) {
           shown={sale.length}
           remaining={moreSale}
           total={data.saleComps.length}
+          expanded={showAllSale}
+          onToggle={
+            data.saleComps.length > 5
+              ? () => setShowAllSale((v) => !v)
+              : undefined
+          }
         />
         {sale.length === 0 ? (
           <EmptyComps label="No sale comps returned." />
@@ -737,6 +766,12 @@ function CompsPanel({ data }: { data: PropertyCardData }) {
           shown={rental.length}
           remaining={moreRental}
           total={data.rentalComps.length}
+          expanded={showAllRental}
+          onToggle={
+            data.rentalComps.length > 5
+              ? () => setShowAllRental((v) => !v)
+              : undefined
+          }
         />
         {rental.length === 0 ? (
           <EmptyComps label="No rental comps returned." />
@@ -753,20 +788,35 @@ function CompsHeader({
   shown,
   remaining,
   total,
+  expanded,
+  onToggle,
 }: {
   title: string;
   shown: number;
   remaining: number;
   total: number;
+  expanded: boolean;
+  onToggle?: () => void;
 }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
       <div className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
         {title}
       </div>
-      <div className="font-data text-[11px] tabular-nums text-[var(--market-text-muted)]">
-        Top {shown}
-        {remaining > 0 ? ` of ${total}` : ""}
+      <div className="flex items-center gap-2">
+        <div className="font-data text-[11px] tabular-nums text-[var(--market-text-muted)]">
+          {expanded ? "All" : "Top"} {shown}
+          {remaining > 0 ? ` of ${total}` : ""}
+        </div>
+        {onToggle ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="min-h-[36px] text-[11px] font-semibold text-[var(--market-cyan)] hover:text-[var(--market-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]"
+          >
+            {expanded ? "Show top 5" : "View all comps"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -881,7 +931,8 @@ function RecordsPanel({ data }: { data: PropertyCardData }) {
   if (populated.length === 0) {
     return (
       <p className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3 text-xs text-[var(--market-text-muted)]">
-        ATTOM record returned, but these fields were not included.
+        ATTOM record returned, but year built / size / tax fields were not
+        included.
       </p>
     );
   }
@@ -1030,31 +1081,27 @@ function PropertyAiPanel({ data }: { data: PropertyCardData }) {
         </div>
       </div>
       {state ? (
-        <div className="mt-3 border border-[var(--market-border)] bg-[var(--market-surface)] p-3">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--market-text-secondary)]">
-            {state.message}
-          </p>
-          {state.sources && state.sources.length > 0 ? (
-            <div className="mt-3 border-t border-[var(--market-border)] pt-2">
-              <div className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
-                Sources
-              </div>
-              <ul className="mt-1 flex flex-col gap-1 text-xs text-[var(--market-text-secondary)]">
-                {state.sources.map((url) => (
-                  <li key={url} className="break-all font-data">
-                    {url}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          <p className="mt-3 text-[11px] text-[var(--market-amber)]">
-            AI-generated internal draft. Verify before relying.
-          </p>
+        <div className="mt-3">
+          <AiResponseCard state={state} />
         </div>
       ) : null}
     </div>
   );
+}
+
+function propertyAccent(id: string): string {
+  switch (id) {
+    case "loudonwood-51":
+      return "var(--market-cyan)";
+    case "momrow-16":
+      return "var(--market-blue)";
+    case "osborne-322":
+      return "var(--market-amber)";
+    case "macaffer-14":
+      return "color-mix(in srgb, var(--market-amber) 65%, var(--market-text-muted))";
+    default:
+      return "var(--market-border-strong)";
+  }
 }
 
 // =============================================================

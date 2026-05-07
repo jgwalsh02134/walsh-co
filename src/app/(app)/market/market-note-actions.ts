@@ -12,11 +12,24 @@ export type MarketNoteProperty = {
   zip: string | null;
   houseValue: string;
   houseSource: string;
+  houseRange: string;
   rent: string;
   rentSource: string;
+  rentRange: string;
   yieldPct: string;
   refreshed: string;
   verification: string;
+  zillowTrend: {
+    latest: string;
+    change1Y: string;
+    change3Y: string;
+    change5Y: string;
+    asOf: string;
+  };
+  comps: {
+    saleCount: number;
+    rentalCount: number;
+  };
 };
 
 export type MarketNoteInput = {
@@ -34,7 +47,14 @@ export type MarketNoteInput = {
 export type MarketNoteState = {
   ok: boolean;
   message: string;
-  sources?: string[];
+  sources?: AiSource[];
+};
+
+export type AiSource = {
+  title: string;
+  url: string;
+  domain: string;
+  usedFor?: string;
 };
 
 export async function generateMarketNote(
@@ -61,14 +81,23 @@ async function runMarketNote(
     "Create a short internal market analysis for the J.G. Walsh & Co. Market Tracker.",
     "Use only the supplied portfolio/property data unless web search is explicitly enabled.",
     "Do not call this an appraisal. Do not make legal, zoning, or financial conclusions.",
-    "Structure with clearly-labeled sections:",
-    "  • Market value summary",
-    "  • Rent summary",
-    "  • Source confidence",
-    "  • Attention items",
-    "  • Suggested next checks",
-    "  • Caveats",
-    "Use plain text. Keep the whole note under 240 words.",
+    "Return Markdown only, using this structure:",
+    "# Market Note",
+    "## Executive Takeaway",
+    "- 2-3 bullets max.",
+    "## Property Value Signal",
+    "- House value by source, range/confidence, and source disagreement if visible.",
+    "## Rent Signal",
+    "- Current market rent and rent range/comps if available.",
+    "## Evidence",
+    "- RentCast comps, ATTOM verification, Zillow ZIP trend, and FRED macro context if relevant.",
+    "## Risks / Missing Data",
+    "- Missing assessment/tax, acquisition basis, stale snapshots, unknown condition/renovation scope.",
+    "## Next Checks",
+    "- 3-5 concise actionable checks.",
+    "## Sources",
+    "- Compact internal/provider source list. Use [1], [2] markers only when web search is enabled.",
+    "Keep the whole note concise.",
     "",
     JSON.stringify(input, null, 2),
   ].join("\n");
@@ -84,7 +113,10 @@ async function runMarketNote(
       return {
         ok: true,
         message: result.outputText || "OpenAI returned no note text.",
-        sources: result.sources,
+        sources: normalizeAiSources(
+          result.sources,
+          "Current macro / mortgage-rate context"
+        ),
       };
     }
 
@@ -182,14 +214,23 @@ async function runPropertyAnalysis(
     "Use only the supplied property data unless web search is explicitly enabled.",
     "Do not call this an appraisal. Do not make legal, zoning, or financial conclusions.",
     "Be concrete and reference the supplied numbers.",
-    "Structure with clearly-labeled sections:",
-    "  • Market value summary",
-    "  • Rent summary",
-    "  • Source confidence",
-    "  • Attention items",
-    "  • Suggested next checks",
-    "  • Caveats",
-    "Use plain text. Keep the whole note under 220 words.",
+    "Return Markdown only, using this structure:",
+    "# Market Note",
+    "## Executive Takeaway",
+    "- 2-3 bullets max.",
+    "## Property Value Signal",
+    "- House value by source, range/confidence, and source disagreement if visible.",
+    "## Rent Signal",
+    "- Current market rent and rent range/comps if available.",
+    "## Evidence",
+    "- RentCast comps, ATTOM verification, Zillow ZIP trend, and FRED macro context if relevant.",
+    "## Risks / Missing Data",
+    "- Missing assessment/tax, acquisition basis, stale snapshots, unknown condition/renovation scope.",
+    "## Next Checks",
+    "- 3-5 concise actionable checks.",
+    "## Sources",
+    "- Compact internal/provider source list. Use [1], [2] markers only when web search is enabled.",
+    "Keep the whole note concise.",
     "",
     JSON.stringify(input, null, 2),
   ].join("\n");
@@ -204,7 +245,10 @@ async function runPropertyAnalysis(
       return {
         ok: true,
         message: result.outputText || "OpenAI returned no note text.",
-        sources: result.sources,
+        sources: normalizeAiSources(
+          result.sources,
+          "Current ZIP / macro market context"
+        ),
       };
     }
 
@@ -222,4 +266,28 @@ async function runPropertyAnalysis(
           : "AI property analysis failed.",
     };
   }
+}
+
+function normalizeAiSources(urls: string[], usedFor: string): AiSource[] {
+  const seen = new Set<string>();
+  const sources: AiSource[] = [];
+
+  for (const url of urls) {
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    let domain = "source";
+    try {
+      domain = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      domain = "source";
+    }
+    sources.push({
+      title: domain,
+      domain,
+      url,
+      usedFor,
+    });
+  }
+
+  return sources;
 }

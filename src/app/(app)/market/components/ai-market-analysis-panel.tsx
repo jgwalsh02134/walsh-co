@@ -16,6 +16,7 @@ import {
   type MarketNoteInput,
   type MarketNoteState,
 } from "../market-note-actions";
+import { AiResponseCard } from "./ai-response-card";
 
 export function AiMarketAnalysisPanel({
   input,
@@ -83,28 +84,7 @@ export function AiMarketAnalysisPanel({
         </div>
 
         {state ? (
-          <div className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3">
-            <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--market-text-secondary)]">
-              {state.message}
-            </p>
-            {state.sources && state.sources.length > 0 ? (
-              <div className="mt-3 border-t border-[var(--market-border)] pt-2">
-                <div className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
-                  Sources
-                </div>
-                <ul className="mt-1 flex flex-col gap-1 text-xs text-[var(--market-text-secondary)]">
-                  {state.sources.map((url) => (
-                    <li key={url} className="break-all font-data">
-                      {url}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            <p className="mt-3 text-[11px] text-[var(--market-amber)]">
-              AI-generated internal draft. Verify before relying.
-            </p>
-          </div>
+          <AiResponseCard state={state} />
         ) : (
           <p className="text-xs text-[var(--market-text-muted)]">
             Output appears here. Includes market value summary, rent summary,

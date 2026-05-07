@@ -60,6 +60,11 @@ import {
 } from "@/lib/zillow-research";
 import { AiMarketAnalysisPanel } from "./components/ai-market-analysis-panel";
 import {
+  DataCoveragePanel,
+  type CoverageRow,
+  type RoadmapRow,
+} from "./components/data-coverage-panel";
+import {
   MacroContextPanel,
   type MacroSeriesObservation,
 } from "./components/macro-context-panel";
@@ -774,7 +779,9 @@ export default async function MarketPage() {
     | "missing_acquisition_basis"
     | "stale_rentcast"
     | "missing_tax_data"
-    | "avm_unavailable_for_plan";
+    | "avm_unavailable_for_plan"
+    | "missing_sale_comps"
+    | "missing_rental_comps";
 
   const ISSUE_LABEL: Record<PropertyIssue, string> = {
     records_pending: "Records pending",
@@ -784,6 +791,8 @@ export default async function MarketPage() {
     stale_rentcast: "Stale RentCast data",
     missing_tax_data: "Tax/assessment missing",
     avm_unavailable_for_plan: "ATTOM AVM unavailable for plan",
+    missing_sale_comps: "Sale comps missing",
+    missing_rental_comps: "Rental comps missing",
   };
 
   const ISSUE_DETAIL: Record<PropertyIssue, string> = {
@@ -794,6 +803,8 @@ export default async function MarketPage() {
     stale_rentcast: "Last RentCast snapshot is more than 30 days old.",
     missing_tax_data: "No ATTOM or manual assessed-value / tax data.",
     avm_unavailable_for_plan: "Current ATTOM plan/key disallows the AVM endpoint.",
+    missing_sale_comps: "No sale comparables were returned in the latest data.",
+    missing_rental_comps: "No rental comparables were returned in the latest data.",
   };
 
   const ISSUE_SEVERITY: Record<
@@ -807,6 +818,8 @@ export default async function MarketPage() {
     stale_rentcast: "warning",
     missing_tax_data: "warning",
     avm_unavailable_for_plan: "info",
+    missing_sale_comps: "info",
+    missing_rental_comps: "info",
   };
 
   function analyze(property: TrackedProperty): PropertyAnalysis {
@@ -855,6 +868,8 @@ export default async function MarketPage() {
     }
     if (!taxResolved) issues.push("missing_tax_data");
     if (avmUnavailableForPlan) issues.push("avm_unavailable_for_plan");
+    if (saleComps.length === 0) issues.push("missing_sale_comps");
+    if (rentalComps.length === 0) issues.push("missing_rental_comps");
 
     return {
       property,
@@ -962,6 +977,12 @@ export default async function MarketPage() {
   const privateCard = privateAnalysis
     ? toCardData(privateAnalysis, true)
     : null;
+  const attomAvmAvailable = [...attomAvmByProperty.values()].some(
+    (snap) => getAttomAvm(snap)?.estimatedValue != null
+  );
+  const attomAvmUnavailable = [...attomAvmByProperty.values()].some((snap) =>
+    isAvmUnavailableForPlan(snap)
+  );
 
   // ---------- KPIs (business-only; 14 MacAffer excluded) ----------
   const valuedCount = businessAnalyses.filter(
@@ -1048,8 +1069,16 @@ export default async function MarketPage() {
       zip: a.property.zip,
       houseValue: formatCurrency(a.house.value),
       houseSource: a.house.source,
+      houseRange:
+        a.house.rangeLow != null && a.house.rangeHigh != null
+          ? `${formatCurrency(a.house.rangeLow)} – ${formatCurrency(a.house.rangeHigh)}`
+          : dash,
       rent: formatRent(a.rent.rent),
       rentSource: a.rent.source,
+      rentRange:
+        a.rent.rangeLow != null && a.rent.rangeHigh != null
+          ? `${formatRent(a.rent.rangeLow)} – ${formatRent(a.rent.rangeHigh)}`
+          : dash,
       yieldPct: a.yieldPct != null ? `${a.yieldPct.toFixed(2)}%` : dash,
       refreshed: a.rentCastLastFetched
         ? relativeAge(a.rentCastLastFetched)
@@ -1057,11 +1086,123 @@ export default async function MarketPage() {
         ? relativeAge(a.attomLastFetched)
         : dash,
       verification: a.verifiedByAttom ? "ATTOM verified" : "Records pending",
+      zillowTrend: {
+        latest: formatCurrency(a.trend.zhvi?.latestValue ?? null),
+        change1Y:
+          a.trend.zhvi?.yoyChange != null
+            ? `${(a.trend.zhvi.yoyChange * 100).toFixed(1)}%`
+            : dash,
+        change3Y:
+          a.trend.zhvi?.threeYearChange != null
+            ? `${(a.trend.zhvi.threeYearChange * 100).toFixed(1)}%`
+            : dash,
+        change5Y:
+          a.trend.zhvi?.fiveYearChange != null
+            ? `${(a.trend.zhvi.fiveYearChange * 100).toFixed(1)}%`
+            : dash,
+        asOf: a.trend.zhvi?.latestDate
+          ? formatFredObsDate(a.trend.zhvi.latestDate)
+          : dash,
+      },
+      comps: {
+        saleCount: a.saleComps.length,
+        rentalCount: a.rentalComps.length,
+      },
     })),
     attentionItems: attentionGroups.map(
       (g) => `${g.issue} — ${g.properties.join(", ")}`
     ),
   };
+
+  const dataCoverageRows: CoverageRow[] = [
+    {
+      name: "RentCast",
+      status: rentCastSnapshotsExist ? "Connected" : "Missing",
+      detail: "House AVM value, market rent, sale/rental comps",
+    },
+    {
+      name: "ATTOM records",
+      status: attomSnapshotsExist ? "Connected" : "Missing",
+      detail: "Record verification, APN, facts, tax/assessment",
+    },
+    {
+      name: "FRED",
+      status: fredSnapshotExists ? "Connected" : "Missing",
+      detail: "Macro/rate context only",
+    },
+    {
+      name: "Zillow ZHVI ZIP",
+      status: zillowSnapshotExists ? "Connected" : "Missing",
+      detail: "ZIP-level trend context only",
+    },
+    {
+      name: "ATTOM AVM",
+      status: attomAvmAvailable ? "Connected" : attomAvmUnavailable ? "Missing" : "Planned",
+      detail: attomAvmAvailable
+        ? "Available in existing snapshots"
+        : attomAvmUnavailable
+        ? "Unavailable for current plan/key"
+        : "Pending successful AVM snapshot",
+    },
+    {
+      name: "HouseCanary AVM",
+      status: "Planned",
+      detail: "Second valuation source; not connected",
+    },
+    {
+      name: "FHFA HPI",
+      status: "Planned",
+      detail: "Official single-family price trends; not connected",
+    },
+    {
+      name: "Redfin Data Center",
+      status: "Planned",
+      detail: "Sale/inventory/DOM/price-drop pulse; not connected",
+    },
+    {
+      name: "Census ACS",
+      status: "Planned",
+      detail: "Demographics and housing fundamentals; not connected",
+    },
+    {
+      name: "Climate risk",
+      status: "Optional",
+      detail: "Later risk context; not connected",
+    },
+  ];
+
+  const roadmapRows: RoadmapRow[] = [
+    {
+      priority: 1,
+      name: "Confirm/use ATTOM AVM availability",
+      detail: "Use current ATTOM access when the AVM endpoint returns usable data.",
+    },
+    {
+      priority: 2,
+      name: "HouseCanary AVM",
+      detail: "Add a second property-level valuation source for comparison.",
+    },
+    {
+      priority: 3,
+      name: "FHFA HPI",
+      detail: "Use official single-family price trends for market context.",
+    },
+    {
+      priority: 4,
+      name: "Redfin Data Center",
+      detail: "Track sale volume, inventory, DOM, and price-drop pulse.",
+    },
+    {
+      priority: 5,
+      name: "Census ACS",
+      detail: "Add demographic and housing fundamentals context.",
+    },
+    {
+      priority: 6,
+      name: "Climate risk",
+      detail: "Evaluate later as a risk context layer.",
+    },
+  ];
 
   // ---------- Render ----------
   return (
@@ -1170,6 +1311,8 @@ export default async function MarketPage() {
             : "FRED key not configured. Set FRED_API_KEY to enable."
         }
       />
+
+      <DataCoveragePanel rows={dataCoverageRows} roadmap={roadmapRows} />
 
       <SourceDiagnosticsPanel sources={dynamicSources} counts={counts} />
     </div>
