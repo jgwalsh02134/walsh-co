@@ -36,6 +36,12 @@ import {
 import { prisma } from "@/lib/prisma";
 import { hasRentCastKey } from "@/lib/rentcast";
 import {
+  type ZhviSeries,
+  type ZillowTargetZip,
+  ZILLOW_TARGET_ZIPS,
+  hasZillowZhviUrl,
+} from "@/lib/zillow-research";
+import {
   type MarketSection,
   type MarketSource,
   type SourceStatus,
@@ -49,6 +55,7 @@ import { statusTokens } from "@/lib/status";
 import { AttomRefreshButton } from "./attom-refresh-button";
 import { FredRefreshButton } from "./fred-refresh-button";
 import { RentCastRefreshButton } from "./rentcast-refresh-button";
+import { ZillowRefreshButton } from "./zillow-refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +84,36 @@ function getFredObservations(
       | Record<FredSeriesId, FredObservation | null>
       | undefined) ?? null
   );
+}
+
+/**
+ * Read Zillow ZHVI series off a stored snapshot's `raw` column. We
+ * wrote `{ sourceName, targetZips, series }` in zillow-actions.ts.
+ */
+function getZhviSeries(
+  snap: MarketSourceSnapshot | null
+): Record<ZillowTargetZip, ZhviSeries | null> | null {
+  if (!snap || snap.status !== "SUCCESS") return null;
+  const raw = snap.raw as { series?: unknown } | null;
+  return (
+    (raw?.series as
+      | Record<ZillowTargetZip, ZhviSeries | null>
+      | undefined) ?? null
+  );
+}
+
+/** Format a YoY/3y/5y change as +X.X% / -X.X%. */
+function formatPctChange(v: number | null): string {
+  if (v == null) return dash;
+  const pct = v * 100;
+  const sign = pct > 0 ? "+" : pct < 0 ? "" : "";
+  return `${sign}${pct.toFixed(1)}%`;
+}
+
+/** Color a percent change green/red/neutral for the dark Market shell. */
+function pctChangeColor(v: number | null): string {
+  if (v == null || v === 0) return "var(--market-text-muted)";
+  return v > 0 ? "var(--market-positive)" : "var(--market-negative)";
 }
 
 /** Display formatter that respects the per-series unit hint. */
@@ -573,10 +610,16 @@ export default async function MarketPage() {
   let allRecentSnapshots: MarketSourceSnapshot[] = [];
   let allAttomSnapshots: MarketSourceSnapshot[] = [];
   let latestFredSnapshot: MarketSourceSnapshot | null = null;
+  let latestZillowSnapshot: MarketSourceSnapshot | null = null;
   let dbAvailable = true;
   try {
-    const [manualMap, recentSnapshots, attomSnapshots, fredLatest] =
-      await Promise.all([
+    const [
+      manualMap,
+      recentSnapshots,
+      attomSnapshots,
+      fredLatest,
+      zillowLatest,
+    ] = await Promise.all([
       getManualEntryMap(),
       // Recent RentCast snapshots; dedupe to the latest SUCCESS per
       // property in JS (small N, simple query).
@@ -598,11 +641,17 @@ export default async function MarketPage() {
         where: { provider: "FRED" },
         orderBy: { fetchedAt: "desc" },
       }),
+      // Zillow ZHVI ZIP — same pattern, one row per refresh.
+      prisma.marketSourceSnapshot.findFirst({
+        where: { provider: "ZILLOW_RESEARCH" },
+        orderBy: { fetchedAt: "desc" },
+      }),
     ]);
     manualEntries = manualMap;
     allRecentSnapshots = recentSnapshots;
     allAttomSnapshots = attomSnapshots;
     latestFredSnapshot = fredLatest;
+    latestZillowSnapshot = zillowLatest;
     for (const snap of recentSnapshots) {
       if (rentCastByProperty.has(snap.propertyId)) continue;
       if (snap.status === "SUCCESS") {
@@ -715,11 +764,15 @@ export default async function MarketPage() {
   const keyConfigured = hasRentCastKey();
   const attomKeyConfigured = hasAttomKey();
   const fredKeyConfigured = hasFredKey();
+  const zillowUrlConfigured = hasZillowZhviUrl();
   const rentCastSnapshotsExist = rentCastByProperty.size > 0;
   const attomSnapshotsExist = attomByProperty.size > 0;
   const fredSnapshotExists =
     !!latestFredSnapshot && latestFredSnapshot.status === "SUCCESS";
+  const zillowSnapshotExists =
+    !!latestZillowSnapshot && latestZillowSnapshot.status === "SUCCESS";
   const fredObservations = getFredObservations(latestFredSnapshot);
+  const zhviSeries = getZhviSeries(latestZillowSnapshot);
   // Dynamic source-registry statuses — no key reads on the client.
   const dynamicSources: typeof marketSources = marketSources.map((s) => {
     if (s.id === "rentcast") {
@@ -748,6 +801,16 @@ export default async function MarketPage() {
         status: fredSnapshotExists
           ? "Connected"
           : fredKeyConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    }
+    if (s.id === "zillow-research") {
+      return {
+        ...s,
+        status: zillowSnapshotExists
+          ? "Connected"
+          : zillowUrlConfigured
           ? "Planned"
           : "Not connected",
       };
@@ -848,6 +911,7 @@ export default async function MarketPage() {
               <RentCastRefreshButton keyConfigured={keyConfigured} />
               <AttomRefreshButton keyConfigured={attomKeyConfigured} />
               <FredRefreshButton keyConfigured={fredKeyConfigured} />
+              <ZillowRefreshButton urlConfigured={zillowUrlConfigured} />
               <span className="text-[11px] text-[var(--market-text-muted)]">
                 Each refresh issues live API calls. Click only when needed.
               </span>
@@ -1056,6 +1120,100 @@ export default async function MarketPage() {
         <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
           Source: Federal Reserve Economic Data (FRED). Refreshes are manual
           only.
+        </p>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Zillow Home Value Trends"
+        description={
+          latestZillowSnapshot
+            ? `Zillow Research · ZHVI · last refreshed ${formatDate(
+                latestZillowSnapshot.fetchedAt.toISOString()
+              )}`
+            : "Zillow ZHVI provides ZIP-level home-value index trends. Trend context only — does not replace RentCast property estimates."
+        }
+      >
+        {zhviSeries ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ZILLOW_TARGET_ZIPS.map((zip) => {
+              const s = zhviSeries[zip];
+              const propertiesInZip = trackedProperties
+                .filter((p) => p.zip === zip)
+                .map((p) => p.address);
+              return (
+                <div
+                  key={zip}
+                  className="market-card flex flex-col gap-2 rounded-[var(--radius-md)] p-4"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div className="flex flex-col">
+                      <span className="text-base font-semibold text-[var(--market-text)]">
+                        ZIP {zip}
+                      </span>
+                      <span className="text-[11px] text-[var(--market-text-muted)]">
+                        {s?.metro ? `${s.metro} · ` : ""}
+                        {s?.state ?? "NY"}
+                        {propertiesInZip.length > 0
+                          ? ` · ${propertiesInZip.join(", ")}`
+                          : ""}
+                      </span>
+                    </div>
+                    <ToneTag
+                      label={
+                        s?.latestValue != null
+                          ? "Zillow ZHVI"
+                          : "No data"
+                      }
+                      tone={s?.latestValue != null ? "info" : "neutral"}
+                    />
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-0.5">
+                      <dt className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                        Latest ZHVI
+                      </dt>
+                      <dd className="font-mono text-xl font-semibold tabular-nums text-[var(--market-text)]">
+                        {formatCurrency(s?.latestValue ?? null)}
+                      </dd>
+                      <span className="text-[11px] text-[var(--market-text-muted)]">
+                        as of{" "}
+                        {s?.latestDate
+                          ? formatDate(s.latestDate)
+                          : dash}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <dt className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                        1-year change
+                      </dt>
+                      <dd
+                        className="font-mono text-xl font-semibold tabular-nums"
+                        style={{
+                          color: pctChangeColor(s?.yoyChange ?? null),
+                        }}
+                      >
+                        {formatPctChange(s?.yoyChange ?? null)}
+                      </dd>
+                      <span className="text-[11px] text-[var(--market-text-muted)]">
+                        3y {formatPctChange(s?.threeYearChange ?? null)} · 5y{" "}
+                        {formatPctChange(s?.fiveYearChange ?? null)}
+                      </span>
+                    </div>
+                  </dl>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--market-text-muted)]">
+            {zillowUrlConfigured
+              ? "Click Refresh Zillow ZHVI data in the page header to fetch the first snapshot."
+              : "ZILLOW_ZHVI_ZIP_CSV_URL not configured. Set it in the Railway service environment."}
+          </p>
+        )}
+        <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
+          Source: Zillow Research (ZHVI). Trend context only — does not
+          replace RentCast property estimates. Refreshes are manual only.
         </p>
       </SectionPanel>
 
@@ -1348,11 +1506,57 @@ export default async function MarketPage() {
         description={
           rentCastLatestFetchedAt ||
           attomLatestFetchedAt ||
-          latestFredSnapshot
+          latestFredSnapshot ||
+          latestZillowSnapshot
             ? "Latest refresh per provider. Refreshes are manual only."
             : "No provider has been refreshed yet."
         }
       >
+        {latestZillowSnapshot ? (
+          <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Provider
+              </span>
+              <span className="font-medium text-[var(--market-text)]">
+                Zillow Research
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Last refreshed
+              </span>
+              <span className="text-[var(--market-text)]">
+                {formatDate(latestZillowSnapshot.fetchedAt.toISOString())}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                ZIPs resolved
+              </span>
+              <span className="font-mono tabular-nums text-[var(--market-text)]">
+                {zhviSeries
+                  ? Object.values(zhviSeries).filter(
+                      (s) => s?.latestValue != null
+                    ).length
+                  : 0}{" "}
+                / {ZILLOW_TARGET_ZIPS.length}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Data as of
+              </span>
+              <span className="text-[var(--market-text)]">
+                {latestZillowSnapshot.asOfDate
+                  ? formatDate(
+                      new Date(latestZillowSnapshot.asOfDate).toISOString()
+                    )
+                  : dash}
+              </span>
+            </div>
+          </div>
+        ) : null}
         {latestFredSnapshot ? (
           <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div className="flex flex-col">
@@ -1490,11 +1694,14 @@ export default async function MarketPage() {
               </span>
             </div>
           </div>
-        ) : !attomLatestFetchedAt && !latestFredSnapshot ? (
+        ) : !attomLatestFetchedAt &&
+          !latestFredSnapshot &&
+          !latestZillowSnapshot ? (
           <p className="text-sm text-[var(--market-text-muted)]">
-            Click any refresh button in the page header — <strong>RentCast</strong>,{" "}
-            <strong>ATTOM</strong>, or <strong>FRED</strong> — to fetch the
-            first snapshot.
+            Click any refresh button in the page header —{" "}
+            <strong>RentCast</strong>, <strong>ATTOM</strong>,{" "}
+            <strong>FRED</strong>, or <strong>Zillow ZHVI</strong> — to
+            fetch the first snapshot.
           </p>
         ) : null}
         <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
@@ -1510,8 +1717,8 @@ export default async function MarketPage() {
           {NEXT_INTEGRATION.reason}
         </p>
         <p className="mt-3 text-xs text-[var(--market-text-muted)]">
-          RentCast, ATTOM, and FRED are wired and live. Census ACS,
-          ClimateCheck, and Mapbox remain unconnected.
+          RentCast, ATTOM, FRED, and Zillow ZHVI (ZIP) are wired and live.
+          Census ACS, ClimateCheck, and Mapbox remain unconnected.
         </p>
       </SectionPanel>
     </div>

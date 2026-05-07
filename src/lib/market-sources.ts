@@ -143,6 +143,19 @@ export const marketSources: MarketSource[] = [
     notes:
       "Token is optional for low-volume static maps; required for production.",
   },
+  {
+    id: "zillow-research",
+    name: "Zillow Research — ZHVI",
+    category: "Valuation",
+    status: "Not connected",
+    intendedUse:
+      "ZIP-level home-value index trend context (latest, 1y / 3y / 5y change). Trend only — does NOT replace per-property RentCast estimates.",
+    priority: 8,
+    requiresApiKey: false,
+    envVarName: "ZILLOW_ZHVI_ZIP_CSV_URL",
+    notes:
+      "Public Zillow Research CSV; no API key. URL points to the published ZHVI ZIP file.",
+  },
 ];
 
 // ---------- Section → source mapping ----------
