@@ -1,7 +1,11 @@
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+import { hasOpenAIKey } from "@/lib/openai";
+import { OpenAITestPanel } from "./openai-test-panel";
 
 export default function SettingsPage() {
+  const openAIConfigured = hasOpenAIKey();
+
   return (
     <>
       <PageHeader
@@ -60,7 +64,7 @@ export default function SettingsPage() {
         title="Integrations"
         description="External services this workspace will connect to."
       >
-        <p className="text-sm text-[var(--color-text-muted)]">Coming later.</p>
+        <OpenAITestPanel configured={openAIConfigured} />
       </SectionPanel>
 
       <SectionPanel
