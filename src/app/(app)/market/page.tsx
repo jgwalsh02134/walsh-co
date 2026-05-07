@@ -53,6 +53,10 @@ import {
 } from "@/lib/zillow-research";
 import { AttomAvmRefreshButton } from "./attom-avm-refresh-button";
 import { AttomRefreshButton } from "./attom-refresh-button";
+import {
+  PropertyValuationChart,
+  SAMPLE_VALUATION_DATA,
+} from "./components/property-valuation-chart";
 import { FredRefreshButton } from "./fred-refresh-button";
 import { RentCastListingsRefreshButton } from "./rentcast-listings-refresh-button";
 import { RentCastRefreshButton } from "./rentcast-refresh-button";
@@ -1054,6 +1058,37 @@ export default async function MarketPage() {
           </p>
         </div>
       ) : null}
+
+      {/* ============================================================
+           Valuation chart preview (collapsed, mock data)
+         ============================================================ */}
+      <details className="group rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+          <span>
+            Valuation chart preview{" "}
+            <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
+              · Demo visualization — not final underwriting data
+            </span>
+          </span>
+          <span aria-hidden className="text-[var(--market-text-muted)]">
+            ▾
+          </span>
+        </summary>
+        <div className="border-t border-[var(--market-border)] p-4">
+          <PropertyValuationChart
+            propertyName="322 Osborne Rd"
+            zip="12211"
+            data={SAMPLE_VALUATION_DATA}
+          />
+          <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
+            Mock data wired in to validate the chart shape. Replace with
+            real RentCast / ATTOM AVM history + Zillow ZHVI benchmark +
+            internal projection points once the snapshot pipeline emits
+            time series. See file header in property-valuation-chart.tsx
+            for the data-mapping plan.
+          </p>
+        </div>
+      </details>
 
       {/* ============================================================
            Area listings (collapsed; hidden when nothing is wired)
