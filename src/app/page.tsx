@@ -36,12 +36,33 @@ export default function Home() {
                 href={card.href}
                 className="group flex h-full min-h-[160px] flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-card-hover)] sm:p-6"
               >
-                <span
-                  aria-hidden
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
-                >
-                  {card.icon}
-                </span>
+                {card.blueprintIcon ? (
+                  // Blueprint art is a fixed-color illustration, so we
+                  // give it a neutral surface to sit on — the warm
+                  // workspace palette doesn't fight the Icons8 blue.
+                  // Light opacity keeps the title visually dominant.
+                  <span
+                    aria-hidden
+                    className="inline-flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-soft)]"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={card.blueprintIcon}
+                      alt=""
+                      className="h-11 w-11 opacity-90"
+                      loading="lazy"
+                    />
+                  </span>
+                ) : (
+                  // Fallback to the original Lucide icon badge when no
+                  // blueprint asset is provided for this card.
+                  <span
+                    aria-hidden
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
+                  >
+                    {card.icon}
+                  </span>
+                )}
                 <div className="flex flex-1 flex-col gap-1.5">
                   <h2 className="text-lg font-semibold text-[var(--color-text)]">
                     {card.title}
@@ -68,12 +89,22 @@ export default function Home() {
           <span>
             Access protected by Cloudflare Access · Microsoft Entra login.
           </span>
-          <Link
-            href="/settings"
-            className="self-start text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:underline sm:self-auto"
-          >
-            Settings
-          </Link>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <a
+              href="https://icons8.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:underline"
+            >
+              Icons by Icons8
+            </a>
+            <Link
+              href="/settings"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:underline"
+            >
+              Settings
+            </Link>
+          </span>
         </footer>
       </main>
     </div>

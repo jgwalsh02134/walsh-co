@@ -146,8 +146,17 @@ export type LandingCard = {
   title: string;
   description: string;
   href: string;
+  /** Lucide fallback icon — rendered when `blueprintIcon` is absent or the
+   *  static asset fails to load. Stays a small, currentColor-driven icon. */
   icon: ReactNode;
+  /** Optional public path to a static Icons8-blueprint-style SVG. The page
+   *  renders this as a larger, fixed-color illustration and falls back to
+   *  `icon` when this is undefined. Only used on the landing cards — never
+   *  on inline UI controls (search, edit, archive, etc. stay Lucide). */
+  blueprintIcon?: string;
 };
+
+const BLUEPRINT_DIR = "/icons/landing/blueprint";
 
 export const landingCards: LandingCard[] = [
   {
@@ -156,6 +165,7 @@ export const landingCards: LandingCard[] = [
       "View company holdings, property status, and portfolio-level summaries.",
     href: "/portfolio",
     icon: cardIcons.portfolio,
+    blueprintIcon: `${BLUEPRINT_DIR}/portfolio.svg`,
   },
   {
     title: "Market Tracker",
@@ -163,6 +173,7 @@ export const landingCards: LandingCard[] = [
       "Track values, rent estimates, comps, market trends, and data sources.",
     href: "/market",
     icon: cardIcons.market,
+    blueprintIcon: `${BLUEPRINT_DIR}/market-tracker.svg`,
   },
   {
     title: "Properties",
@@ -170,6 +181,7 @@ export const landingCards: LandingCard[] = [
       "Open individual property records, documents, tasks, and financial details.",
     href: "/properties",
     icon: cardIcons.properties,
+    blueprintIcon: `${BLUEPRINT_DIR}/properties.svg`,
   },
   {
     title: "322 Osborne Workspace",
@@ -177,6 +189,7 @@ export const landingCards: LandingCard[] = [
       "Manage renovation scope, contractors, bids, tasks, budget, and documents.",
     href: "/renovation",
     icon: cardIcons.renovation,
+    blueprintIcon: `${BLUEPRINT_DIR}/renovation.svg`,
   },
   {
     title: "Contacts",
@@ -184,6 +197,7 @@ export const landingCards: LandingCard[] = [
       "Organize contractors, professionals, municipal contacts, vendors, and key relationships.",
     href: "/contacts",
     icon: cardIcons.contacts,
+    blueprintIcon: `${BLUEPRINT_DIR}/contacts.svg`,
   },
   {
     title: "Documents",
@@ -191,6 +205,7 @@ export const landingCards: LandingCard[] = [
       "Organize deeds, insurance, permits, contracts, COIs, bids, and photos.",
     href: "/documents",
     icon: cardIcons.documents,
+    blueprintIcon: `${BLUEPRINT_DIR}/documents.svg`,
   },
   {
     title: "Budget & Financials",
@@ -198,6 +213,7 @@ export const landingCards: LandingCard[] = [
       "Track estimates, committed costs, actuals, variance, and exposure.",
     href: "/budget",
     icon: cardIcons.budget,
+    blueprintIcon: `${BLUEPRINT_DIR}/budget.svg`,
   },
   {
     title: "Tasks & Follow-ups",
@@ -205,6 +221,7 @@ export const landingCards: LandingCard[] = [
       "Manage project work, punch items, deadlines, and open decisions.",
     href: "/tasks",
     icon: cardIcons.tasks,
+    blueprintIcon: `${BLUEPRINT_DIR}/tasks.svg`,
   },
 ];
 
