@@ -248,7 +248,9 @@ function PropertyMarketCard({
       <dl className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
           <dt className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
-            Est. value
+            {resolved.source === "RentCast"
+              ? "RentCast AVM estimate"
+              : "Est. value"}
           </dt>
           <dd className="font-mono text-base font-semibold tabular-nums text-[var(--market-text)]">
             {formatCurrency(resolved.estimatedValue)}
@@ -266,7 +268,9 @@ function PropertyMarketCard({
         </div>
         <div className="flex flex-col gap-1">
           <dt className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
-            Est. rent
+            {resolved.source === "RentCast"
+              ? "RentCast long-term rent estimate"
+              : "Est. rent"}
           </dt>
           <dd className="font-mono text-base font-semibold tabular-nums text-[var(--market-text)]">
             {formatRent(resolved.estimatedRent)}
@@ -284,6 +288,30 @@ function PropertyMarketCard({
         </div>
       </dl>
 
+      {isPrivate ? (
+        <div
+          className="flex flex-col gap-0.5 rounded-[var(--radius-md)] border px-3 py-2 text-[11px]"
+          style={{
+            background: "var(--semantic-warning-bg)",
+            borderColor: "var(--semantic-warning-border)",
+            color: "var(--semantic-warning)",
+          }}
+        >
+          <span className="font-semibold uppercase tracking-wide">
+            Private / Reference Only
+          </span>
+          <span className="text-[var(--market-text-secondary)]">
+            Excluded from business KPIs. Values shown for reference only.
+          </span>
+        </div>
+      ) : null}
+
+      {resolved.source === "RentCast" ? (
+        <p className="text-[10px] leading-snug text-[var(--market-text-muted)]">
+          Not verified against official records. Not investment advice.
+        </p>
+      ) : null}
+
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--market-border)] pt-3 text-[11px]">
         <span className="text-[var(--market-text-muted)]">
           As of{" "}
@@ -296,8 +324,11 @@ function PropertyMarketCard({
             <>
               {" "}
               ·{" "}
-              <span className="text-[var(--market-text-secondary)]">
-                {rentCast.compsCount} comps
+              <span
+                className="text-[var(--market-text-secondary)]"
+                title="Number of comparable properties returned by the RentCast AVM"
+              >
+                {rentCast.compsCount} comps returned
               </span>
             </>
           ) : null}
@@ -447,6 +478,7 @@ export default async function MarketPage() {
   // ---- Load both data sources in parallel ----
   let manualEntries = new Map<string, MarketManualEntry>();
   let rentCastByProperty = new Map<string, MarketSourceSnapshot>();
+  let allRecentSnapshots: MarketSourceSnapshot[] = [];
   let dbAvailable = true;
   try {
     const [manualMap, recentSnapshots] = await Promise.all([
@@ -460,6 +492,7 @@ export default async function MarketPage() {
       }),
     ]);
     manualEntries = manualMap;
+    allRecentSnapshots = recentSnapshots;
     for (const snap of recentSnapshots) {
       if (rentCastByProperty.has(snap.propertyId)) continue;
       // Only consider SUCCESS rows for resolved estimates. NO_DATA / ERROR
@@ -472,6 +505,38 @@ export default async function MarketPage() {
     dbAvailable = false;
     console.error("[/market] data unavailable:", err);
   }
+
+  // ---- RentCast snapshot history aggregates ----
+  // The "latest refresh" is the largest fetchedAt across ALL RentCast rows
+  // (including ERROR rows so users can see when something was last
+  // attempted, not just when it succeeded). The success/error counts are
+  // computed against that batch — i.e. snapshots taken within ±60s of the
+  // latest fetchedAt — so a single refresh shows up as one row.
+  const rentCastLatestFetchedAt =
+    allRecentSnapshots.length > 0
+      ? allRecentSnapshots[0].fetchedAt
+      : null;
+  const latestBatchSnapshots = (() => {
+    if (!rentCastLatestFetchedAt) return [] as MarketSourceSnapshot[];
+    const cutoff = rentCastLatestFetchedAt.getTime() - 60_000;
+    return allRecentSnapshots.filter(
+      (s) => s.fetchedAt.getTime() >= cutoff
+    );
+  })();
+  const rentCastBatchSuccess = latestBatchSnapshots.filter(
+    (s) => s.status === "SUCCESS"
+  ).length;
+  const rentCastBatchErrors = latestBatchSnapshots.filter(
+    (s) => s.status === "ERROR"
+  ).length;
+  const rentCastBatchNoData = latestBatchSnapshots.filter(
+    (s) => s.status === "NO_DATA"
+  ).length;
+  const rentCastTotalComps = Array.from(rentCastByProperty.values()).reduce(
+    (acc, s) => acc + (s.compsCount ?? 0),
+    0
+  );
+  const manualEntriesExist = manualEntries.size > 0;
   const entryFor = (propertyId: string): MarketManualEntry | null =>
     manualEntries.get(propertyId) ?? null;
   const rentCastFor = (propertyId: string): MarketSourceSnapshot | null =>
@@ -523,25 +588,39 @@ export default async function MarketPage() {
     null
   );
 
-  // Data completeness: 4 cells per business asset.
-  //   1. value (RentCast or manual)
-  //   2. rent  (RentCast or manual)
-  //   3. assessed (manual only — RentCast doesn't provide this)
-  //   4. annual taxes (manual only)
-  const FIELDS_PER_ASSET = 4;
-  const totalCells = businessProperties.length * FIELDS_PER_ASSET;
-  const populatedCells = businessProperties.reduce((acc, p) => {
+  // Data completeness — split into two clear sub-metrics:
+  //   - Estimate cells: value + rent (RentCast or manual fallback)
+  //   - Tax / assessment cells: assessedValue + annualTaxes (manual only;
+  //     RentCast does not provide these)
+  const businessAssetCount = businessProperties.length;
+  const estimateCellsTotal = businessAssetCount * 2;
+  const taxCellsTotal = businessAssetCount * 2;
+  const totalCells = estimateCellsTotal + taxCellsTotal;
+  const estimateCellsPopulated = businessProperties.reduce((acc, p) => {
     const r = resolvedFor(p.id);
-    const m = entryFor(p.id);
     let n = 0;
     if (r.estimatedValue != null) n++;
     if (r.estimatedRent != null) n++;
+    return acc + n;
+  }, 0);
+  const taxCellsPopulated = businessProperties.reduce((acc, p) => {
+    const m = entryFor(p.id);
+    let n = 0;
     if (m && decimalToNumber(m.assessedValue) != null) n++;
     if (m && decimalToNumber(m.annualTaxes) != null) n++;
     return acc + n;
   }, 0);
+  const populatedCells = estimateCellsPopulated + taxCellsPopulated;
   const dataCompletenessPct =
     totalCells === 0 ? 0 : Math.round((populatedCells / totalCells) * 100);
+  const estimateCompletenessPct =
+    estimateCellsTotal === 0
+      ? 0
+      : Math.round((estimateCellsPopulated / estimateCellsTotal) * 100);
+  const taxCompletenessPct =
+    taxCellsTotal === 0
+      ? 0
+      : Math.round((taxCellsPopulated / taxCellsTotal) * 100);
 
   // Latest asOfDate across resolved entries (RentCast or manual).
   const lastUpdatedISO = businessResolved
@@ -573,6 +652,9 @@ export default async function MarketPage() {
           primaryAction={
             <div className="flex flex-col items-end gap-2">
               <RentCastRefreshButton keyConfigured={keyConfigured} />
+              <span className="text-[11px] text-[var(--market-text-muted)]">
+                Uses RentCast API calls. Refresh only when needed.
+              </span>
               <Link
                 href="/market/manual"
                 className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--radius-md)] border border-[var(--market-border)] bg-transparent px-3 py-2 text-sm font-medium text-[var(--market-text)] hover:border-[var(--market-border-strong)]"
@@ -595,23 +677,63 @@ export default async function MarketPage() {
               Manual entries database not reachable
             </span>
           ) : null}
-          <span
-            className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
-            style={{
-              background: "var(--semantic-warning-bg)",
-              borderColor: "var(--semantic-warning-border)",
-              color: "var(--semantic-warning)",
-            }}
-          >
+          {rentCastSnapshotsExist ? (
             <span
-              aria-hidden
-              className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{ background: "var(--semantic-warning)" }}
-            />
-            Data sources not connected
-          </span>
+              className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+              style={{
+                background: "var(--semantic-success-bg)",
+                borderColor: "var(--semantic-success-border)",
+                color: "var(--semantic-success)",
+              }}
+            >
+              <span
+                aria-hidden
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: "var(--semantic-success)" }}
+              />
+              Source snapshot · RentCast{" "}
+              {rentCastLatestFetchedAt
+                ? `· last refreshed ${formatDate(
+                    rentCastLatestFetchedAt.toISOString()
+                  )}`
+                : ""}
+              {" · "}
+              {rentCastByProperty.size} of {trackedProperties.length} properties
+              {rentCastTotalComps > 0
+                ? ` · ${rentCastTotalComps} comps returned`
+                : ""}
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+              style={{
+                background: "var(--semantic-warning-bg)",
+                borderColor: "var(--semantic-warning-border)",
+                color: "var(--semantic-warning)",
+              }}
+            >
+              <span
+                aria-hidden
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: "var(--semantic-warning)" }}
+              />
+              No RentCast snapshots yet — refresh to fetch
+            </span>
+          )}
+          {manualEntriesExist ? (
+            <span
+              className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+              style={{
+                background: "var(--semantic-info-bg)",
+                borderColor: "var(--semantic-info-border)",
+                color: "var(--semantic-info)",
+              }}
+            >
+              Manual Internal fallback available
+            </span>
+          ) : null}
           <span>
-            All figures below are placeholders — not verified, not investment
+            Estimates are not verified against official records. Not investment
             advice.
           </span>
         </div>
@@ -630,12 +752,12 @@ export default async function MarketPage() {
           <KpiTile
             label="Est. portfolio value"
             value={formatCurrency(portfolioValue)}
-            sublabel={partialValueLabel}
+            sublabel={`${partialValueLabel} · RentCast + manual fallback`}
           />
           <KpiTile
             label="Est. monthly rent"
             value={formatRent(portfolioMonthlyRent)}
-            sublabel={partialRentLabel}
+            sublabel={`${partialRentLabel} · RentCast + manual fallback`}
           />
           <KpiTile
             label="Data completeness"
@@ -646,14 +768,18 @@ export default async function MarketPage() {
             }
             sublabel={
               dataCompletenessPct === 0
-                ? "Add manual data to begin"
-                : `${populatedCells} of ${totalCells} cells filled`
+                ? "Add manual data or refresh RentCast"
+                : `Estimates ${formatPct(estimateCompletenessPct)} · Tax ${formatPct(taxCompletenessPct)}`
             }
           />
           <KpiTile
             label="Last updated"
             value={formatDate(lastUpdatedISO)}
-            sublabel="Most recent manual entry"
+            sublabel={
+              rentCastLatestFetchedAt
+                ? "RentCast or manual"
+                : "Manual entries only"
+            }
           />
           <KpiTile
             label="Connected sources"
@@ -680,12 +806,19 @@ export default async function MarketPage() {
         </div>
         {privateProperty ? (
           <div className="mt-5 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--market-text-muted)]">
                 Private / Reference Only
               </span>
               <ToneTag label="Excluded from KPIs" tone="neutral" />
+              <ToneTag label="Reference only" tone="warning" />
             </div>
+            <p className="text-[11px] text-[var(--market-text-muted)]">
+              14 MacAffer Dr is held outside the J.G. Walsh & Co. business
+              structure. Estimates below — including any RentCast values —
+              are shown for reference only and do not contribute to portfolio
+              KPIs.
+            </p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <PropertyMarketCard
                 property={privateProperty}
@@ -923,6 +1056,72 @@ export default async function MarketPage() {
       </SectionPanel>
 
       <SectionPanel
+        title="RentCast snapshot history"
+        description={
+          rentCastLatestFetchedAt
+            ? `Latest refresh ${formatDate(rentCastLatestFetchedAt.toISOString())}`
+            : "No refresh has run yet."
+        }
+      >
+        {rentCastLatestFetchedAt ? (
+          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Provider
+              </span>
+              <span className="font-medium text-[var(--market-text)]">
+                RentCast
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Successful snapshots
+              </span>
+              <span className="font-mono tabular-nums text-[var(--market-text)]">
+                {rentCastBatchSuccess} / {latestBatchSnapshots.length}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Errors
+              </span>
+              <span
+                className="font-mono tabular-nums"
+                style={{
+                  color:
+                    rentCastBatchErrors > 0
+                      ? "var(--semantic-error)"
+                      : "var(--market-text-muted)",
+                }}
+              >
+                {rentCastBatchErrors}
+                {rentCastBatchNoData > 0
+                  ? ` · ${rentCastBatchNoData} no-data`
+                  : ""}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Comps returned (latest set)
+              </span>
+              <span className="font-mono tabular-nums text-[var(--market-text)]">
+                {rentCastTotalComps > 0 ? rentCastTotalComps : dash}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--market-text-muted)]">
+            Click <strong>Refresh RentCast estimates</strong> in the page
+            header to fetch the first snapshot. RentCast is the only live
+            external source wired today.
+          </p>
+        )}
+        <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
+          Refreshes are manual only. No automatic background fetches.
+        </p>
+      </SectionPanel>
+
+      <SectionPanel
         title="Next integration"
         description={`Recommended: ${NEXT_INTEGRATION.recommendedFirstLiveSource}`}
       >
@@ -930,10 +1129,8 @@ export default async function MarketPage() {
           {NEXT_INTEGRATION.reason}
         </p>
         <p className="mt-3 text-xs text-[var(--market-text-muted)]">
-          No API calls are wired in this pass. Connecting RentCast will require
-          adding the <code className="font-mono">RENTCAST_API_KEY</code>{" "}
-          environment variable to the Railway service and a server-side fetch
-          action — both deferred to a future task.
+          RentCast is wired and live. ATTOM, FRED, Census ACS, ClimateCheck,
+          and Mapbox remain unconnected.
         </p>
       </SectionPanel>
     </div>
