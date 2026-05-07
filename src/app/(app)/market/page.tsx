@@ -170,12 +170,39 @@ function getZhviSeries(
 // Format helpers
 // =============================================================
 
-function relativeAge(d: Date | null | undefined): string {
+function toDateOrNull(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+function toIsoStringOrNull(value: unknown): string | null {
+  return toDateOrNull(value)?.toISOString() ?? null;
+}
+
+function toDateLabel(value: unknown): string {
+  const d = toDateOrNull(value);
   if (!d) return dash;
-  const ms = Date.now() - new Date(d).getTime();
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function relativeAge(value: unknown): string {
+  const d = toDateOrNull(value);
+  if (!d) return dash;
+  const ms = Date.now() - d.getTime();
   if (Number.isNaN(ms)) return dash;
   const days = Math.floor(ms / 86_400_000);
-  if (days < 0) return d.toLocaleDateString();
+  if (days < 0) return toDateLabel(d);
   if (days === 0) return "today";
   if (days === 1) return "yesterday";
   if (days < 30) return `${days}d ago`;
@@ -183,9 +210,10 @@ function relativeAge(d: Date | null | undefined): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-function isStale(d: Date | null | undefined, daysThreshold: number): boolean {
+function isStale(value: unknown, daysThreshold: number): boolean {
+  const d = toDateOrNull(value);
   if (!d) return false;
-  const ms = Date.now() - new Date(d).getTime();
+  const ms = Date.now() - d.getTime();
   if (Number.isNaN(ms)) return false;
   return ms / 86_400_000 > daysThreshold;
 }
@@ -869,7 +897,7 @@ export default async function MarketPage() {
     house: {
       value: a.house.value,
       source: a.house.source,
-      asOfDate: a.house.asOfDate ? a.house.asOfDate.toISOString() : null,
+      asOfDate: toIsoStringOrNull(a.house.asOfDate),
       rangeLow: a.house.rangeLow,
       rangeHigh: a.house.rangeHigh,
       confidence: a.house.confidence,
@@ -877,7 +905,7 @@ export default async function MarketPage() {
     rent: {
       rent: a.rent.rent,
       source: a.rent.source,
-      asOfDate: a.rent.asOfDate ? a.rent.asOfDate.toISOString() : null,
+      asOfDate: toIsoStringOrNull(a.rent.asOfDate),
       rangeLow: a.rent.rangeLow,
       rangeHigh: a.rent.rangeHigh,
     },
@@ -919,21 +947,14 @@ export default async function MarketPage() {
       : null,
     saleComps: a.saleComps as PropertyComp[],
     rentalComps: a.rentalComps as PropertyComp[],
-    rentCastLastFetched: a.rentCastLastFetched
-      ? a.rentCastLastFetched.toISOString()
-      : null,
-    attomLastFetched: a.attomLastFetched
-      ? a.attomLastFetched.toISOString()
-      : null,
-    valuationSeries: a.valuationSeries.map(
-      (p): SerializableValuationPoint => ({
-        ...p,
-        date:
-          p.date instanceof Date
-            ? p.date.toISOString()
-            : new Date(p.date).toISOString(),
+    rentCastLastFetched: toIsoStringOrNull(a.rentCastLastFetched),
+    attomLastFetched: toIsoStringOrNull(a.attomLastFetched),
+    valuationSeries: a.valuationSeries
+      .map((p): SerializableValuationPoint | null => {
+        const date = toIsoStringOrNull(p.date);
+        return date ? { ...p, date } : null;
       })
-    ),
+      .filter((p): p is SerializableValuationPoint => p != null),
     attentionItems: a.issues.map((id) => ISSUE_LABEL[id]),
   });
 
@@ -975,6 +996,7 @@ export default async function MarketPage() {
     fredLatestFetchedAt,
     zillowLatestFetchedAt,
   ]
+    .map(toDateOrNull)
     .filter((d): d is Date => d != null)
     .sort((a, b) => a.getTime() - b.getTime())
     .pop();
