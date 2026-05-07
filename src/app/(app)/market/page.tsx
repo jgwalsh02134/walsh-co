@@ -26,6 +26,13 @@ import {
   getManualEntryMap,
 } from "@/lib/market-manual";
 import { type AttomFacts, hasAttomKey } from "@/lib/attom";
+import {
+  FRED_SERIES,
+  FRED_SERIES_LABELS,
+  type FredObservation,
+  type FredSeriesId,
+  hasFredKey,
+} from "@/lib/fred";
 import { prisma } from "@/lib/prisma";
 import { hasRentCastKey } from "@/lib/rentcast";
 import {
@@ -40,6 +47,7 @@ import {
 } from "@/lib/market-sources";
 import { statusTokens } from "@/lib/status";
 import { AttomRefreshButton } from "./attom-refresh-button";
+import { FredRefreshButton } from "./fred-refresh-button";
 import { RentCastRefreshButton } from "./rentcast-refresh-button";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +61,40 @@ function getAttomFacts(snap: MarketSourceSnapshot | null): AttomFacts | null {
   if (!snap || snap.status !== "SUCCESS") return null;
   const raw = snap.raw as { facts?: unknown } | null;
   return (raw?.facts as AttomFacts | undefined) ?? null;
+}
+
+/**
+ * Read FRED observations off a stored snapshot's `raw` column. We wrote
+ * `{ sourceName, observations, errors }` in fred-actions.ts.
+ */
+function getFredObservations(
+  snap: MarketSourceSnapshot | null
+): Record<FredSeriesId, FredObservation | null> | null {
+  if (!snap || snap.status !== "SUCCESS") return null;
+  const raw = snap.raw as { observations?: unknown } | null;
+  return (
+    (raw?.observations as
+      | Record<FredSeriesId, FredObservation | null>
+      | undefined) ?? null
+  );
+}
+
+/** Display formatter that respects the per-series unit hint. */
+function formatFredValue(obs: FredObservation | null): string {
+  if (!obs || obs.value == null) return dash;
+  switch (obs.unit) {
+    case "PERCENT":
+      return `${obs.value.toFixed(2)}%`;
+    case "INDEX":
+      return obs.value.toLocaleString("en-US", {
+        maximumFractionDigits: 2,
+      });
+    case "THOUSANDS_SAAR":
+      // FRED reports housing starts in thousands of units, SAAR.
+      return `${obs.value.toLocaleString("en-US", {
+        maximumFractionDigits: 0,
+      })}K`;
+  }
 }
 
 /**
@@ -530,9 +572,11 @@ export default async function MarketPage() {
   let attomByProperty = new Map<string, MarketSourceSnapshot>();
   let allRecentSnapshots: MarketSourceSnapshot[] = [];
   let allAttomSnapshots: MarketSourceSnapshot[] = [];
+  let latestFredSnapshot: MarketSourceSnapshot | null = null;
   let dbAvailable = true;
   try {
-    const [manualMap, recentSnapshots, attomSnapshots] = await Promise.all([
+    const [manualMap, recentSnapshots, attomSnapshots, fredLatest] =
+      await Promise.all([
       getManualEntryMap(),
       // Recent RentCast snapshots; dedupe to the latest SUCCESS per
       // property in JS (small N, simple query).
@@ -548,10 +592,17 @@ export default async function MarketPage() {
         orderBy: { fetchedAt: "desc" },
         take: 100,
       }),
+      // FRED is portfolio-wide and stored as a single row per refresh,
+      // so we only need the most recent one.
+      prisma.marketSourceSnapshot.findFirst({
+        where: { provider: "FRED" },
+        orderBy: { fetchedAt: "desc" },
+      }),
     ]);
     manualEntries = manualMap;
     allRecentSnapshots = recentSnapshots;
     allAttomSnapshots = attomSnapshots;
+    latestFredSnapshot = fredLatest;
     for (const snap of recentSnapshots) {
       if (rentCastByProperty.has(snap.propertyId)) continue;
       if (snap.status === "SUCCESS") {
@@ -663,8 +714,12 @@ export default async function MarketPage() {
 
   const keyConfigured = hasRentCastKey();
   const attomKeyConfigured = hasAttomKey();
+  const fredKeyConfigured = hasFredKey();
   const rentCastSnapshotsExist = rentCastByProperty.size > 0;
   const attomSnapshotsExist = attomByProperty.size > 0;
+  const fredSnapshotExists =
+    !!latestFredSnapshot && latestFredSnapshot.status === "SUCCESS";
+  const fredObservations = getFredObservations(latestFredSnapshot);
   // Dynamic source-registry statuses — no key reads on the client.
   const dynamicSources: typeof marketSources = marketSources.map((s) => {
     if (s.id === "rentcast") {
@@ -683,6 +738,16 @@ export default async function MarketPage() {
         status: attomSnapshotsExist
           ? "Connected"
           : attomKeyConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    }
+    if (s.id === "fred") {
+      return {
+        ...s,
+        status: fredSnapshotExists
+          ? "Connected"
+          : fredKeyConfigured
           ? "Planned"
           : "Not connected",
       };
@@ -782,6 +847,7 @@ export default async function MarketPage() {
             <div className="flex flex-col items-end gap-2">
               <RentCastRefreshButton keyConfigured={keyConfigured} />
               <AttomRefreshButton keyConfigured={attomKeyConfigured} />
+              <FredRefreshButton keyConfigured={fredKeyConfigured} />
               <span className="text-[11px] text-[var(--market-text-muted)]">
                 Each refresh issues live API calls. Click only when needed.
               </span>
@@ -938,6 +1004,59 @@ export default async function MarketPage() {
             sublabel={`${dynamicCounts.manual} manual`}
           />
         </div>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Macro & Rate Context"
+        description={
+          latestFredSnapshot
+            ? `FRED · last refreshed ${formatDate(
+                latestFredSnapshot.fetchedAt.toISOString()
+              )}`
+            : "FRED is the source for portfolio-wide macro and rate context."
+        }
+      >
+        {fredObservations ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {FRED_SERIES.map((id) => {
+              const obs = fredObservations[id];
+              return (
+                <div
+                  key={id}
+                  className="market-card flex flex-col gap-1 rounded-[var(--radius-md)] p-3"
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--market-text-muted)]">
+                    {FRED_SERIES_LABELS[id]}
+                  </span>
+                  <span className="font-mono text-xl font-semibold tabular-nums text-[var(--market-text)]">
+                    {formatFredValue(obs)}
+                  </span>
+                  <span className="text-[11px] text-[var(--market-text-muted)]">
+                    <code className="font-mono text-[var(--market-text-secondary)]">
+                      {id}
+                    </code>
+                    {obs?.date ? (
+                      <>
+                        {" · as of "}
+                        {formatDate(obs.date)}
+                      </>
+                    ) : null}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--market-text-muted)]">
+            {fredKeyConfigured
+              ? "Click Refresh FRED macro data in the page header to fetch the first snapshot."
+              : "FRED key not configured. Set FRED_API_KEY in the Railway service environment."}
+          </p>
+        )}
+        <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
+          Source: Federal Reserve Economic Data (FRED). Refreshes are manual
+          only.
+        </p>
       </SectionPanel>
 
       <SectionPanel
@@ -1227,11 +1346,57 @@ export default async function MarketPage() {
       <SectionPanel
         title="Source snapshot history"
         description={
-          rentCastLatestFetchedAt || attomLatestFetchedAt
+          rentCastLatestFetchedAt ||
+          attomLatestFetchedAt ||
+          latestFredSnapshot
             ? "Latest refresh per provider. Refreshes are manual only."
             : "No provider has been refreshed yet."
         }
       >
+        {latestFredSnapshot ? (
+          <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Provider
+              </span>
+              <span className="font-medium text-[var(--market-text)]">
+                FRED
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Last refreshed
+              </span>
+              <span className="text-[var(--market-text)]">
+                {formatDate(latestFredSnapshot.fetchedAt.toISOString())}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Series fetched
+              </span>
+              <span className="font-mono tabular-nums text-[var(--market-text)]">
+                {fredObservations
+                  ? Object.values(fredObservations).filter((o) => o != null)
+                      .length
+                  : 0}{" "}
+                / {FRED_SERIES.length}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Data as of
+              </span>
+              <span className="text-[var(--market-text)]">
+                {latestFredSnapshot.asOfDate
+                  ? formatDate(
+                      new Date(latestFredSnapshot.asOfDate).toISOString()
+                    )
+                  : dash}
+              </span>
+            </div>
+          </div>
+        ) : null}
         {attomLatestFetchedAt ? (
           <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div className="flex flex-col">
@@ -1325,11 +1490,11 @@ export default async function MarketPage() {
               </span>
             </div>
           </div>
-        ) : !attomLatestFetchedAt ? (
+        ) : !attomLatestFetchedAt && !latestFredSnapshot ? (
           <p className="text-sm text-[var(--market-text-muted)]">
-            Click <strong>Refresh RentCast estimates</strong> or{" "}
-            <strong>Refresh ATTOM records</strong> in the page header to
-            fetch the first snapshot.
+            Click any refresh button in the page header — <strong>RentCast</strong>,{" "}
+            <strong>ATTOM</strong>, or <strong>FRED</strong> — to fetch the
+            first snapshot.
           </p>
         ) : null}
         <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
@@ -1345,7 +1510,7 @@ export default async function MarketPage() {
           {NEXT_INTEGRATION.reason}
         </p>
         <p className="mt-3 text-xs text-[var(--market-text-muted)]">
-          RentCast and ATTOM are wired and live. FRED, Census ACS,
+          RentCast, ATTOM, and FRED are wired and live. Census ACS,
           ClimateCheck, and Mapbox remain unconnected.
         </p>
       </SectionPanel>
