@@ -25,6 +25,7 @@ import {
   formatDecimalRent,
   getManualEntryMap,
 } from "@/lib/market-manual";
+import { type AttomFacts, hasAttomKey } from "@/lib/attom";
 import { prisma } from "@/lib/prisma";
 import { hasRentCastKey } from "@/lib/rentcast";
 import {
@@ -38,9 +39,21 @@ import {
   NEXT_INTEGRATION,
 } from "@/lib/market-sources";
 import { statusTokens } from "@/lib/status";
+import { AttomRefreshButton } from "./attom-refresh-button";
 import { RentCastRefreshButton } from "./rentcast-refresh-button";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Read the safe extracted ATTOM facts off a stored snapshot's `raw`
+ * column. `raw` is JSON; we wrote it as `{ sourceName, facts, response }`
+ * in attom-actions.ts.
+ */
+function getAttomFacts(snap: MarketSourceSnapshot | null): AttomFacts | null {
+  if (!snap || snap.status !== "SUCCESS") return null;
+  const raw = snap.raw as { facts?: unknown } | null;
+  return (raw?.facts as AttomFacts | undefined) ?? null;
+}
 
 /**
  * Resolved per-property estimate. Consumers read this without caring
@@ -197,13 +210,20 @@ function PropertyMarketCard({
   resolved,
   manual,
   rentCast,
+  attom,
 }: {
   property: TrackedProperty;
   resolved: Resolved;
   manual: MarketManualEntry | null;
   rentCast: MarketSourceSnapshot | null;
+  attom: MarketSourceSnapshot | null;
 }) {
   const isPrivate = property.kind === "private";
+  const attomFacts = getAttomFacts(attom);
+  const verifiedByAttom = Boolean(attomFacts);
+  const recordsPending =
+    !verifiedByAttom &&
+    (property.zipNeedsVerification || property.factsNeedVerification);
   // Confidence: prefer manual confidence when manual is the chosen source;
   // RentCast snapshots don't carry an explicit 0-100 confidence so the
   // bar sits at 0 (empty) when RentCast is the source. Visual range shown
@@ -238,6 +258,33 @@ function PropertyMarketCard({
             {property.city}, {property.state}{" "}
             {property.zip ?? <span className="italic">ZIP {dash}</span>}
           </span>
+          {verifiedByAttom ? (
+            <span className="text-[10px] text-[var(--market-text-muted)]">
+              Record source: ATTOM
+              {attomFacts?.apn ? (
+                <>
+                  {" "}
+                  · APN{" "}
+                  <code className="font-mono text-[var(--market-text-secondary)]">
+                    {attomFacts.apn}
+                  </code>
+                </>
+              ) : null}
+              {attomFacts?.yearBuilt ? (
+                <> · Built {attomFacts.yearBuilt}</>
+              ) : null}
+              {attomFacts?.buildingSize ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <span className="font-mono tabular-nums">
+                    {attomFacts.buildingSize.toLocaleString()}
+                  </span>{" "}
+                  sqft
+                </>
+              ) : null}
+            </span>
+          ) : null}
         </div>
         <ToneTag
           label={property.assetRole}
@@ -334,8 +381,10 @@ function PropertyMarketCard({
           ) : null}
         </span>
         <div className="flex items-center gap-2">
-          {property.zipNeedsVerification || property.factsNeedVerification ? (
-            <ToneTag label="Needs verification" tone="warning" />
+          {verifiedByAttom ? (
+            <ToneTag label="Verified by ATTOM" tone="success" />
+          ) : recordsPending ? (
+            <ToneTag label="Official records pending" tone="warning" />
           ) : null}
           <ToneTag label={sourceLabel} tone={sourceTone} />
           <Link
@@ -475,30 +524,44 @@ export default async function MarketPage() {
   const _staticCounts = countConnected();
   void _staticCounts;
 
-  // ---- Load both data sources in parallel ----
+  // ---- Load every data source in parallel ----
   let manualEntries = new Map<string, MarketManualEntry>();
   let rentCastByProperty = new Map<string, MarketSourceSnapshot>();
+  let attomByProperty = new Map<string, MarketSourceSnapshot>();
   let allRecentSnapshots: MarketSourceSnapshot[] = [];
+  let allAttomSnapshots: MarketSourceSnapshot[] = [];
   let dbAvailable = true;
   try {
-    const [manualMap, recentSnapshots] = await Promise.all([
+    const [manualMap, recentSnapshots, attomSnapshots] = await Promise.all([
       getManualEntryMap(),
-      // Pull recent RentCast snapshots and dedupe to the latest SUCCESS
-      // per property in JS — small N, simple query.
+      // Recent RentCast snapshots; dedupe to the latest SUCCESS per
+      // property in JS (small N, simple query).
       prisma.marketSourceSnapshot.findMany({
         where: { provider: "RentCast" },
+        orderBy: { fetchedAt: "desc" },
+        take: 100,
+      }),
+      // ATTOM snapshots — same pattern, separate query so the two
+      // providers can be deduped and aggregated independently.
+      prisma.marketSourceSnapshot.findMany({
+        where: { provider: "ATTOM" },
         orderBy: { fetchedAt: "desc" },
         take: 100,
       }),
     ]);
     manualEntries = manualMap;
     allRecentSnapshots = recentSnapshots;
+    allAttomSnapshots = attomSnapshots;
     for (const snap of recentSnapshots) {
       if (rentCastByProperty.has(snap.propertyId)) continue;
-      // Only consider SUCCESS rows for resolved estimates. NO_DATA / ERROR
-      // rows are still inserted for traceability, but don't drive display.
       if (snap.status === "SUCCESS") {
         rentCastByProperty.set(snap.propertyId, snap);
+      }
+    }
+    for (const snap of attomSnapshots) {
+      if (attomByProperty.has(snap.propertyId)) continue;
+      if (snap.status === "SUCCESS") {
+        attomByProperty.set(snap.propertyId, snap);
       }
     }
   } catch (err) {
@@ -537,29 +600,95 @@ export default async function MarketPage() {
     0
   );
   const manualEntriesExist = manualEntries.size > 0;
+
+  // ---- ATTOM snapshot-history aggregates ----
+  const attomLatestFetchedAt =
+    allAttomSnapshots.length > 0 ? allAttomSnapshots[0].fetchedAt : null;
+  const attomLatestBatch = (() => {
+    if (!attomLatestFetchedAt) return [] as MarketSourceSnapshot[];
+    const cutoff = attomLatestFetchedAt.getTime() - 60_000;
+    return allAttomSnapshots.filter(
+      (s) => s.fetchedAt.getTime() >= cutoff
+    );
+  })();
+  const attomBatchSuccess = attomLatestBatch.filter(
+    (s) => s.status === "SUCCESS"
+  ).length;
+  const attomBatchErrors = attomLatestBatch.filter(
+    (s) => s.status === "ERROR"
+  ).length;
+  const attomBatchNoData = attomLatestBatch.filter(
+    (s) => s.status === "NO_DATA"
+  ).length;
+
+  /**
+   * Resolve assessed value + annual taxes per property with ATTOM-first
+   * priority and manual fallback. RentCast doesn't provide these fields
+   * so it isn't part of this chain.
+   */
+  type TaxResolved = {
+    assessedValue: number | null;
+    annualTaxes: number | null;
+    source: "ATTOM" | "Manual Internal" | "None";
+    asOfDate: Date | null;
+  };
+  function resolveTax(propertyId: string): TaxResolved {
+    const attom = attomFor(propertyId);
+    const manual = entryFor(propertyId);
+    const facts = getAttomFacts(attom);
+    const aAssessed = facts?.assessedValue ?? null;
+    const aTaxes = facts?.annualTaxes ?? null;
+    const mAssessed = manual ? decimalToNumber(manual.assessedValue) : null;
+    const mTaxes = manual ? decimalToNumber(manual.annualTaxes) : null;
+    const assessedValue = aAssessed ?? mAssessed;
+    const annualTaxes = aTaxes ?? mTaxes;
+    const source: TaxResolved["source"] =
+      aAssessed != null || aTaxes != null
+        ? "ATTOM"
+        : mAssessed != null || mTaxes != null
+        ? "Manual Internal"
+        : "None";
+    const asOfDate =
+      attom?.asOfDate ?? attom?.fetchedAt ?? manual?.asOfDate ?? null;
+    return { assessedValue, annualTaxes, source, asOfDate };
+  }
   const entryFor = (propertyId: string): MarketManualEntry | null =>
     manualEntries.get(propertyId) ?? null;
   const rentCastFor = (propertyId: string): MarketSourceSnapshot | null =>
     rentCastByProperty.get(propertyId) ?? null;
+  const attomFor = (propertyId: string): MarketSourceSnapshot | null =>
+    attomByProperty.get(propertyId) ?? null;
   const resolvedFor = (propertyId: string): Resolved =>
     resolveEstimate(rentCastFor(propertyId), entryFor(propertyId));
 
   const keyConfigured = hasRentCastKey();
+  const attomKeyConfigured = hasAttomKey();
   const rentCastSnapshotsExist = rentCastByProperty.size > 0;
-  // Dynamic source-registry status for RentCast on this page only — does
-  // NOT mutate the registry export (no key reads on the client).
-  const dynamicSources: typeof marketSources = marketSources.map((s) =>
-    s.id === "rentcast"
-      ? {
-          ...s,
-          status: rentCastSnapshotsExist
-            ? "Connected"
-            : keyConfigured
-            ? "Planned"
-            : "Not connected",
-        }
-      : s
-  );
+  const attomSnapshotsExist = attomByProperty.size > 0;
+  // Dynamic source-registry statuses — no key reads on the client.
+  const dynamicSources: typeof marketSources = marketSources.map((s) => {
+    if (s.id === "rentcast") {
+      return {
+        ...s,
+        status: rentCastSnapshotsExist
+          ? "Connected"
+          : keyConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    }
+    if (s.id === "attom") {
+      return {
+        ...s,
+        status: attomSnapshotsExist
+          ? "Connected"
+          : attomKeyConfigured
+          ? "Planned"
+          : "Not connected",
+      };
+    }
+    return s;
+  });
   const dynamicCounts = {
     connected: dynamicSources.filter((s) => s.status === "Connected").length,
     manual: dynamicSources.filter((s) => s.status === "Manual").length,
@@ -604,10 +733,10 @@ export default async function MarketPage() {
     return acc + n;
   }, 0);
   const taxCellsPopulated = businessProperties.reduce((acc, p) => {
-    const m = entryFor(p.id);
+    const t = resolveTax(p.id);
     let n = 0;
-    if (m && decimalToNumber(m.assessedValue) != null) n++;
-    if (m && decimalToNumber(m.annualTaxes) != null) n++;
+    if (t.assessedValue != null) n++;
+    if (t.annualTaxes != null) n++;
     return acc + n;
   }, 0);
   const populatedCells = estimateCellsPopulated + taxCellsPopulated;
@@ -652,8 +781,9 @@ export default async function MarketPage() {
           primaryAction={
             <div className="flex flex-col items-end gap-2">
               <RentCastRefreshButton keyConfigured={keyConfigured} />
+              <AttomRefreshButton keyConfigured={attomKeyConfigured} />
               <span className="text-[11px] text-[var(--market-text-muted)]">
-                Uses RentCast API calls. Refresh only when needed.
+                Each refresh issues live API calls. Click only when needed.
               </span>
               <Link
                 href="/market/manual"
@@ -720,6 +850,27 @@ export default async function MarketPage() {
               No RentCast snapshots yet — refresh to fetch
             </span>
           )}
+          {attomSnapshotsExist ? (
+            <span
+              className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+              style={{
+                background: "var(--semantic-success-bg)",
+                borderColor: "var(--semantic-success-border)",
+                color: "var(--semantic-success)",
+              }}
+            >
+              <span
+                aria-hidden
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: "var(--semantic-success)" }}
+              />
+              ATTOM records · {attomByProperty.size} of {trackedProperties.length}{" "}
+              properties
+              {attomLatestFetchedAt
+                ? ` · ${formatDate(attomLatestFetchedAt.toISOString())}`
+                : ""}
+            </span>
+          ) : null}
           {manualEntriesExist ? (
             <span
               className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium"
@@ -801,6 +952,7 @@ export default async function MarketPage() {
               resolved={resolvedFor(p.id)}
               manual={entryFor(p.id)}
               rentCast={rentCastFor(p.id)}
+              attom={attomFor(p.id)}
             />
           ))}
         </div>
@@ -825,6 +977,7 @@ export default async function MarketPage() {
                 resolved={resolvedFor(privateProperty.id)}
                 manual={entryFor(privateProperty.id)}
                 rentCast={rentCastFor(privateProperty.id)}
+                attom={attomFor(privateProperty.id)}
               />
             </div>
           </div>
@@ -955,11 +1108,11 @@ export default async function MarketPage() {
             {trackedProperties
               .filter((p) => p.kind === "business")
               .map((p) => {
-                const e = entryFor(p.id);
+                const t = resolveTax(p.id);
                 return (
                   <div
                     key={p.id}
-                    className="grid grid-cols-[2fr_1fr_1fr] items-center gap-3 border-b border-[var(--market-border)] py-2.5 last:border-b-0 text-sm"
+                    className="grid grid-cols-[2fr_1fr_1fr_auto] items-center gap-3 border-b border-[var(--market-border)] py-2.5 last:border-b-0 text-sm"
                   >
                     <span className="text-[var(--market-text)]">
                       {p.address}
@@ -968,14 +1121,30 @@ export default async function MarketPage() {
                       <span className="mr-1 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
                         Assessed
                       </span>
-                      {formatDecimalCurrency(e?.assessedValue)}
+                      {formatCurrency(t.assessedValue)}
                     </span>
                     <span className="text-right font-mono tabular-nums text-[var(--market-text)]">
                       <span className="mr-1 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
                         Annual taxes
                       </span>
-                      {formatDecimalCurrency(e?.annualTaxes)}
+                      {formatCurrency(t.annualTaxes)}
                     </span>
+                    <ToneTag
+                      label={
+                        t.source === "ATTOM"
+                          ? "ATTOM"
+                          : t.source === "Manual Internal"
+                          ? "Manual"
+                          : "—"
+                      }
+                      tone={
+                        t.source === "ATTOM"
+                          ? "success"
+                          : t.source === "Manual Internal"
+                          ? "info"
+                          : "neutral"
+                      }
+                    />
                   </div>
                 );
               })}
@@ -1056,13 +1225,60 @@ export default async function MarketPage() {
       </SectionPanel>
 
       <SectionPanel
-        title="RentCast snapshot history"
+        title="Source snapshot history"
         description={
-          rentCastLatestFetchedAt
-            ? `Latest refresh ${formatDate(rentCastLatestFetchedAt.toISOString())}`
-            : "No refresh has run yet."
+          rentCastLatestFetchedAt || attomLatestFetchedAt
+            ? "Latest refresh per provider. Refreshes are manual only."
+            : "No provider has been refreshed yet."
         }
       >
+        {attomLatestFetchedAt ? (
+          <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Provider
+              </span>
+              <span className="font-medium text-[var(--market-text)]">
+                ATTOM
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Last refreshed
+              </span>
+              <span className="text-[var(--market-text)]">
+                {formatDate(attomLatestFetchedAt.toISOString())}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Successful records
+              </span>
+              <span className="font-mono tabular-nums text-[var(--market-text)]">
+                {attomBatchSuccess} / {attomLatestBatch.length}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Errors
+              </span>
+              <span
+                className="font-mono tabular-nums"
+                style={{
+                  color:
+                    attomBatchErrors > 0
+                      ? "var(--semantic-error)"
+                      : "var(--market-text-muted)",
+                }}
+              >
+                {attomBatchErrors}
+                {attomBatchNoData > 0
+                  ? ` · ${attomBatchNoData} no-data`
+                  : ""}
+              </span>
+            </div>
+          </div>
+        ) : null}
         {rentCastLatestFetchedAt ? (
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div className="flex flex-col">
@@ -1109,13 +1325,13 @@ export default async function MarketPage() {
               </span>
             </div>
           </div>
-        ) : (
+        ) : !attomLatestFetchedAt ? (
           <p className="text-sm text-[var(--market-text-muted)]">
-            Click <strong>Refresh RentCast estimates</strong> in the page
-            header to fetch the first snapshot. RentCast is the only live
-            external source wired today.
+            Click <strong>Refresh RentCast estimates</strong> or{" "}
+            <strong>Refresh ATTOM records</strong> in the page header to
+            fetch the first snapshot.
           </p>
-        )}
+        ) : null}
         <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
           Refreshes are manual only. No automatic background fetches.
         </p>
@@ -1129,8 +1345,8 @@ export default async function MarketPage() {
           {NEXT_INTEGRATION.reason}
         </p>
         <p className="mt-3 text-xs text-[var(--market-text-muted)]">
-          RentCast is wired and live. ATTOM, FRED, Census ACS, ClimateCheck,
-          and Mapbox remain unconnected.
+          RentCast and ATTOM are wired and live. FRED, Census ACS,
+          ClimateCheck, and Mapbox remain unconnected.
         </p>
       </SectionPanel>
     </div>
