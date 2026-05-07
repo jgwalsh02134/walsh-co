@@ -3,8 +3,8 @@
 /**
  * Property Valuation Chart
  *
- * Bloomberg-GP-inspired view for a single property's market value over
- * time, with confidence band, ZIP benchmark series, and event markers.
+ * Terminal-style view for a single property's market value over time,
+ * with confidence band, ZIP benchmark series, and event markers.
  *
  * Data wiring:
  *   • RentCast current value         → current `propertyValue`
@@ -195,7 +195,7 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
       </div>
       <div className="flex items-center justify-between gap-3">
         <span className="text-[var(--market-text-muted)]">Property value</span>
-        <span className="font-mono tabular-nums">
+        <span className="font-data tabular-nums">
           {formatCurrencyFull(raw.propertyValue)}
         </span>
       </div>
@@ -204,7 +204,7 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
           <span className="text-[var(--market-text-muted)]">
             Valuation range
           </span>
-          <span className="font-mono tabular-nums">
+          <span className="font-data tabular-nums">
             {formatCurrencyFull(raw.lowerBound)} —{" "}
             {formatCurrencyFull(raw.upperBound)}
           </span>
@@ -215,7 +215,7 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
           <span className="text-[var(--market-text-muted)]">
             ZIP ZHVI benchmark
           </span>
-          <span className="font-mono tabular-nums">
+          <span className="font-data tabular-nums">
             {formatCurrencyFull(raw.benchmarkValue)}
           </span>
         </div>
@@ -294,14 +294,14 @@ export function PropertyValuationChart({
 
   return (
     <div
-      className="flex flex-col gap-2 rounded-[var(--radius-md)] border p-3"
+      className="flex flex-col gap-2 border p-3"
       style={{
         background: "var(--market-surface)",
         borderColor: "var(--market-border)",
       }}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
-        <span className="text-sm font-semibold text-[var(--market-text)]">
+        <span className="font-display text-sm font-semibold text-[var(--market-text)]">
           {propertyName}
         </span>
         {zip ? (
@@ -346,6 +346,7 @@ export function PropertyValuationChart({
               domain={["dataMin", "dataMax"]}
               tick={{
                 fill: "var(--market-text-muted)",
+                fontFamily: "var(--font-data)",
                 fontSize: 11,
               }}
               tickFormatter={(t) => formatChartDate(new Date(t))}
@@ -356,6 +357,7 @@ export function PropertyValuationChart({
             <YAxis
               tick={{
                 fill: "var(--market-text-muted)",
+                fontFamily: "var(--font-data)",
                 fontSize: 11,
               }}
               tickFormatter={(v) => formatCurrencyShort(v as number)}
@@ -443,6 +445,7 @@ export function PropertyValuationChart({
             <Legend
               wrapperStyle={{
                 paddingTop: 4,
+                fontFamily: "var(--font-text)",
                 fontSize: 11,
                 color: "var(--market-text-secondary)",
               }}

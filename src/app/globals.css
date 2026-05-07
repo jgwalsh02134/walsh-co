@@ -8,7 +8,10 @@
     Arial, sans-serif;
   --font-text: "neue-haas-grotesk-text", "Helvetica Neue", Helvetica, Arial,
     sans-serif;
-  --font-data: "source-sans-3", "neue-haas-grotesk-text", monospace;
+  --font-sans: var(--font-text);
+  --font-data: "source-code-pro", "SFMono-Regular", Consolas, "Liberation Mono",
+    Menlo, monospace;
+  --font-mono: var(--font-data);
   /* Backwards-compat alias used by older callsites; maps to text. */
   --font-ui: var(--font-text);
 
@@ -329,8 +332,8 @@
 
   --font-sans: var(--font-text);
   /* `font-mono` Tailwind utility is repurposed for tabular numeric data
-     across the workspace (phone numbers, prices, KPIs). Source Sans 3
-     carries good tabular figures; system monospace is the final fallback. */
+     across the workspace (phone numbers, prices, KPIs). Source Code Pro
+     carries the market-terminal numeric voice; system monospace is fallback. */
   --font-mono: var(--font-data);
 }
 

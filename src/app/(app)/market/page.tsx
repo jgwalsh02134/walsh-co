@@ -4,8 +4,6 @@ import type {
   MarketSourceSnapshot,
 } from "@prisma/client";
 import type { ReactNode } from "react";
-import { PageHeader } from "@/components/page-header";
-import { SectionPanel } from "@/components/section-panel";
 import {
   type AttomAvmHistoryPoint,
   type AttomAvmValue,
@@ -51,6 +49,7 @@ import {
   ZILLOW_TARGET_ZIPS,
   hasZillowZhviUrl,
 } from "@/lib/zillow-research";
+import { AIMarketNotePanel } from "./ai-market-note-panel";
 import { AttomAvmRefreshButton } from "./attom-avm-refresh-button";
 import { AttomRefreshButton } from "./attom-refresh-button";
 import {
@@ -58,6 +57,7 @@ import {
   type ValuationPoint,
 } from "./components/property-valuation-chart";
 import { FredRefreshButton } from "./fred-refresh-button";
+import type { MarketNoteInput } from "./market-note-actions";
 import { RentCastListingsRefreshButton } from "./rentcast-listings-refresh-button";
 import { RentCastRefreshButton } from "./rentcast-refresh-button";
 import { ZillowRefreshButton } from "./zillow-refresh-button";
@@ -444,7 +444,7 @@ function ToneTag({
   const t = statusTokens[tone];
   return (
     <span
-      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+      className="inline-flex items-center border px-1.5 py-0.5 text-[11px] font-semibold leading-none"
       style={{ background: t.background, color: t.text, borderColor: t.border }}
     >
       {label}
@@ -456,7 +456,7 @@ function SourceStatusTag({ status }: { status: SourceStatus }) {
   return <ToneTag label={status} tone={statusTone(status)} />;
 }
 
-function KpiTile({
+function MetricStripItem({
   label,
   value,
   sublabel,
@@ -466,15 +466,15 @@ function KpiTile({
   sublabel?: string;
 }) {
   return (
-    <div className="market-card flex flex-col gap-1.5 rounded-[var(--radius-md)] p-4">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--market-text-muted)]">
+    <div className="min-w-[150px] border-r border-[var(--market-border)] px-3 py-2 last:border-r-0">
+      <span className="block text-[11px] text-[var(--market-text-muted)]">
         {label}
       </span>
-      <span className="font-mono text-2xl font-semibold tabular-nums text-[var(--market-text)]">
+      <span className="mt-1 block font-data text-xl font-semibold leading-none tabular-nums text-[var(--market-text)]">
         {value}
       </span>
       {sublabel ? (
-        <span className="text-[11px] text-[var(--market-text-muted)]">
+        <span className="mt-1 block text-[11px] leading-tight text-[var(--market-text-muted)]">
           {sublabel}
         </span>
       ) : null}
@@ -482,7 +482,7 @@ function KpiTile({
   );
 }
 
-function MetricCell({
+function BoardCell({
   label,
   value,
   sub,
@@ -494,18 +494,18 @@ function MetricCell({
   valueColor?: string;
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+    <div className="min-w-0">
+      <span className="block text-[11px] text-[var(--market-text-muted)]">
         {label}
       </span>
       <span
-        className="font-mono text-sm font-semibold tabular-nums"
+        className="mt-1 block truncate font-data text-sm tabular-nums"
         style={{ color: valueColor ?? "var(--market-text)" }}
       >
         {value}
       </span>
       {sub != null ? (
-        <span className="text-[10px] text-[var(--market-text-muted)]">
+        <span className="mt-0.5 block truncate text-[11px] text-[var(--market-text-muted)]">
           {sub}
         </span>
       ) : null}
@@ -523,19 +523,65 @@ function DetailCell({
   sub?: ReactNode;
 }) {
   return (
-    <div className="min-w-0 rounded-[var(--radius-sm)] border border-[var(--market-border)] bg-[var(--market-surface-raised)] px-3 py-2">
-      <span className="block text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+    <div className="min-w-0 border border-[var(--market-border)] bg-[var(--market-surface-raised)] px-3 py-2">
+      <span className="block text-[11px] text-[var(--market-text-muted)]">
         {label}
       </span>
-      <span className="mt-0.5 block break-words font-mono text-sm font-semibold tabular-nums text-[var(--market-text)]">
+      <span className="mt-0.5 block break-words font-data text-sm tabular-nums text-[var(--market-text)]">
         {value}
       </span>
       {sub != null ? (
-        <span className="mt-0.5 block text-[10px] text-[var(--market-text-muted)]">
+        <span className="mt-0.5 block text-[11px] text-[var(--market-text-muted)]">
           {sub}
         </span>
       ) : null}
     </div>
+  );
+}
+
+function TerminalSection({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border border-[var(--market-border)] bg-[var(--market-surface)]">
+      <header className="flex min-h-[42px] flex-wrap items-center justify-between gap-2 border-b border-[var(--market-border)] px-3 py-2">
+        <h2 className="font-display text-sm font-semibold tracking-wide text-[var(--market-text)]">
+          {title}
+        </h2>
+        {meta ? (
+          <div className="text-xs text-[var(--market-text-muted)]">{meta}</div>
+        ) : null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function TerminalDisclosure({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <details className="border border-[var(--market-border)] bg-[var(--market-surface)]">
+      <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+        <span className="font-display font-semibold">{title}</span>
+        {meta ? (
+          <span className="text-xs text-[var(--market-text-muted)]">{meta}</span>
+        ) : null}
+      </summary>
+      <div className="border-t border-[var(--market-border)]">{children}</div>
+    </details>
   );
 }
 
@@ -1091,213 +1137,192 @@ export default async function MarketPage() {
     tax: resolveTax(p.id),
   }));
   const hasAnyTaxData = businessTaxRows.some((r) => r.tax.source !== "None");
+  const marketNoteInput: MarketNoteInput = {
+    portfolio: {
+      businessAssets: businessProperties.length,
+      houseValue: formatCurrency(portfolioValue),
+      marketRent: formatRent(portfolioMonthlyRent),
+      grossRentYield:
+        grossRentYield != null
+          ? `${(grossRentYield * 100).toFixed(2)}%`
+          : dash,
+      completeness:
+        dataCompletenessPct === 0 ? "Not started" : formatPct(dataCompletenessPct),
+    },
+    properties: businessAnalyses.map((a) => ({
+      address: a.property.address,
+      city: a.property.city,
+      zip: a.property.zip,
+      houseValue: formatCurrency(a.house.value),
+      houseSource: a.house.source,
+      rent: formatRent(a.rent.rent),
+      rentSource: a.rent.source,
+      yieldPct: a.yieldPct != null ? `${a.yieldPct.toFixed(2)}%` : dash,
+      refreshed: a.rentCastLastFetched
+        ? relativeAge(a.rentCastLastFetched)
+        : a.attomLastFetched
+        ? relativeAge(a.attomLastFetched)
+        : dash,
+      verification: a.verifiedByAttom ? "ATTOM verified" : "Records pending",
+    })),
+    attentionItems: flags.map((f) => `${f.property}: ${f.text}`),
+  };
 
   return (
-    <div className="market-shell -mx-4 -my-6 flex flex-col gap-6 px-4 py-6 sm:-mx-6 sm:-my-8 sm:px-6 sm:py-8 lg:-mx-8 lg:-my-10 lg:px-8 lg:py-10">
-      {/* ============================================================
-           Header: title, freshness chips, refresh menu
-         ============================================================ */}
-      <div className="flex flex-col gap-3">
-        <PageHeader
-          title="Market Intelligence"
-          description="A property-first view of house market value, market rent, data freshness, attention items, and valuation trend context."
-        />
+    <div className="market-shell -mx-4 -my-6 flex flex-col gap-4 px-3 py-4 sm:-mx-6 sm:-my-8 sm:px-5 sm:py-5 lg:-mx-8 lg:-my-10 lg:px-6 lg:py-6">
+      <header className="border border-[var(--market-border)] bg-[var(--market-surface)]">
+        <div className="flex flex-col gap-3 border-b border-[var(--market-border)] px-3 py-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="font-display text-2xl font-semibold leading-tight text-[var(--market-text)]">
+              Market Intelligence
+            </h1>
+            <p className="mt-1 max-w-3xl text-sm text-[var(--market-text-secondary)]">
+              Real estate valuation monitor for current house value, market rent,
+              evidence, trend context, and attention items.
+            </p>
+          </div>
+          <details className="border border-[var(--market-border)] bg-[var(--market-bg)]">
+            <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-4 px-3 py-2 text-sm text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+              <span className="font-display font-semibold">Refresh controls</span>
+              <span className="text-xs text-[var(--market-text-muted)]">
+                Manual refresh only · external provider calls
+              </span>
+            </summary>
+            <div className="flex max-w-4xl flex-wrap items-start gap-2 border-t border-[var(--market-border)] p-3">
+              <RentCastRefreshButton keyConfigured={keyConfigured} />
+              <RentCastListingsRefreshButton keyConfigured={keyConfigured} />
+              <AttomRefreshButton keyConfigured={attomKeyConfigured} />
+              <AttomAvmRefreshButton keyConfigured={attomKeyConfigured} />
+              <FredRefreshButton keyConfigured={fredKeyConfigured} />
+              <ZillowRefreshButton urlConfigured={zillowUrlConfigured} />
+              <Link
+                href="/market/manual"
+                className="inline-flex min-h-[40px] items-center justify-center border border-[var(--market-border)] bg-transparent px-3 py-2 text-sm font-medium text-[var(--market-text)] hover:border-[var(--market-border-strong)]"
+              >
+                {manualEntries.size > 0 ? "Edit manual data" : "Add manual data"}
+              </Link>
+            </div>
+          </details>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-2 text-xs text-[var(--market-text-muted)]">
+          <FreshnessChip label="RentCast" ts={rentCastLatestFetchedAt} keyOk={keyConfigured} />
+          <FreshnessChip label="ATTOM" ts={attomLatestFetchedAt} keyOk={attomKeyConfigured} />
+          <FreshnessChip label="FRED" ts={fredLatestFetchedAt} keyOk={fredKeyConfigured} />
+          <FreshnessChip label="Zillow ZHVI" ts={zillowLatestFetchedAt} keyOk={zillowUrlConfigured} />
+          {!dbAvailable ? <ToneTag label="Error: database unavailable" tone="error" /> : null}
+        </div>
+      </header>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--market-text-muted)]">
-          <FreshnessChip
-            label="RentCast"
-            ts={rentCastLatestFetchedAt}
-            keyOk={keyConfigured}
+      <section className="overflow-x-auto border border-[var(--market-border)] bg-[var(--market-surface)]">
+        <div className="grid min-w-[720px] grid-cols-5">
+          <MetricStripItem
+            label="Business assets"
+            value={businessProperties.length}
+            sublabel="Private reference excluded"
           />
-          <FreshnessChip
-            label="ATTOM"
-            ts={attomLatestFetchedAt}
-            keyOk={attomKeyConfigured}
+          <MetricStripItem
+            label="House market value"
+            value={formatCurrency(portfolioValue)}
+            sublabel={`${valuedCount}/${businessProperties.length} valued`}
           />
-          <FreshnessChip
-            label="FRED"
-            ts={fredLatestFetchedAt}
-            keyOk={fredKeyConfigured}
+          <MetricStripItem
+            label="Market rent"
+            value={formatRent(portfolioMonthlyRent)}
+            sublabel={`${rentedCount}/${businessProperties.length} rents`}
           />
-          <FreshnessChip
-            label="Zillow ZHVI"
-            ts={zillowLatestFetchedAt}
-            keyOk={zillowUrlConfigured}
+          <MetricStripItem
+            label="Gross rent yield"
+            value={
+              grossRentYield != null
+                ? `${(grossRentYield * 100).toFixed(2)}%`
+                : dash
+            }
+            sublabel="Annualized rent / value"
           />
-          {!dbAvailable ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-medium"
-              style={{
-                background: "var(--semantic-error-bg)",
-                borderColor: "var(--semantic-error-border)",
-                color: "var(--semantic-error)",
-              }}
+          <MetricStripItem
+            label="Freshness / completeness"
+            value={
+              dataCompletenessPct === 0 ? "NA" : formatPct(dataCompletenessPct)
+            }
+            sublabel={
+              newestSourceTimestamp
+                ? `Latest ${relativeAge(newestSourceTimestamp)}`
+                : "Awaiting refresh"
+            }
+          />
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex flex-col gap-4">
+          <TerminalSection
+            title="Property valuation board"
+            meta="House value and market rent are separate pipelines"
+          >
+            <div className="hidden grid-cols-[minmax(180px,1.35fr)_1fr_1fr_0.75fr_0.95fr_0.95fr_0.9fr_auto] border-b border-[var(--market-border)] px-3 py-2 text-[11px] text-[var(--market-text-muted)] xl:grid">
+              <span>Property</span>
+              <span>House value</span>
+              <span>Market rent</span>
+              <span>Yield</span>
+              <span>Value source</span>
+              <span>Rent source</span>
+              <span>Fresh / verify</span>
+              <span className="text-right">Analysis</span>
+            </div>
+            <div className="divide-y divide-[var(--market-border)]">
+              {businessAnalyses.map((a) => (
+                <PropertyValuationCard
+                  key={a.property.id}
+                  analysis={a}
+                  isPrivate={false}
+                />
+              ))}
+            </div>
+          </TerminalSection>
+
+          {privateAnalysis ? (
+            <TerminalSection
+              title="Private / Reference Only"
+              meta={<ToneTag label="Private" tone="warning" />}
             >
-              Database unavailable
-            </span>
+              <div className="divide-y divide-[var(--market-border)]">
+                <PropertyValuationCard analysis={privateAnalysis} isPrivate />
+              </div>
+              <p className="border-t border-[var(--market-border)] px-3 py-2 text-xs text-[var(--market-text-muted)]">
+                14 MacAffer Dr is excluded from business KPIs. Values display
+                only as private reference context.
+              </p>
+            </TerminalSection>
           ) : null}
         </div>
 
-        <details className="group flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
-            <span className="flex items-center gap-2">
-              Refresh data
-              <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
-                Manual only · external API calls
-              </span>
-            </span>
-            <span aria-hidden className="text-[var(--market-text-muted)]">
-              ▾
-            </span>
-          </summary>
-          <div className="flex flex-wrap items-start gap-2 border-t border-[var(--market-border)] px-4 py-3">
-            <RentCastRefreshButton keyConfigured={keyConfigured} />
-            <RentCastListingsRefreshButton keyConfigured={keyConfigured} />
-            <AttomRefreshButton keyConfigured={attomKeyConfigured} />
-            <AttomAvmRefreshButton keyConfigured={attomKeyConfigured} />
-            <FredRefreshButton keyConfigured={fredKeyConfigured} />
-            <ZillowRefreshButton urlConfigured={zillowUrlConfigured} />
-            <Link
-              href="/market/manual"
-              className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--radius-md)] border border-[var(--market-border)] bg-transparent px-3 py-2 text-sm font-medium text-[var(--market-text)] hover:border-[var(--market-border-strong)]"
-            >
-              {manualEntries.size > 0 ? "Edit manual data" : "Add manual data"}
-            </Link>
-          </div>
-          <p className="px-4 pb-3 text-[11px] text-[var(--market-text-muted)]">
-            Refreshes use external provider/API calls. Use only when needed.
-          </p>
-        </details>
+        <aside className="flex flex-col gap-4">
+          <TerminalSection
+            title="Attention tape"
+            meta={flags.length === 0 ? "Clear" : `${flags.length} items`}
+          >
+            {flags.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-[var(--market-text-secondary)]">
+                No critical market-data flags.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[var(--market-border)]">
+                {flags.map((f, i) => (
+                  <li key={`${f.property}-${i}`} className="px-3 py-2">
+                    <span className="block text-sm font-semibold text-[var(--market-text)]">
+                      {f.property}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-[var(--market-text-secondary)]">
+                      {f.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </TerminalSection>
+          <AIMarketNotePanel input={marketNoteInput} />
+        </aside>
       </div>
-
-      {/* ============================================================
-           Portfolio Summary
-         ============================================================ */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiTile
-          label="Business assets"
-          value={businessProperties.length}
-          sublabel="Private reference asset excluded"
-        />
-        <KpiTile
-          label="House value"
-          value={formatCurrency(portfolioValue)}
-          sublabel={
-            valuedCount === businessProperties.length
-              ? "House value: AVM + manual fallback"
-              : `${valuedCount} of ${businessProperties.length} valued`
-          }
-        />
-        <KpiTile
-          label="Market rent"
-          value={formatRent(portfolioMonthlyRent)}
-          sublabel={
-            rentedCount === businessProperties.length
-              ? "Market rent: RentCast + manual fallback"
-              : `${rentedCount} of ${businessProperties.length} rent estimates`
-          }
-        />
-        <KpiTile
-          label="Gross rent yield"
-          value={
-            grossRentYield != null
-              ? `${(grossRentYield * 100).toFixed(2)}%`
-              : dash
-          }
-          sublabel="Annualized rent ÷ value"
-        />
-        <KpiTile
-          label="Data freshness"
-          value={
-            dataCompletenessPct === 0
-              ? "Not started"
-              : formatPct(dataCompletenessPct)
-          }
-          sublabel={
-            newestSourceTimestamp
-              ? `Latest source ${relativeAge(newestSourceTimestamp)}`
-              : "Awaiting first refresh"
-          }
-        />
-      </div>
-
-      {/* ============================================================
-           Needs attention
-         ============================================================ */}
-      <SectionPanel
-        title="Needs attention"
-        description={
-          flags.length === 0
-            ? "No critical market-data flags."
-            : `${flags.length} item${flags.length === 1 ? "" : "s"} to review.`
-        }
-        padded={flags.length === 0}
-      >
-        {flags.length === 0 ? (
-          <p className="text-sm text-[var(--market-text-muted)]">
-            All business properties have value, rent, tax, and source data
-            within tolerance.
-          </p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-[var(--market-border)]">
-            {flags.map((f, i) => (
-              <li
-                key={`${f.property}-${i}`}
-                className="flex flex-col gap-0.5 px-5 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <span className="text-sm text-[var(--market-text)]">
-                  {f.property}
-                </span>
-                <span className="text-[11px] text-[var(--market-text-muted)]">
-                  {f.text}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionPanel>
-
-      {/* ============================================================
-           Property valuations — value / rent / trend / projection
-         ============================================================ */}
-      <SectionPanel
-        title="Business property dashboard"
-        description="Current house market value and market rent stay separate. Trend and projection context is inside each details panel."
-      >
-        <div className="flex flex-col gap-3">
-          {businessAnalyses.map((a) => (
-            <PropertyValuationCard
-              key={a.property.id}
-              analysis={a}
-              isPrivate={false}
-            />
-          ))}
-        </div>
-      </SectionPanel>
-
-      {/* ============================================================
-           Private / Reference Only
-         ============================================================ */}
-      {privateAnalysis ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--market-text-muted)]">
-              Private / Reference Only
-            </span>
-            <ToneTag label="Excluded from KPIs" tone="warning" />
-          </div>
-          <PropertyValuationCard analysis={privateAnalysis} isPrivate />
-          <p className="text-[11px] text-[var(--market-text-muted)]">
-            14 MacAffer Dr is held outside the J.G. Walsh & Co. business
-            structure. Values shown for reference only and do not contribute to
-            portfolio KPIs.
-          </p>
-        </div>
-      ) : null}
-
-      {/* Mock-data preview removed — each property card now renders its
-           own valuation chart from real RentCast + Zillow + projection
-           inputs via the "Show valuation chart" disclosure. */}
 
       {/* ============================================================
            Area listings (collapsed; hidden when nothing is wired)
@@ -1629,8 +1654,7 @@ function PropertyValuationCard({
   analysis: PropertyAnalysis;
   isPrivate: boolean;
 }) {
-  const { property, house, rent, trend, projection, verifiedByAttom } =
-    analysis;
+  const { property, house, rent, verifiedByAttom } = analysis;
   const lastRefreshed =
     [
       house.asOfDate,
@@ -1659,24 +1683,25 @@ function PropertyValuationCard({
     rent.rangeLow != null && rent.rangeHigh != null
       ? `${formatCurrency(rent.rangeLow)}-${formatCurrency(rent.rangeHigh)}/mo`
       : dash;
+  const stale = lastRefreshed != null ? isStale(lastRefreshed, 30) : false;
 
   return (
     <article
-      className={`flex flex-col gap-3 rounded-[var(--radius-md)] p-4 ${
+      className={`border-b border-[var(--market-border)] last:border-b-0 ${
         isPrivate
-          ? "border border-dashed border-[var(--market-border)] bg-transparent"
-          : "market-card"
+          ? "border border-dashed border-[var(--market-amber)] bg-transparent"
+          : "bg-[var(--market-surface)]"
       }`}
     >
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-[var(--market-text)]">
+      <div className="grid grid-cols-1 gap-3 px-3 py-3 xl:grid-cols-[minmax(190px,1.35fr)_minmax(120px,0.95fr)_minmax(120px,0.95fr)_minmax(90px,0.65fr)_minmax(105px,0.75fr)_minmax(105px,0.75fr)_minmax(110px,0.8fr)_auto] xl:items-center">
+        <div className="min-w-0">
+          <h3 className="truncate font-display text-sm font-semibold text-[var(--market-text)]">
             {property.address}
           </h3>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--market-text-muted)]">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--market-text-muted)]">
             <span>
-            {property.city}
-            {property.zip ? ` · ${property.zip}` : ""}
+              {property.city}
+              {property.zip ? ` / ZIP ${property.zip}` : ""}
             </span>
             {property.workspaceHref ? (
               <Link
@@ -1687,41 +1712,31 @@ function PropertyValuationCard({
               </Link>
             ) : null}
           </div>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <ToneTag label={verificationLabel} tone={verificationTone} />
           {isPrivate ? (
-            <>
-              <ToneTag label="Private / Reference Only" tone="warning" />
-              <ToneTag label="Excluded from business KPIs" tone="warning" />
-            </>
+            <p className="mt-1 text-[11px] text-[var(--market-amber)]">
+              Private / Reference Only · excluded from business KPIs
+            </p>
           ) : null}
         </div>
-      </header>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCell
+        <BoardCell
           label="House market value"
           value={
-            <span className="text-lg">
-              {formatCurrency(house.value)}
-            </span>
+            <span className="font-semibold">{formatCurrency(house.value)}</span>
           }
-          sub={`Value source: ${house.source}`}
+          sub={valueRange !== dash ? `Range ${valueRange}` : "Range unavailable"}
         />
-        <MetricCell
+        <BoardCell
           label="Market rent"
           value={
-            <span className="text-lg">
-              {formatRent(rent.rent)}
-            </span>
+            <span className="font-semibold">{formatRent(rent.rent)}</span>
           }
-          sub={`Rent source: ${rent.source}`}
+          sub={rentRange !== dash ? `Range ${rentRange}` : "Range unavailable"}
         />
-        <MetricCell
+        <BoardCell
           label="Gross rent yield"
           value={
-            <span className="text-base">
+            <span>
               {analysis.yieldPct != null
                 ? `${analysis.yieldPct.toFixed(2)}%`
                 : dash}
@@ -1729,218 +1744,334 @@ function PropertyValuationCard({
           }
           sub="Annualized rent ÷ value"
         />
-        <MetricCell
-          label="Last refreshed"
+        <BoardCell label="Value source" value={house.source} />
+        <BoardCell label="Rent source" value={rent.source} />
+        <BoardCell
+          label="Last update"
           value={lastRefreshed ? relativeAge(lastRefreshed) : dash}
           sub={
             lastRefreshed ? formatDate(lastRefreshed.toISOString()) : "No snapshot"
           }
         />
-        <MetricCell
-          label="Verification"
-          value={<ToneTag label={verificationLabel} tone={verificationTone} />}
-          sub={analysis.avmUnavailableForPlan ? "ATTOM AVM plan/key limit" : null}
-        />
-      </section>
-
-      <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)]">
-        <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
-          <span>Details / valuation chart</span>
-          <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
-            {analysis.valuationSeries.length} chart points · {analysis.saleComps.length} sale comps · {analysis.rentalComps.length} rental comps
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-[11px] text-[var(--market-text-muted)]">
+            Verification
           </span>
-        </summary>
-        <div className="flex flex-col gap-4 border-t border-[var(--market-border)] p-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <DetailCell label="Value range" value={valueRange} sub="AVM range" />
-            <DetailCell label="Rent range" value={rentRange} sub="RentCast range" />
-            <DetailCell
-              label="Sale comps"
-              value={analysis.saleComps.length}
-              sub="RentCast AVM response"
-            />
-            <DetailCell
-              label="Rental comps"
-              value={analysis.rentalComps.length}
-              sub="RentCast rent response"
+          <div className="flex flex-wrap gap-1.5">
+            <ToneTag label={verificationLabel} tone={verificationTone} />
+            {stale ? <ToneTag label="Stale" tone="warning" /> : null}
+            {isPrivate ? <ToneTag label="Private" tone="warning" /> : null}
+          </div>
+          {analysis.avmUnavailableForPlan ? (
+            <span className="text-[11px] text-[var(--market-text-muted)]">
+              ATTOM AVM plan/key limit
+            </span>
+          ) : null}
+        </div>
+
+        <details className="group xl:col-span-8">
+          <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-center border border-[var(--market-border)] px-3 py-2 text-sm font-semibold text-[var(--market-text)] transition hover:border-[var(--market-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--market-cyan)] xl:ml-auto xl:w-fit [&::-webkit-details-marker]:hidden">
+            Analysis
+          </summary>
+          <div className="mt-3 border border-[var(--market-border)] bg-[var(--market-surface)]">
+            <PropertyAnalysisDetails
+              analysis={analysis}
+              valueRange={valueRange}
+              rentRange={rentRange}
             />
           </div>
+        </details>
+      </div>
+    </article>
+  );
+}
 
-          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-              <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-                Record verification
-              </span>
-              {analysis.attomFacts ? (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <DetailCell
-                    label="Year built"
-                    value={analysis.attomFacts.yearBuilt ?? dash}
-                  />
-                  <DetailCell
-                    label="Building size"
-                    value={
-                      analysis.attomFacts.buildingSize != null
-                        ? `${analysis.attomFacts.buildingSize.toLocaleString()} sqft`
-                        : dash
-                    }
-                  />
-                  <DetailCell
-                    label="Assessed value"
-                    value={formatCurrency(analysis.attomFacts.assessedValue)}
-                  />
-                  <DetailCell
-                    label="Annual taxes"
-                    value={formatCurrency(analysis.attomFacts.annualTaxes)}
-                  />
-                  <DetailCell
-                    label="Last sale"
-                    value={formatCurrency(analysis.attomFacts.lastSalePrice)}
-                    sub={
-                      analysis.attomFacts.lastSaleDate
-                        ? formatDate(analysis.attomFacts.lastSaleDate)
-                        : undefined
-                    }
-                  />
-                  <DetailCell
-                    label="Class"
-                    value={analysis.attomFacts.propertyClass ?? dash}
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-[var(--market-text-secondary)]">
-                  {property.notes ?? "Manual notes are the fallback record context."}
-                </p>
-              )}
-            </div>
+function PropertyAnalysisDetails({
+  analysis,
+  valueRange,
+  rentRange,
+}: {
+  analysis: PropertyAnalysis;
+  valueRange: string;
+  rentRange: string;
+}) {
+  const { property, trend, projection } = analysis;
 
-            <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-                  ZIP value trend
-                  {property.zip ? ` · ZIP ${property.zip}` : ""}
-                </span>
-                <span className="text-[10px] text-[var(--market-text-muted)]">
-                  {trend.zhvi?.latestDate
-                    ? `Zillow ZHVI as of ${formatDate(trend.zhvi.latestDate)}`
-                    : "Zillow ZHVI · no data"}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm tabular-nums">
-                <span
-                  style={{
-                    color: pctChangeColor(trend.zhvi?.yoyChange ?? null),
-                  }}
-                >
-                  1y {formatPctChange(trend.zhvi?.yoyChange ?? null)}
-                </span>
-                <span
-                  style={{
-                    color: pctChangeColor(trend.zhvi?.threeYearChange ?? null),
-                  }}
-                >
-                  3y {formatPctChange(trend.zhvi?.threeYearChange ?? null)}
-                </span>
-                <span
-                  style={{
-                    color: pctChangeColor(trend.zhvi?.fiveYearChange ?? null),
-                  }}
-                >
-                  5y {formatPctChange(trend.zhvi?.fiveYearChange ?? null)}
-                </span>
-                <span className="text-[var(--market-text-muted)]">
-                  Latest ZHVI {formatCurrency(trend.zhvi?.latestValue ?? null)}
-                </span>
-              </div>
-              <span className="text-[10px] text-[var(--market-text-muted)]">
-                ZIP-level home value index. Trend context only, not a property
-                estimate.
-              </span>
-            </div>
-          </section>
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <DetailCell label="Value range" value={valueRange} sub="AVM range" />
+        <DetailCell label="Rent range" value={rentRange} sub="RentCast range" />
+        <DetailCell
+          label="Sale comps"
+          value={analysis.saleComps.length}
+          sub="Top evidence below"
+        />
+        <DetailCell
+          label="Rental comps"
+          value={analysis.rentalComps.length}
+          sub="Top evidence below"
+        />
+      </div>
 
-          <section className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-                Internal projection
-              </span>
-              <span className="text-[10px] text-[var(--market-text-muted)]">
-                {projection.rateSource
-                  ? `Compounded at ${formatPctChange(projection.rate)}/yr · ${
-                      projection.rateSource
-                    }`
-                  : "Provider forecast pending"}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <MetricCell label="12 mo" value={formatCurrency(projection.m12)} />
-              <MetricCell label="24 mo" value={formatCurrency(projection.m24)} />
-              <MetricCell label="36 mo" value={formatCurrency(projection.m36)} />
-            </div>
-            <span className="text-[10px] text-[var(--market-text-muted)]">
-              Internal projection, based on current AVM + ZIP trend. Not a
-              provider forecast. Not a guarantee.
-            </span>
-          </section>
-
+      <TerminalDisclosure
+        title="Valuation chart"
+        meta={`${analysis.valuationSeries.length} points · ZIP trend context`}
+      >
+        <div className="p-3">
           <PropertyValuationChart
             propertyName={property.address}
             zip={property.zip ?? undefined}
             data={analysis.valuationSeries}
             height={260}
           />
-          <p className="mt-2 text-[10px] text-[var(--market-text-muted)]">
+          <p className="mt-2 text-[11px] text-[var(--market-text-muted)]">
             Chart uses current AVM plus ZIP ZHVI trend context and internal
-            projections. Not an appraisal. Historical points and non-current range
-            bands are trend-context-derived, not actual historical appraisals.
+            projections. Not an appraisal. Historical points and non-current
+            range bands are trend-context-derived, not actual historical
+            appraisals.
           </p>
+        </div>
+      </TerminalDisclosure>
 
-          {analysis.saleComps.length > 0 || analysis.rentalComps.length > 0 ? (
-            <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-              <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
-                <span>RentCast comparables</span>
-                <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
-                  {analysis.saleComps.length} sale · {analysis.rentalComps.length} rental
-                </span>
-              </summary>
-              <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <TerminalDisclosure
+          title="Comps"
+          meta={`${analysis.saleComps.length} sale · ${analysis.rentalComps.length} rental`}
+        >
+          <div className="grid grid-cols-1 gap-3 p-3">
             {analysis.saleComps.length > 0 ? (
-              <CompsList title="Sale comps" kind="sale" comps={analysis.saleComps} />
-            ) : null}
+              <CompsList
+                title="Sale comps"
+                kind="sale"
+                comps={analysis.saleComps}
+              />
+            ) : (
+              <p className="text-sm text-[var(--market-text-muted)]">
+                No sale comps returned.
+              </p>
+            )}
             {analysis.rentalComps.length > 0 ? (
-              <CompsList title="Rental comps" kind="rent" comps={analysis.rentalComps} />
-            ) : null}
-              </div>
-            </details>
-          ) : null}
+              <CompsList
+                title="Rental comps"
+                kind="rent"
+                comps={analysis.rentalComps}
+              />
+            ) : (
+              <p className="text-sm text-[var(--market-text-muted)]">
+                No rental comps returned.
+              </p>
+            )}
+          </div>
+        </TerminalDisclosure>
 
+        <TerminalDisclosure
+          title="Records"
+          meta={analysis.verifiedByAttom ? "ATTOM returned" : "Manual fallback"}
+        >
+          <div className="p-3">
+            <RecordFacts facts={analysis.attomFacts} fallback={property.notes} />
+          </div>
+        </TerminalDisclosure>
+      </div>
+
+      <TerminalDisclosure
+        title="Trend / projection"
+        meta="Internal projection · not provider forecast"
+      >
+        <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
+          <div className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold text-[var(--market-text)]">
+                ZIP value trend{property.zip ? ` · ZIP ${property.zip}` : ""}
+              </span>
+              <span className="font-data text-[11px] text-[var(--market-text-muted)]">
+                {trend.zhvi?.latestDate
+                  ? formatDate(trend.zhvi.latestDate)
+                  : "No ZHVI data"}
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <DetailCell
+                label="1Y"
+                value={formatPctChange(trend.zhvi?.yoyChange ?? null)}
+              />
+              <DetailCell
+                label="3Y"
+                value={formatPctChange(trend.zhvi?.threeYearChange ?? null)}
+              />
+              <DetailCell
+                label="5Y"
+                value={formatPctChange(trend.zhvi?.fiveYearChange ?? null)}
+              />
+              <DetailCell
+                label="ZHVI"
+                value={formatCurrency(trend.zhvi?.latestValue ?? null)}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--market-text-muted)]">
+              ZIP-level home value index. Trend context only, not a property
+              estimate.
+            </p>
+          </div>
+
+          <div className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold text-[var(--market-text)]">
+                Internal projection
+              </span>
+              <span className="font-data text-[11px] text-[var(--market-text-muted)]">
+                {projection.rateSource
+                  ? `${formatPctChange(projection.rate)}/yr · ${projection.rateSource}`
+                  : "Not calculable"}
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <BoardCell label="12 mo" value={formatCurrency(projection.m12)} />
+              <BoardCell label="24 mo" value={formatCurrency(projection.m24)} />
+              <BoardCell label="36 mo" value={formatCurrency(projection.m36)} />
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--market-text-muted)]">
+              Internal projection · based on current AVM + ZIP trend. Not a
+              provider forecast.
+            </p>
+          </div>
+        </div>
+      </TerminalDisclosure>
+
+      <TerminalDisclosure title="Source details" meta="Pipeline boundaries">
+        <div className="flex flex-col gap-3 p-3">
           {analysis.avmHistory && analysis.avmHistory.length > 0 ? (
-            <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-              <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
-                <span>ATTOM AVM history</span>
-                <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
-                  {analysis.avmHistory.length} point
-                  {analysis.avmHistory.length === 1 ? "" : "s"}
-                </span>
-              </summary>
+            <div>
+              <h4 className="text-sm font-semibold text-[var(--market-text)]">
+                ATTOM AVM history
+              </h4>
               <div className="mt-2">
                 <AvmHistoryList points={analysis.avmHistory} />
               </div>
-            </details>
+            </div>
           ) : analysis.avmUnavailableForPlan ? (
-            <p className="text-[11px] text-[var(--market-text-muted)]">
+            <p className="text-sm text-[var(--market-text-muted)]">
               ATTOM AVM history unavailable for current plan/key.
             </p>
           ) : null}
-
           <p className="text-[11px] text-[var(--market-text-muted)]">
             House value and rent use separate pipelines. House value is never
             calculated from rent. Rent forecasts are not invented from
             home-value trend. Zillow ZHVI and FRED are context only.
           </p>
         </div>
+      </TerminalDisclosure>
+    </div>
+  );
+}
+
+function RecordFacts({
+  facts,
+  fallback,
+}: {
+  facts: AttomFacts | null;
+  fallback?: string | null;
+}) {
+  if (!facts) {
+    return (
+      <p className="text-sm text-[var(--market-text-secondary)]">
+        {fallback ?? "Manual notes are the fallback record context."}
+      </p>
+    );
+  }
+
+  type RecordFactItem = {
+    label: string;
+    value: ReactNode;
+    sub?: ReactNode;
+  };
+  const visibleFactCandidates: Array<RecordFactItem | null> = [
+    facts.apn ? { label: "APN", value: facts.apn } : null,
+    facts.yearBuilt != null
+      ? { label: "Year built", value: facts.yearBuilt }
+      : null,
+    facts.buildingSize != null
+      ? {
+          label: "Building size",
+          value: `${facts.buildingSize.toLocaleString()} sqft`,
+        }
+      : null,
+    facts.assessedValue != null
+      ? { label: "Assessed value", value: formatCurrency(facts.assessedValue) }
+      : null,
+    facts.annualTaxes != null
+      ? { label: "Annual taxes", value: formatCurrency(facts.annualTaxes) }
+      : null,
+    facts.lastSalePrice != null
+      ? {
+          label: "Last sale",
+          value: formatCurrency(facts.lastSalePrice),
+          sub: facts.lastSaleDate ? formatDate(facts.lastSaleDate) : undefined,
+        }
+      : null,
+    facts.propertyClass
+      ? { label: "Class", value: facts.propertyClass }
+      : null,
+  ];
+  const visibleFacts = visibleFactCandidates.filter(
+    (item): item is RecordFactItem => item != null
+  );
+
+  const allFacts = [
+    { label: "ATTOM ID", value: facts.attomId ?? dash },
+    { label: "APN", value: facts.apn ?? dash },
+    { label: "FIPS", value: facts.fips ?? dash },
+    { label: "Address", value: facts.addressOneLine ?? dash },
+    { label: "Year built", value: facts.yearBuilt ?? dash },
+    {
+      label: "Building size",
+      value:
+        facts.buildingSize != null
+          ? `${facts.buildingSize.toLocaleString()} sqft`
+          : dash,
+    },
+    { label: "Assessed value", value: formatCurrency(facts.assessedValue) },
+    { label: "Market value", value: formatCurrency(facts.marketValue) },
+    { label: "Annual taxes", value: formatCurrency(facts.annualTaxes) },
+    { label: "Last sale", value: formatCurrency(facts.lastSalePrice) },
+    {
+      label: "Last sale date",
+      value: facts.lastSaleDate ? formatDate(facts.lastSaleDate) : dash,
+    },
+    { label: "Class", value: facts.propertyClass ?? dash },
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      {visibleFacts.length > 0 ? (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {visibleFacts.map((fact) => (
+            <DetailCell
+              key={fact.label}
+              label={fact.label}
+              value={fact.value}
+              sub={fact.sub}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--market-text-muted)]">
+          ATTOM record returned, but year built / size / tax fields were not
+          included.
+        </p>
+      )}
+      <details>
+        <summary className="min-h-[44px] cursor-pointer list-none text-sm font-semibold text-[var(--market-cyan)] [&::-webkit-details-marker]:hidden">
+          All record fields
+        </summary>
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {allFacts.map((fact) => (
+            <DetailCell key={fact.label} label={fact.label} value={fact.value} />
+          ))}
+        </div>
       </details>
-    </article>
+    </div>
   );
 }
 
@@ -1957,54 +2088,79 @@ function CompsList({
   kind: "sale" | "rent";
   comps: RentCastComp[];
 }) {
-  // Cap to 8 to keep the section compact; full list lives in raw.
-  const slice = comps.slice(0, 8);
+  const slice = comps.slice(0, 5);
+  const remaining = comps.slice(5);
+  const renderAmount = (amount: number | null) => {
+    if (amount == null) return kind === "rent" ? "rent not returned" : dash;
+    return kind === "sale"
+      ? formatCurrency(amount)
+      : `${formatCurrency(amount)}/mo`;
+  };
+  const renderRows = (rows: RentCastComp[]) =>
+    rows.map((c, i) => (
+      <tr
+        key={`${c.address}-${i}`}
+        className="border-t border-[var(--market-border)]"
+      >
+        <td className="max-w-[220px] truncate py-2 pr-3 text-[var(--market-text)]">
+          {c.address ?? dash}
+        </td>
+        <td className="py-2 pr-3 font-data tabular-nums text-[var(--market-text)]">
+          {renderAmount(c.amount)}
+        </td>
+        <td className="py-2 pr-3 text-[var(--market-text-muted)]">
+          {[
+            c.beds != null ? `${c.beds}bd` : null,
+            c.baths != null ? `${c.baths}ba` : null,
+          ]
+            .filter(Boolean)
+            .join(" / ") || dash}
+        </td>
+        <td className="py-2 pr-3 font-data tabular-nums text-[var(--market-text-muted)]">
+          {c.sqft != null ? `${c.sqft.toLocaleString()} sqft` : dash}
+        </td>
+        <td className="py-2 pr-3 font-data tabular-nums text-[var(--market-text-muted)]">
+          {c.distanceMiles != null ? `${c.distanceMiles.toFixed(1)} mi` : dash}
+        </td>
+        <td className="py-2 font-data tabular-nums text-[var(--market-text-muted)]">
+          {c.date ? formatDate(c.date) : c.status ?? dash}
+        </td>
+      </tr>
+    ));
+
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-2">
       <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
         {title}
       </span>
-      <ul className="flex flex-col divide-y divide-[var(--market-border)]">
-        {slice.map((c, i) => (
-          <li
-            key={`${c.address}-${i}`}
-            className="grid grid-cols-1 gap-x-3 py-1.5 text-[11px] sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-baseline"
-          >
-            <span className="truncate text-[var(--market-text)]">
-              {c.address ?? dash}
-            </span>
-            <span className="font-mono tabular-nums text-[var(--market-text)] sm:text-right">
-              {c.amount != null
-                ? kind === "sale"
-                  ? formatCurrency(c.amount)
-                  : `${formatCurrency(c.amount)}/mo`
-                : dash}
-            </span>
-            <span className="text-[var(--market-text-muted)] sm:text-right">
-              {[
-                c.beds != null ? `${c.beds}bd` : null,
-                c.baths != null ? `${c.baths}ba` : null,
-                c.sqft != null
-                  ? `${c.sqft.toLocaleString()} sqft`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || dash}
-            </span>
-            <span className="text-[var(--market-text-muted)] sm:text-right">
-              {c.distanceMiles != null
-                ? `${c.distanceMiles.toFixed(1)} mi`
-                : c.date
-                ? formatDate(c.date)
-                : dash}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {comps.length > slice.length ? (
-        <span className="text-[10px] text-[var(--market-text-muted)]">
-          + {comps.length - slice.length} more in raw response
-        </span>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] border-collapse text-left text-[11px]">
+          <thead>
+            <tr className="text-[10px] text-[var(--market-text-muted)]">
+              <th className="pb-1 pr-3 font-normal">Address</th>
+              <th className="pb-1 pr-3 font-normal">
+                {kind === "sale" ? "Price" : "Rent"}
+              </th>
+              <th className="pb-1 pr-3 font-normal">Beds/Baths</th>
+              <th className="pb-1 pr-3 font-normal">Sqft</th>
+              <th className="pb-1 pr-3 font-normal">Distance</th>
+              <th className="pb-1 font-normal">Date/Status</th>
+            </tr>
+          </thead>
+          <tbody>{renderRows(slice)}</tbody>
+        </table>
+      </div>
+      {remaining.length > 0 ? (
+        <details>
+          <summary className="min-h-[44px] cursor-pointer list-none text-[11px] font-semibold text-[var(--market-cyan)] [&::-webkit-details-marker]:hidden">
+            Show all comps ({remaining.length} more)
+          </summary>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] border-collapse text-left text-[11px]">
+              <tbody>{renderRows(remaining)}</tbody>
+            </table>
+          </div>
+        </details>
       ) : null}
     </div>
   );
