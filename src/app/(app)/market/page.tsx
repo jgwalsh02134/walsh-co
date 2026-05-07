@@ -55,7 +55,7 @@ import { AttomAvmRefreshButton } from "./attom-avm-refresh-button";
 import { AttomRefreshButton } from "./attom-refresh-button";
 import {
   PropertyValuationChart,
-  SAMPLE_VALUATION_DATA,
+  type ValuationPoint,
 } from "./components/property-valuation-chart";
 import { FredRefreshButton } from "./fred-refresh-button";
 import { RentCastListingsRefreshButton } from "./rentcast-listings-refresh-button";
@@ -713,6 +713,7 @@ export default async function MarketPage() {
     trend: ValueTrend;
     projection: ValueProjection;
     verifiedByAttom: boolean;
+    attomFacts: AttomFacts | null;
     rentCastLastFetched: Date | null;
     attomLastFetched: Date | null;
     /** Comparables extracted from RentCast AVM responses. */
@@ -723,13 +724,163 @@ export default async function MarketPage() {
     /** True when the latest ATTOM AVM snapshot was refused by plan/key. */
     avmUnavailableForPlan: boolean;
     yieldPct: number | null;
+    /** 7-point series for the property valuation chart. Empty when the
+     *  inputs (current AVM + ZIP trend) aren't available; the chart's
+     *  built-in empty state handles that. */
+    valuationSeries: ValuationPoint[];
   };
+
+  /**
+   * Build the property valuation chart series from existing pipeline
+   * outputs. We don't have full historical AVM history yet, so:
+   *   - Historical points (1y / 3y / 5y back) are derived by reversing
+   *     the Zillow ZHVI ZIP growth rate from the current AVM. They're
+   *     anchored on real provider data but are MODELED — not actual
+   *     past appraisals. The card UI calls this out explicitly.
+   *   - Current point uses the resolved house value + RentCast range.
+   *   - Projection points use the existing internal projection (12 / 24 /
+   *     36 month outputs, compounded at the ZIP annualized rate).
+   *   - Benchmark line uses Zillow ZHVI: latest at current; reversed to
+   *     each historical bucket using the same per-period growth rates.
+   *   - ATTOM `lastSaleDate` becomes an "Acquisition" event marker on
+   *     the nearest point when it falls inside the chart range.
+   */
+  function buildValuationSeries(
+    house: HouseValue,
+    trend: ValueTrend,
+    projection: ValueProjection,
+    facts: AttomFacts | null
+  ): ValuationPoint[] {
+    if (house.value == null || trend.zhvi == null) return [];
+
+    const now = new Date();
+    const yearsAgo = (n: number): Date => {
+      const d = new Date(now);
+      d.setFullYear(d.getFullYear() - n);
+      return d;
+    };
+    const monthsAhead = (n: number): Date => {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() + n);
+      return d;
+    };
+    const reverseGrowth = (
+      current: number | null,
+      change: number | null
+    ): number | null => {
+      if (current == null || change == null) return null;
+      const denom = 1 + change;
+      if (denom <= 0) return null;
+      return current / denom;
+    };
+
+    const yoy = trend.zhvi.yoyChange ?? null;
+    const y3 = trend.zhvi.threeYearChange ?? null;
+    const y5 = trend.zhvi.fiveYearChange ?? null;
+    const benchLatest = trend.zhvi.latestValue ?? null;
+
+    const points: ValuationPoint[] = [];
+
+    const v5y = reverseGrowth(house.value, y5);
+    const b5y = reverseGrowth(benchLatest, y5);
+    if (v5y != null) {
+      points.push({
+        date: yearsAgo(5),
+        propertyValue: v5y,
+        benchmarkValue: b5y,
+        isProjection: false,
+      });
+    }
+    const v3y = reverseGrowth(house.value, y3);
+    const b3y = reverseGrowth(benchLatest, y3);
+    if (v3y != null) {
+      points.push({
+        date: yearsAgo(3),
+        propertyValue: v3y,
+        benchmarkValue: b3y,
+        isProjection: false,
+      });
+    }
+    const v1y = reverseGrowth(house.value, yoy);
+    const b1y = reverseGrowth(benchLatest, yoy);
+    if (v1y != null) {
+      points.push({
+        date: yearsAgo(1),
+        propertyValue: v1y,
+        benchmarkValue: b1y,
+        isProjection: false,
+      });
+    }
+
+    // Current — only point with a real RentCast valuation range.
+    points.push({
+      date: now,
+      propertyValue: house.value,
+      lowerBound: house.rangeLow,
+      upperBound: house.rangeHigh,
+      benchmarkValue: benchLatest,
+      isProjection: false,
+    });
+
+    if (projection.m12 != null) {
+      points.push({
+        date: monthsAhead(12),
+        propertyValue: projection.m12,
+        isProjection: true,
+      });
+    }
+    if (projection.m24 != null) {
+      points.push({
+        date: monthsAhead(24),
+        propertyValue: projection.m24,
+        isProjection: true,
+      });
+    }
+    if (projection.m36 != null) {
+      points.push({
+        date: monthsAhead(36),
+        propertyValue: projection.m36,
+        isProjection: true,
+      });
+    }
+
+    // Acquisition event — tag the nearest existing point.
+    const acqRaw = facts?.lastSaleDate;
+    if (acqRaw && points.length > 0) {
+      const acq = new Date(acqRaw);
+      if (!Number.isNaN(acq.getTime())) {
+        const acqTs = acq.getTime();
+        const firstTs = (points[0].date as Date).getTime();
+        const lastTs = (points[points.length - 1].date as Date).getTime();
+        if (acqTs >= firstTs && acqTs <= lastTs) {
+          let nearestIdx = 0;
+          let bestDelta = Number.POSITIVE_INFINITY;
+          for (let i = 0; i < points.length; i++) {
+            const t = (points[i].date as Date).getTime();
+            const delta = Math.abs(t - acqTs);
+            if (delta < bestDelta) {
+              bestDelta = delta;
+              nearestIdx = i;
+            }
+          }
+          points[nearestIdx] = {
+            ...points[nearestIdx],
+            event: "Acquisition",
+          };
+        }
+      }
+    }
+
+    return points;
+  }
+
   function analyze(property: TrackedProperty): PropertyAnalysis {
     const m = entryFor(property.id);
     const rc = rentCastFor(property.id);
     const a = attomFor(property.id);
     const aAvm = attomAvmFor(property.id);
     const aAvmHistory = attomAvmHistoryFor(property.id);
+    const facts = getAttomFacts(a);
     const house = resolveHouseValue(aAvm, a, rc, m);
     const rent = resolveMarketRent(rc, m);
     const trend = resolveValueTrend(property, zhviSeries);
@@ -748,7 +899,8 @@ export default async function MarketPage() {
       rent,
       trend,
       projection,
-      verifiedByAttom: !!getAttomFacts(a),
+      verifiedByAttom: !!facts,
+      attomFacts: facts,
       rentCastLastFetched: rc?.fetchedAt ?? null,
       attomLastFetched: a?.fetchedAt ?? null,
       saleComps,
@@ -756,6 +908,7 @@ export default async function MarketPage() {
       avmHistory: getAttomAvmHistory(aAvmHistory),
       avmUnavailableForPlan: isAvmUnavailableForPlan(aAvm),
       yieldPct,
+      valuationSeries: buildValuationSeries(house, trend, projection, facts),
     };
   }
   const businessAnalyses = businessProperties.map(analyze);
@@ -1059,36 +1212,9 @@ export default async function MarketPage() {
         </div>
       ) : null}
 
-      {/* ============================================================
-           Valuation chart preview (collapsed, mock data)
-         ============================================================ */}
-      <details className="group rounded-[var(--radius-md)] border border-[var(--market-border)] bg-[var(--market-surface)]">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
-          <span>
-            Valuation chart preview{" "}
-            <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
-              · Demo visualization — not final underwriting data
-            </span>
-          </span>
-          <span aria-hidden className="text-[var(--market-text-muted)]">
-            ▾
-          </span>
-        </summary>
-        <div className="border-t border-[var(--market-border)] p-4">
-          <PropertyValuationChart
-            propertyName="322 Osborne Rd"
-            zip="12211"
-            data={SAMPLE_VALUATION_DATA}
-          />
-          <p className="mt-3 text-[11px] text-[var(--market-text-muted)]">
-            Mock data wired in to validate the chart shape. Replace with
-            real RentCast / ATTOM AVM history + Zillow ZHVI benchmark +
-            internal projection points once the snapshot pipeline emits
-            time series. See file header in property-valuation-chart.tsx
-            for the data-mapping plan.
-          </p>
-        </div>
-      </details>
+      {/* Mock-data preview removed — each property card now renders its
+           own valuation chart from real RentCast + Zillow + projection
+           inputs via the "Show valuation chart" disclosure. */}
 
       {/* ============================================================
            Area listings (collapsed; hidden when nothing is wired)
@@ -1438,6 +1564,7 @@ type PropertyAnalysis = {
   trend: ValueTrend;
   projection: ValueProjection;
   verifiedByAttom: boolean;
+  attomFacts: AttomFacts | null;
   rentCastLastFetched: Date | null;
   attomLastFetched: Date | null;
   saleComps: RentCastComp[];
@@ -1445,6 +1572,7 @@ type PropertyAnalysis = {
   avmHistory: AttomAvmHistoryPoint[] | null;
   avmUnavailableForPlan: boolean;
   yieldPct: number | null;
+  valuationSeries: ValuationPoint[];
 };
 
 function PropertyValuationCard({
@@ -1651,6 +1779,37 @@ function PropertyValuationCard({
           provider forecast. Not a guarantee.
         </span>
       </section>
+
+      {/* Valuation chart — collapsed by default */}
+      {analysis.valuationSeries.length >= 2 ? (
+        <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
+            <span>
+              Show valuation chart{" "}
+              <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
+                {analysis.valuationSeries.length}
+              </span>{" "}
+              points
+            </span>
+            <span aria-hidden className="text-[var(--market-text-muted)]">
+              ▾
+            </span>
+          </summary>
+          <div className="mt-3">
+            <PropertyValuationChart
+              propertyName={property.address}
+              zip={property.zip ?? undefined}
+              data={analysis.valuationSeries}
+            />
+            <p className="mt-2 text-[10px] text-[var(--market-text-muted)]">
+              Chart uses current AVM plus ZIP ZHVI trend context and internal
+              projections. Historical points are derived from ZIP ZHVI trend
+              applied to the current AVM — not actual past appraisals. Not an
+              appraisal.
+            </p>
+          </div>
+        </details>
+      ) : null}
 
       {/* RentCast comparables (sale + rental) */}
       {analysis.saleComps.length > 0 || analysis.rentalComps.length > 0 ? (
