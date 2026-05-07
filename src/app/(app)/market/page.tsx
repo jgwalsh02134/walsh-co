@@ -513,6 +513,32 @@ function MetricCell({
   );
 }
 
+function DetailCell({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+}) {
+  return (
+    <div className="min-w-0 rounded-[var(--radius-sm)] border border-[var(--market-border)] bg-[var(--market-surface-raised)] px-3 py-2">
+      <span className="block text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+        {label}
+      </span>
+      <span className="mt-0.5 block break-words font-mono text-sm font-semibold tabular-nums text-[var(--market-text)]">
+        {value}
+      </span>
+      {sub != null ? (
+        <span className="mt-0.5 block text-[10px] text-[var(--market-text-muted)]">
+          {sub}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 // =============================================================
 // Page
 // =============================================================
@@ -737,7 +763,9 @@ export default async function MarketPage() {
    *     the Zillow ZHVI ZIP growth rate from the current AVM. They're
    *     anchored on real provider data but are MODELED — not actual
    *     past appraisals. The card UI calls this out explicitly.
-   *   - Current point uses the resolved house value + RentCast range.
+   *   - Current point uses the resolved house value + AVM range.
+   *   - Historical and projection band points are trend-context-derived from
+   *     that current AVM range, not provider appraisals.
    *   - Projection points use the existing internal projection (12 / 24 /
    *     36 month outputs, compounded at the ZIP annualized rate).
    *   - Benchmark line uses Zillow ZHVI: latest at current; reversed to
@@ -778,6 +806,20 @@ export default async function MarketPage() {
     const y3 = trend.zhvi.threeYearChange ?? null;
     const y5 = trend.zhvi.fiveYearChange ?? null;
     const benchLatest = trend.zhvi.latestValue ?? null;
+    const hasRange =
+      house.value > 0 &&
+      house.rangeLow != null &&
+      house.rangeHigh != null &&
+      house.rangeLow <= house.rangeHigh;
+    const rangeFor = (
+      value: number | null
+    ): Pick<ValuationPoint, "lowerBound" | "upperBound"> => {
+      if (!hasRange || value == null) return {};
+      return {
+        lowerBound: value * (house.rangeLow! / house.value!),
+        upperBound: value * (house.rangeHigh! / house.value!),
+      };
+    };
 
     const points: ValuationPoint[] = [];
 
@@ -787,6 +829,7 @@ export default async function MarketPage() {
       points.push({
         date: yearsAgo(5),
         propertyValue: v5y,
+        ...rangeFor(v5y),
         benchmarkValue: b5y,
         isProjection: false,
       });
@@ -797,6 +840,7 @@ export default async function MarketPage() {
       points.push({
         date: yearsAgo(3),
         propertyValue: v3y,
+        ...rangeFor(v3y),
         benchmarkValue: b3y,
         isProjection: false,
       });
@@ -807,6 +851,7 @@ export default async function MarketPage() {
       points.push({
         date: yearsAgo(1),
         propertyValue: v1y,
+        ...rangeFor(v1y),
         benchmarkValue: b1y,
         isProjection: false,
       });
@@ -826,6 +871,7 @@ export default async function MarketPage() {
       points.push({
         date: monthsAhead(12),
         propertyValue: projection.m12,
+        ...rangeFor(projection.m12),
         isProjection: true,
       });
     }
@@ -833,6 +879,7 @@ export default async function MarketPage() {
       points.push({
         date: monthsAhead(24),
         propertyValue: projection.m24,
+        ...rangeFor(projection.m24),
         isProjection: true,
       });
     }
@@ -840,6 +887,7 @@ export default async function MarketPage() {
       points.push({
         date: monthsAhead(36),
         propertyValue: projection.m36,
+        ...rangeFor(projection.m36),
         isProjection: true,
       });
     }
@@ -1051,9 +1099,8 @@ export default async function MarketPage() {
          ============================================================ */}
       <div className="flex flex-col gap-3">
         <PageHeader
-          eyebrow="Market Tracker"
-          title="Market intelligence"
-          description="House market value, market rent, historical trends, and forward projections across J.G. Walsh & Co. assets. Not investment advice."
+          title="Market Intelligence"
+          description="A property-first view of house market value, market rent, data freshness, attention items, and valuation trend context."
         />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--market-text-muted)]">
@@ -1118,7 +1165,7 @@ export default async function MarketPage() {
             </Link>
           </div>
           <p className="px-4 pb-3 text-[11px] text-[var(--market-text-muted)]">
-            Refreshes use external provider calls. Use only when needed.
+            Refreshes use external provider/API calls. Use only when needed.
           </p>
         </details>
       </div>
@@ -1133,20 +1180,20 @@ export default async function MarketPage() {
           sublabel="Private reference asset excluded"
         />
         <KpiTile
-          label="Est. portfolio value"
+          label="House value"
           value={formatCurrency(portfolioValue)}
           sublabel={
             valuedCount === businessProperties.length
-              ? "ATTOM AVM → RentCast → manual"
+              ? "House value: AVM + manual fallback"
               : `${valuedCount} of ${businessProperties.length} valued`
           }
         />
         <KpiTile
-          label="Est. monthly rent"
+          label="Market rent"
           value={formatRent(portfolioMonthlyRent)}
           sublabel={
             rentedCount === businessProperties.length
-              ? "RentCast → manual target"
+              ? "Market rent: RentCast + manual fallback"
               : `${rentedCount} of ${businessProperties.length} rent estimates`
           }
         />
@@ -1175,11 +1222,47 @@ export default async function MarketPage() {
       </div>
 
       {/* ============================================================
+           Needs attention
+         ============================================================ */}
+      <SectionPanel
+        title="Needs attention"
+        description={
+          flags.length === 0
+            ? "No critical market-data flags."
+            : `${flags.length} item${flags.length === 1 ? "" : "s"} to review.`
+        }
+        padded={flags.length === 0}
+      >
+        {flags.length === 0 ? (
+          <p className="text-sm text-[var(--market-text-muted)]">
+            All business properties have value, rent, tax, and source data
+            within tolerance.
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-[var(--market-border)]">
+            {flags.map((f, i) => (
+              <li
+                key={`${f.property}-${i}`}
+                className="flex flex-col gap-0.5 px-5 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="text-sm text-[var(--market-text)]">
+                  {f.property}
+                </span>
+                <span className="text-[11px] text-[var(--market-text-muted)]">
+                  {f.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionPanel>
+
+      {/* ============================================================
            Property valuations — value / rent / trend / projection
          ============================================================ */}
       <SectionPanel
-        title="Property valuations"
-        description="Current house value and market rent today, ZIP-level historical trend, and an internal forward projection."
+        title="Business property dashboard"
+        description="Current house market value and market rent stay separate. Trend and projection context is inside each details panel."
       >
         <div className="flex flex-col gap-3">
           {businessAnalyses.map((a) => (
@@ -1280,42 +1363,6 @@ export default async function MarketPage() {
           </p>
         </details>
       ) : null}
-
-      {/* ============================================================
-           Needs attention
-         ============================================================ */}
-      <SectionPanel
-        title="Needs attention"
-        description={
-          flags.length === 0
-            ? "No critical market-data flags."
-            : `${flags.length} item${flags.length === 1 ? "" : "s"} to review.`
-        }
-        padded={flags.length === 0}
-      >
-        {flags.length === 0 ? (
-          <p className="text-sm text-[var(--market-text-muted)]">
-            All business properties have value, rent, tax, and source data
-            within tolerance.
-          </p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-[var(--market-border)]">
-            {flags.map((f, i) => (
-              <li
-                key={`${f.property}-${i}`}
-                className="flex flex-col gap-0.5 px-5 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <span className="text-sm text-[var(--market-text)]">
-                  {f.property}
-                </span>
-                <span className="text-[11px] text-[var(--market-text-muted)]">
-                  {f.text}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionPanel>
 
       {/* ============================================================
            Macro & Rate Context (collapsed by default)
@@ -1584,110 +1631,92 @@ function PropertyValuationCard({
 }) {
   const { property, house, rent, trend, projection, verifiedByAttom } =
     analysis;
+  const lastRefreshed =
+    [
+      house.asOfDate,
+      rent.asOfDate,
+      analysis.rentCastLastFetched,
+      analysis.attomLastFetched,
+    ]
+      .filter((d): d is Date => d instanceof Date)
+      .sort((a, b) => a.getTime() - b.getTime())
+      .pop() ?? null;
+  const verificationLabel = verifiedByAttom
+    ? "ATTOM verified"
+    : property.factsNeedVerification || property.zipNeedsVerification
+    ? "Records pending"
+    : "Manual notes";
+  const verificationTone: keyof typeof statusTokens = verifiedByAttom
+    ? "success"
+    : property.factsNeedVerification || property.zipNeedsVerification
+    ? "warning"
+    : "neutral";
+  const valueRange =
+    house.rangeLow != null && house.rangeHigh != null
+      ? `${formatCurrency(house.rangeLow)}-${formatCurrency(house.rangeHigh)}`
+      : dash;
+  const rentRange =
+    rent.rangeLow != null && rent.rangeHigh != null
+      ? `${formatCurrency(rent.rangeLow)}-${formatCurrency(rent.rangeHigh)}/mo`
+      : dash;
 
   return (
     <article
-      className={`flex flex-col gap-4 rounded-[var(--radius-md)] p-4 ${
+      className={`flex flex-col gap-3 rounded-[var(--radius-md)] p-4 ${
         isPrivate
           ? "border border-dashed border-[var(--market-border)] bg-transparent"
           : "market-card"
       }`}
     >
-      {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col">
+        <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold text-[var(--market-text)]">
             {property.address}
           </h3>
-          <span className="text-[11px] text-[var(--market-text-muted)]">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--market-text-muted)]">
+            <span>
             {property.city}
             {property.zip ? ` · ${property.zip}` : ""}
+            </span>
             {property.workspaceHref ? (
-              <>
-                {" · "}
-                <Link
-                  href={property.workspaceHref}
-                  className="text-[var(--market-cyan)] hover:underline"
-                >
-                  workspace
-                </Link>
-              </>
+              <Link
+                href={property.workspaceHref}
+                className="text-[var(--market-cyan)] hover:underline"
+              >
+                workspace
+              </Link>
             ) : null}
-          </span>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {verifiedByAttom ? (
-            <ToneTag label="ATTOM verified" tone="success" />
-          ) : property.factsNeedVerification || property.zipNeedsVerification ? (
-            <ToneTag label="Records pending" tone="warning" />
-          ) : null}
+          <ToneTag label={verificationLabel} tone={verificationTone} />
           {isPrivate ? (
-            <ToneTag label="Reference only" tone="warning" />
+            <>
+              <ToneTag label="Private / Reference Only" tone="warning" />
+              <ToneTag label="Excluded from business KPIs" tone="warning" />
+            </>
           ) : null}
         </div>
       </header>
 
-      {/* Today: value + rent + yield */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCell
           label="House market value"
           value={
-            <span className="text-base">
+            <span className="text-lg">
               {formatCurrency(house.value)}
             </span>
           }
-          sub={
-            <>
-              {house.source === "None"
-                ? "No source connected"
-                : `Source · ${house.source}`}
-              {house.asOfDate ? ` · ${relativeAge(house.asOfDate)}` : ""}
-              {house.confidence != null ? (
-                <>
-                  {" · "}
-                  Confidence {house.confidence}
-                </>
-              ) : null}
-              {house.rangeLow != null && house.rangeHigh != null ? (
-                <>
-                  {" · "}
-                  Range {formatCurrency(house.rangeLow)}–
-                  {formatCurrency(house.rangeHigh)}
-                </>
-              ) : null}
-              {analysis.avmUnavailableForPlan && house.source !== "ATTOM AVM" ? (
-                <>
-                  {" · "}
-                  <span className="text-[var(--semantic-warning)]">
-                    ATTOM AVM unavailable for current plan/key
-                  </span>
-                </>
-              ) : null}
-            </>
-          }
+          sub={`Value source: ${house.source}`}
         />
         <MetricCell
           label="Market rent"
           value={
-            <span className="text-base">
+            <span className="text-lg">
               {formatRent(rent.rent)}
             </span>
           }
-          sub={
-            <>
-              {rent.source === "None"
-                ? "No source connected"
-                : `Source · ${rent.source}`}
-              {rent.asOfDate ? ` · ${relativeAge(rent.asOfDate)}` : ""}
-              {rent.rangeLow != null && rent.rangeHigh != null ? (
-                <>
-                  {" · "}
-                  Range {formatCurrency(rent.rangeLow)}–
-                  {formatCurrency(rent.rangeHigh)}/mo
-                </>
-              ) : null}
-            </>
-          }
+          sub={`Rent source: ${rent.source}`}
         />
         <MetricCell
           label="Gross rent yield"
@@ -1700,188 +1729,217 @@ function PropertyValuationCard({
           }
           sub="Annualized rent ÷ value"
         />
+        <MetricCell
+          label="Last refreshed"
+          value={lastRefreshed ? relativeAge(lastRefreshed) : dash}
+          sub={
+            lastRefreshed ? formatDate(lastRefreshed.toISOString()) : "No snapshot"
+          }
+        />
+        <MetricCell
+          label="Verification"
+          value={<ToneTag label={verificationLabel} tone={verificationTone} />}
+          sub={analysis.avmUnavailableForPlan ? "ATTOM AVM plan/key limit" : null}
+        />
       </section>
 
-      {/* ZIP historical trend */}
-      <section className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-            ZIP value trend
-            {property.zip ? ` · ZIP ${property.zip}` : ""}
+      <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)]">
+        <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-[var(--market-text)] [&::-webkit-details-marker]:hidden">
+          <span>Details / valuation chart</span>
+          <span className="text-[11px] font-normal text-[var(--market-text-muted)]">
+            {analysis.valuationSeries.length} chart points · {analysis.saleComps.length} sale comps · {analysis.rentalComps.length} rental comps
           </span>
-          <span className="text-[10px] text-[var(--market-text-muted)]">
-            {trend.zhvi?.latestDate
-              ? `Zillow ZHVI as of ${formatDate(trend.zhvi.latestDate)}`
-              : "Zillow ZHVI · no data"}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm tabular-nums">
-          <span
-            style={{ color: pctChangeColor(trend.zhvi?.yoyChange ?? null) }}
-          >
-            1y {formatPctChange(trend.zhvi?.yoyChange ?? null)}
-          </span>
-          <span
-            style={{
-              color: pctChangeColor(trend.zhvi?.threeYearChange ?? null),
-            }}
-          >
-            3y {formatPctChange(trend.zhvi?.threeYearChange ?? null)}
-          </span>
-          <span
-            style={{
-              color: pctChangeColor(trend.zhvi?.fiveYearChange ?? null),
-            }}
-          >
-            5y {formatPctChange(trend.zhvi?.fiveYearChange ?? null)}
-          </span>
-          <span className="text-[var(--market-text-muted)]">
-            Latest ZHVI{" "}
-            {formatCurrency(trend.zhvi?.latestValue ?? null)}
-          </span>
-        </div>
-        <span className="text-[10px] text-[var(--market-text-muted)]">
-          ZIP-level home value index. Trend context only — not a property
-          estimate.
-        </span>
-      </section>
-
-      {/* Internal value projection */}
-      <section className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-            Internal value projection
-          </span>
-          <span className="text-[10px] text-[var(--market-text-muted)]">
-            {projection.rateSource
-              ? `Compounded at ${formatPctChange(projection.rate)}/yr · ${
-                  projection.rateSource
-                }`
-              : "Provider forecast pending"}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <MetricCell
-            label="12 mo"
-            value={formatCurrency(projection.m12)}
-          />
-          <MetricCell
-            label="24 mo"
-            value={formatCurrency(projection.m24)}
-          />
-          <MetricCell
-            label="36 mo"
-            value={formatCurrency(projection.m36)}
-          />
-        </div>
-        <span className="text-[10px] text-[var(--market-text-muted)]">
-          Internal projection — based on current AVM + ZIP trend. Not a
-          provider forecast. Not a guarantee.
-        </span>
-      </section>
-
-      {/* Valuation chart — collapsed by default */}
-      {analysis.valuationSeries.length >= 2 ? (
-        <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
-            <span>
-              Show valuation chart{" "}
-              <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
-                {analysis.valuationSeries.length}
-              </span>{" "}
-              points
-            </span>
-            <span aria-hidden className="text-[var(--market-text-muted)]">
-              ▾
-            </span>
-          </summary>
-          <div className="mt-3">
-            <PropertyValuationChart
-              propertyName={property.address}
-              zip={property.zip ?? undefined}
-              data={analysis.valuationSeries}
+        </summary>
+        <div className="flex flex-col gap-4 border-t border-[var(--market-border)] p-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailCell label="Value range" value={valueRange} sub="AVM range" />
+            <DetailCell label="Rent range" value={rentRange} sub="RentCast range" />
+            <DetailCell
+              label="Sale comps"
+              value={analysis.saleComps.length}
+              sub="RentCast AVM response"
             />
-            <p className="mt-2 text-[10px] text-[var(--market-text-muted)]">
-              Chart uses current AVM plus ZIP ZHVI trend context and internal
-              projections. Historical points are derived from ZIP ZHVI trend
-              applied to the current AVM — not actual past appraisals. Not an
-              appraisal.
-            </p>
+            <DetailCell
+              label="Rental comps"
+              value={analysis.rentalComps.length}
+              sub="RentCast rent response"
+            />
           </div>
-        </details>
-      ) : null}
 
-      {/* RentCast comparables (sale + rental) */}
-      {analysis.saleComps.length > 0 || analysis.rentalComps.length > 0 ? (
-        <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
-            <span>
-              RentCast comparables ·{" "}
-              <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
-                {analysis.saleComps.length}
-              </span>{" "}
-              sale ·{" "}
-              <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
-                {analysis.rentalComps.length}
-              </span>{" "}
-              rental
+          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+              <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Record verification
+              </span>
+              {analysis.attomFacts ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <DetailCell
+                    label="Year built"
+                    value={analysis.attomFacts.yearBuilt ?? dash}
+                  />
+                  <DetailCell
+                    label="Building size"
+                    value={
+                      analysis.attomFacts.buildingSize != null
+                        ? `${analysis.attomFacts.buildingSize.toLocaleString()} sqft`
+                        : dash
+                    }
+                  />
+                  <DetailCell
+                    label="Assessed value"
+                    value={formatCurrency(analysis.attomFacts.assessedValue)}
+                  />
+                  <DetailCell
+                    label="Annual taxes"
+                    value={formatCurrency(analysis.attomFacts.annualTaxes)}
+                  />
+                  <DetailCell
+                    label="Last sale"
+                    value={formatCurrency(analysis.attomFacts.lastSalePrice)}
+                    sub={
+                      analysis.attomFacts.lastSaleDate
+                        ? formatDate(analysis.attomFacts.lastSaleDate)
+                        : undefined
+                    }
+                  />
+                  <DetailCell
+                    label="Class"
+                    value={analysis.attomFacts.propertyClass ?? dash}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--market-text-secondary)]">
+                  {property.notes ?? "Manual notes are the fallback record context."}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                  ZIP value trend
+                  {property.zip ? ` · ZIP ${property.zip}` : ""}
+                </span>
+                <span className="text-[10px] text-[var(--market-text-muted)]">
+                  {trend.zhvi?.latestDate
+                    ? `Zillow ZHVI as of ${formatDate(trend.zhvi.latestDate)}`
+                    : "Zillow ZHVI · no data"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm tabular-nums">
+                <span
+                  style={{
+                    color: pctChangeColor(trend.zhvi?.yoyChange ?? null),
+                  }}
+                >
+                  1y {formatPctChange(trend.zhvi?.yoyChange ?? null)}
+                </span>
+                <span
+                  style={{
+                    color: pctChangeColor(trend.zhvi?.threeYearChange ?? null),
+                  }}
+                >
+                  3y {formatPctChange(trend.zhvi?.threeYearChange ?? null)}
+                </span>
+                <span
+                  style={{
+                    color: pctChangeColor(trend.zhvi?.fiveYearChange ?? null),
+                  }}
+                >
+                  5y {formatPctChange(trend.zhvi?.fiveYearChange ?? null)}
+                </span>
+                <span className="text-[var(--market-text-muted)]">
+                  Latest ZHVI {formatCurrency(trend.zhvi?.latestValue ?? null)}
+                </span>
+              </div>
+              <span className="text-[10px] text-[var(--market-text-muted)]">
+                ZIP-level home value index. Trend context only, not a property
+                estimate.
+              </span>
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
+                Internal projection
+              </span>
+              <span className="text-[10px] text-[var(--market-text-muted)]">
+                {projection.rateSource
+                  ? `Compounded at ${formatPctChange(projection.rate)}/yr · ${
+                      projection.rateSource
+                    }`
+                  : "Provider forecast pending"}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <MetricCell label="12 mo" value={formatCurrency(projection.m12)} />
+              <MetricCell label="24 mo" value={formatCurrency(projection.m24)} />
+              <MetricCell label="36 mo" value={formatCurrency(projection.m36)} />
+            </div>
+            <span className="text-[10px] text-[var(--market-text-muted)]">
+              Internal projection, based on current AVM + ZIP trend. Not a
+              provider forecast. Not a guarantee.
             </span>
-            <span aria-hidden className="text-[var(--market-text-muted)]">
-              ▾
-            </span>
-          </summary>
-          <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          </section>
+
+          <PropertyValuationChart
+            propertyName={property.address}
+            zip={property.zip ?? undefined}
+            data={analysis.valuationSeries}
+            height={260}
+          />
+          <p className="mt-2 text-[10px] text-[var(--market-text-muted)]">
+            Chart uses current AVM plus ZIP ZHVI trend context and internal
+            projections. Not an appraisal. Historical points and non-current range
+            bands are trend-context-derived, not actual historical appraisals.
+          </p>
+
+          {analysis.saleComps.length > 0 || analysis.rentalComps.length > 0 ? (
+            <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+              <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
+                <span>RentCast comparables</span>
+                <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
+                  {analysis.saleComps.length} sale · {analysis.rentalComps.length} rental
+                </span>
+              </summary>
+              <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
             {analysis.saleComps.length > 0 ? (
               <CompsList title="Sale comps" kind="sale" comps={analysis.saleComps} />
             ) : null}
             {analysis.rentalComps.length > 0 ? (
               <CompsList title="Rental comps" kind="rent" comps={analysis.rentalComps} />
             ) : null}
-          </div>
-        </details>
-      ) : null}
+              </div>
+            </details>
+          ) : null}
 
-      {/* ATTOM AVM history */}
-      {analysis.avmHistory && analysis.avmHistory.length > 0 ? (
-        <section className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-              ATTOM AVM history
-            </span>
-            <span className="text-[10px] text-[var(--market-text-muted)]">
-              {analysis.avmHistory.length} point
-              {analysis.avmHistory.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          <AvmHistoryList points={analysis.avmHistory} />
-          <span className="text-[10px] text-[var(--market-text-muted)]">
-            Past ATTOM AVM observations. Provider-published; not invented.
-          </span>
-        </section>
-      ) : analysis.avmUnavailableForPlan ? (
-        <section className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-          <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-            ATTOM AVM history
-          </span>
-          <span className="text-sm text-[var(--market-text-secondary)]">
-            ATTOM AVM history unavailable for current plan/key.
-          </span>
-        </section>
-      ) : null}
+          {analysis.avmHistory && analysis.avmHistory.length > 0 ? (
+            <details className="group rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
+              <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[var(--market-text-muted)] [&::-webkit-details-marker]:hidden">
+                <span>ATTOM AVM history</span>
+                <span className="font-mono tabular-nums normal-case text-[var(--market-text-secondary)]">
+                  {analysis.avmHistory.length} point
+                  {analysis.avmHistory.length === 1 ? "" : "s"}
+                </span>
+              </summary>
+              <div className="mt-2">
+                <AvmHistoryList points={analysis.avmHistory} />
+              </div>
+            </details>
+          ) : analysis.avmUnavailableForPlan ? (
+            <p className="text-[11px] text-[var(--market-text-muted)]">
+              ATTOM AVM history unavailable for current plan/key.
+            </p>
+          ) : null}
 
-      {/* Rent trend / forecast — currently always pending */}
-      <section className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-[var(--market-border)] p-3">
-        <span className="text-[10px] uppercase tracking-wide text-[var(--market-text-muted)]">
-          Rent trend / forecast
-        </span>
-        <span className="text-sm text-[var(--market-text-secondary)]">
-          Rent forecast pending
-        </span>
-        <span className="text-[10px] text-[var(--market-text-muted)]">
-          A rent-trend source (Zillow ZORI or RentCast market trends) is not
-          wired today. Rent forecasts are not invented from home-value trend.
-        </span>
-      </section>
+          <p className="text-[11px] text-[var(--market-text-muted)]">
+            House value and rent use separate pipelines. House value is never
+            calculated from rent. Rent forecasts are not invented from
+            home-value trend. Zillow ZHVI and FRED are context only.
+          </p>
+        </div>
+      </details>
     </article>
   );
 }

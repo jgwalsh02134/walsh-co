@@ -6,7 +6,7 @@
  * Bloomberg-GP-inspired view for a single property's market value over
  * time, with confidence band, ZIP benchmark series, and event markers.
  *
- * Future data wiring (mock data is used today):
+ * Data wiring:
  *   • RentCast current value         → current `propertyValue`
  *   • RentCast value range           → `lowerBound` / `upperBound`
  *   • Zillow ZHVI ZIP trend          → `benchmarkValue` (rebased to the
@@ -34,6 +34,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useId } from "react";
 
 // =============================================================
 // Types
@@ -110,7 +111,7 @@ type ChartRow = {
 };
 
 function toRows(data: ValuationPoint[]): ChartRow[] {
-  return data
+  const rows = data
     .map((p) => {
       const ts = toDate(p.date).getTime();
       if (Number.isNaN(ts)) return null;
@@ -133,6 +134,21 @@ function toRows(data: ValuationPoint[]): ChartRow[] {
     })
     .filter((r): r is ChartRow => r !== null)
     .sort((a, b) => a.ts - b.ts);
+
+  const firstProjectionIndex = rows.findIndex((r) => r.projection != null);
+  if (firstProjectionIndex > 0) {
+    const previousValueIndex = rows
+      .slice(0, firstProjectionIndex)
+      .findLastIndex((r) => r.raw.propertyValue != null);
+    if (previousValueIndex >= 0) {
+      rows[previousValueIndex] = {
+        ...rows[previousValueIndex],
+        projection: rows[previousValueIndex].raw.propertyValue,
+      };
+    }
+  }
+
+  return rows;
 }
 
 // =============================================================
@@ -185,7 +201,9 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
       </div>
       {raw.lowerBound != null && raw.upperBound != null ? (
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[var(--market-text-muted)]">Range</span>
+          <span className="text-[var(--market-text-muted)]">
+            Valuation range
+          </span>
           <span className="font-mono tabular-nums">
             {formatCurrencyFull(raw.lowerBound)} —{" "}
             {formatCurrencyFull(raw.upperBound)}
@@ -195,7 +213,7 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
       {raw.benchmarkValue != null ? (
         <div className="flex items-center justify-between gap-3">
           <span className="text-[var(--market-text-muted)]">
-            ZIP benchmark
+            ZIP ZHVI benchmark
           </span>
           <span className="font-mono tabular-nums">
             {formatCurrencyFull(raw.benchmarkValue)}
@@ -224,6 +242,8 @@ export function PropertyValuationChart({
   data,
   height = 320,
 }: PropertyValuationChartProps) {
+  const reactId = useId();
+  const bandId = `pvc-band-${reactId.replace(/:/g, "")}`;
   const rows = toRows(data);
 
   // Empty state — fewer than 2 usable points means the chart can't
@@ -298,7 +318,7 @@ export function PropertyValuationChart({
             margin={{ top: 8, right: 12, left: 0, bottom: 4 }}
           >
             <defs>
-              <linearGradient id="pvc-band" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={bandId} x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="0%"
                   stopColor="var(--market-blue)"
@@ -349,7 +369,7 @@ export function PropertyValuationChart({
               type="monotone"
               dataKey="band"
               stroke="none"
-              fill="url(#pvc-band)"
+              fill={`url(#${bandId})`}
               isAnimationActive={false}
               connectNulls
               activeDot={false}
@@ -460,93 +480,10 @@ export function PropertyValuationChart({
               borderTop: "1px dashed var(--market-text-secondary)",
             }}
           />
-          ZIP benchmark
+          ZIP ZHVI benchmark
         </span>
         <span>Confidence band shaded behind line</span>
       </div>
     </div>
   );
 }
-
-// =============================================================
-// Mock data — for development preview
-// =============================================================
-
-/**
- * 5 years of historical points (annual), current year, plus 3 projected
- * years. Includes one acquisition event and one renovation event.
- *
- * Numbers are rounded made-up values for demo only; replace with real
- * snapshot-driven inputs (see file header for mapping).
- */
-export const SAMPLE_VALUATION_DATA: ValuationPoint[] = [
-  {
-    date: "2021-06-01",
-    propertyValue: 285_000,
-    lowerBound: 268_000,
-    upperBound: 302_000,
-    benchmarkValue: 240_000,
-    event: "Acquisition",
-  },
-  {
-    date: "2022-06-01",
-    propertyValue: 312_000,
-    lowerBound: 295_000,
-    upperBound: 330_000,
-    benchmarkValue: 258_000,
-  },
-  {
-    date: "2023-06-01",
-    propertyValue: 332_000,
-    lowerBound: 315_000,
-    upperBound: 350_000,
-    benchmarkValue: 269_000,
-  },
-  {
-    date: "2024-06-01",
-    propertyValue: 348_000,
-    lowerBound: 330_000,
-    upperBound: 366_000,
-    benchmarkValue: 278_000,
-    event: "Renovation",
-  },
-  {
-    date: "2025-06-01",
-    propertyValue: 372_000,
-    lowerBound: 354_000,
-    upperBound: 390_000,
-    benchmarkValue: 287_000,
-  },
-  {
-    date: "2026-06-01",
-    propertyValue: 388_000,
-    lowerBound: 369_000,
-    upperBound: 408_000,
-    benchmarkValue: 295_000,
-  },
-  // Projection segment
-  {
-    date: "2027-06-01",
-    propertyValue: 404_000,
-    lowerBound: 380_000,
-    upperBound: 428_000,
-    benchmarkValue: 304_000,
-    isProjection: true,
-  },
-  {
-    date: "2028-06-01",
-    propertyValue: 421_000,
-    lowerBound: 391_000,
-    upperBound: 451_000,
-    benchmarkValue: 313_000,
-    isProjection: true,
-  },
-  {
-    date: "2029-06-01",
-    propertyValue: 438_000,
-    lowerBound: 402_000,
-    upperBound: 474_000,
-    benchmarkValue: 322_000,
-    isProjection: true,
-  },
-];
