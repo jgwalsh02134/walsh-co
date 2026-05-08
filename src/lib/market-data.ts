@@ -15,6 +15,13 @@ export type AssetRole =
 
 export type TrackedProperty = {
   id: string;
+  /**
+   * URL-safe slug used for /properties/[slug] routing. Distinct from `id`
+   * — the id retains the legacy "<short-name>-<number>" form used as a
+   * snapshot key, while the slug is the human-readable URL form
+   * "<number>-<short-name>" requested for the property detail pages.
+   */
+  slug: string;
   address: string;
   city: string;
   state: string;
@@ -37,6 +44,7 @@ export type TrackedProperty = {
 export const trackedProperties: TrackedProperty[] = [
   {
     id: "loudonwood-51",
+    slug: "51-loudonwood",
     address: "51 Loudonwood E",
     city: "Loudonville",
     state: "NY",
@@ -49,6 +57,7 @@ export const trackedProperties: TrackedProperty[] = [
   },
   {
     id: "momrow-16",
+    slug: "16-momrow",
     address: "16 Momrow Ct",
     city: "Menands",
     state: "NY",
@@ -61,6 +70,7 @@ export const trackedProperties: TrackedProperty[] = [
   },
   {
     id: "osborne-322",
+    slug: "322-osborne",
     address: "322 Osborne Rd",
     city: "Loudonville",
     state: "NY",
@@ -75,6 +85,7 @@ export const trackedProperties: TrackedProperty[] = [
   },
   {
     id: "macaffer-14",
+    slug: "14-macaffer",
     address: "14 MacAffer Dr",
     city: "Menands",
     state: "NY",
@@ -87,6 +98,11 @@ export const trackedProperties: TrackedProperty[] = [
       "Held outside the business structure. Excluded from business portfolio KPIs. Displayed facts are reference-only until separately confirmed.",
   },
 ];
+
+/** Lookup by URL slug for the property detail route. */
+export function getPropertyBySlug(slug: string): TrackedProperty | null {
+  return trackedProperties.find((p) => p.slug === slug) ?? null;
+}
 
 /** Confidence on a 0-100 scale, or null if unknown. */
 export type ConfidencePct = number | null;

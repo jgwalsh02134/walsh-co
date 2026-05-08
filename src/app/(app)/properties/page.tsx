@@ -1,97 +1,82 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
-import { statusTokens } from "@/lib/status";
+import { ToneTag } from "@/components/tone-tag";
+import { trackedProperties, type TrackedProperty } from "@/lib/market-data";
+import type { StatusTone } from "@/lib/status";
 
-type PropertyRow = {
-  address: string;
-  status: string;
-  description: string;
-  tone: keyof typeof statusTokens;
-  href?: string;
-  needsVerification?: boolean;
-};
-
-const businessProperties: PropertyRow[] = [
-  {
-    address: "51 Loudonwood E",
-    status: "Active Rental",
-    description: "Cash-flowing investment property.",
-    tone: "success",
-  },
-  {
-    address: "16 Momrow Ct",
-    status: "Active Rental",
-    description: "Cash-flowing investment property.",
-    tone: "success",
-  },
-  {
-    address: "322 Osborne Rd",
-    status: "Active Renovation Project",
-    description:
-      "Renovation in bidding & procurement. ZIP and official facts need verification.",
-    tone: "review",
-    href: "/renovation",
-    needsVerification: true,
-  },
-];
-
-const privateProperty: PropertyRow = {
-  address: "14 MacAffer Dr",
-  status: "Private / Reference Only",
-  description:
-    "Primary residence outside the business structure. Tracked for reference — excluded from business portfolio KPIs.",
-  tone: "neutral",
-};
-
-function ToneTag({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: keyof typeof statusTokens;
-}) {
-  const t = statusTokens[tone];
-  return (
-    <span
-      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
-      style={{ background: t.background, color: t.text, borderColor: t.border }}
-    >
-      {label}
-    </span>
-  );
+function statusToneFor(role: TrackedProperty["assetRole"]): StatusTone {
+  switch (role) {
+    case "Active Rental":
+      return "success";
+    case "Active Renovation Project":
+      return "review";
+    case "Private / Reference Only":
+      return "neutral";
+    default:
+      return "neutral";
+  }
 }
 
-function PropertyCard({ property }: { property: PropertyRow }) {
+function PropertyCard({ property }: { property: TrackedProperty }) {
+  const detailHref = `/properties/${property.slug}`;
+  const subline = [
+    property.city,
+    property.state,
+    property.zip ? `ZIP ${property.zip}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <article className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+    <Link
+      href={detailHref}
+      aria-label={`Open ${property.address}`}
+      className="group flex flex-col gap-2 rounded-[var(--radius-xl)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card),var(--shadow-card-ring)] transition-[transform,box-shadow] duration-150 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover),var(--shadow-card-ring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] motion-reduce:hover:translate-y-0"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-base font-semibold text-[var(--color-text)]">
+        <h3 className="text-base font-semibold text-[var(--workspace-text)]">
           {property.address}
         </h3>
-        <ToneTag label={property.status} tone={property.tone} />
+        <ToneTag
+          label={property.assetRole}
+          tone={statusToneFor(property.assetRole)}
+        />
       </div>
-      <p className="text-sm text-[var(--color-text-muted)]">
-        {property.description}
+      <p className="text-sm text-[var(--workspace-text-secondary)]">
+        {subline}
       </p>
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        {property.needsVerification ? (
-          <ToneTag label="Needs verification" tone="warning" />
+      {property.notes ? (
+        <p className="text-sm leading-relaxed text-[var(--workspace-text-secondary)]">
+          {property.notes}
+        </p>
+      ) : null}
+      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+        {property.factsNeedVerification ? (
+          <ToneTag label="Facts need verification" tone="warning" />
         ) : null}
-        {property.href ? (
-          <Link
-            href={property.href}
-            className="font-semibold text-[var(--color-primary)] hover:underline"
+        {property.workspaceHref ? (
+          <span className="font-semibold text-[var(--color-primary)]">
+            Workspace available
+          </span>
+        ) : null}
+        <span className="ml-auto inline-flex items-center gap-1 font-semibold text-[var(--color-primary)]">
+          Open
+          <span
+            aria-hidden
+            className="inline-flex transition-transform duration-150 ease-out group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
           >
-            Open workspace
-          </Link>
-        ) : null}
+            →
+          </span>
+        </span>
       </div>
-    </article>
+    </Link>
   );
 }
 
 export default function PropertiesPage() {
+  const business = trackedProperties.filter((p) => p.kind === "business");
+  const reference = trackedProperties.filter((p) => p.kind === "private");
+
   return (
     <>
       <PageHeader
@@ -105,20 +90,24 @@ export default function PropertiesPage() {
         description="Held under J.G. Walsh & Co. Holding Company LLC."
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {businessProperties.map((p) => (
-            <PropertyCard key={p.address} property={p} />
+          {business.map((p) => (
+            <PropertyCard key={p.slug} property={p} />
           ))}
         </div>
       </SectionPanel>
 
-      <SectionPanel
-        title="Private / Reference Only"
-        description="Excluded from business portfolio KPIs."
-      >
-        <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-soft)] p-1">
-          <PropertyCard property={privateProperty} />
-        </div>
-      </SectionPanel>
+      {reference.length > 0 ? (
+        <SectionPanel
+          title="Private / Reference Only"
+          description="Excluded from business portfolio KPIs."
+        >
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {reference.map((p) => (
+              <PropertyCard key={p.slug} property={p} />
+            ))}
+          </div>
+        </SectionPanel>
+      ) : null}
     </>
   );
 }
