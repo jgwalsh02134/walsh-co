@@ -23,8 +23,8 @@ import {
   generatePropertyAnalysis,
   generatePropertyAnalysisWithWebSearch,
   type MarketNoteState,
-  type PropertyNoteInput,
 } from "../market-note-actions";
+import { buildPropertyNoteInput } from "../property-note-builder";
 import {
   PropertyValuationChart,
   type ValuationPoint,
@@ -1102,110 +1102,4 @@ function propertyAccent(id: string): string {
     default:
       return "var(--market-border-strong)";
   }
-}
-
-// =============================================================
-// Property note input builder (client → server action payload)
-// =============================================================
-
-function buildPropertyNoteInput(data: PropertyCardData): PropertyNoteInput {
-  const { property, house, rent, trend, attomFacts, attentionItems } = data;
-
-  const valueRange =
-    house.rangeLow != null && house.rangeHigh != null
-      ? `${formatCurrency(house.rangeLow)} – ${formatCurrency(house.rangeHigh)}`
-      : "no range";
-  const rentRange =
-    rent.rangeLow != null && rent.rangeHigh != null
-      ? `${formatCurrency(rent.rangeLow)}/mo – ${formatCurrency(rent.rangeHigh)}/mo`
-      : "no range";
-
-  const summarizeComps = (comps: PropertyComp[], kind: "sale" | "rent") =>
-    comps.slice(0, 5).map((c) => {
-      const amount =
-        c.amount != null
-          ? kind === "sale"
-            ? formatCurrency(c.amount)
-            : `${formatCurrency(c.amount)}/mo`
-          : kind === "sale"
-          ? "no price"
-          : "rent not returned";
-      const meta = [
-        c.beds != null ? `${c.beds}bd` : null,
-        c.baths != null ? `${c.baths}ba` : null,
-        c.sqft != null ? `${c.sqft.toLocaleString()} sqft` : null,
-        c.distanceMiles != null ? `${c.distanceMiles.toFixed(1)} mi` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      return `${c.address ?? "—"} · ${amount}${meta ? ` · ${meta}` : ""}`;
-    });
-
-  return {
-    property: {
-      address: property.address,
-      city: property.city,
-      zip: property.zip,
-      role: property.role,
-      isPrivate: property.isPrivate,
-    },
-    houseValue: {
-      value: formatCurrency(house.value),
-      source: house.source,
-      range: valueRange,
-      confidence:
-        house.confidence != null ? `${Math.round(house.confidence)}/100` : "—",
-      asOf: house.asOfDate ? formatDate(house.asOfDate) : "—",
-    },
-    marketRent: {
-      rent: formatRent(rent.rent),
-      source: rent.source,
-      range: rentRange,
-      asOf: rent.asOfDate ? formatDate(rent.asOfDate) : "—",
-    },
-    yieldPct: formatPctValue(data.yieldPct, 2),
-    verification: data.verification.verifiedByAttom
-      ? "ATTOM verified"
-      : property.factsNeedVerification || property.zipNeedsVerification
-      ? "Records pending"
-      : "Manual notes",
-    zipTrend: {
-      zip: trend.zip,
-      latest: formatCurrency(trend.latestValue),
-      change1Y: formatPctChange(trend.yoyChange),
-      change3Y: formatPctChange(trend.threeYearChange),
-      change5Y: formatPctChange(trend.fiveYearChange),
-      asOf: trend.latestDate ? formatDate(trend.latestDate) : "—",
-    },
-    attomFacts: {
-      apn: attomFacts?.apn ?? "—",
-      yearBuilt:
-        attomFacts?.yearBuilt != null ? String(attomFacts.yearBuilt) : "—",
-      sqft:
-        attomFacts?.buildingSize != null
-          ? `${attomFacts.buildingSize.toLocaleString()} sqft`
-          : "—",
-      assessed:
-        attomFacts?.assessedValue != null
-          ? formatCurrency(attomFacts.assessedValue)
-          : "—",
-      annualTaxes:
-        attomFacts?.annualTaxes != null
-          ? formatCurrency(attomFacts.annualTaxes)
-          : "—",
-      lastSale:
-        attomFacts?.lastSalePrice != null
-          ? `${formatCurrency(attomFacts.lastSalePrice)} on ${
-              attomFacts.lastSaleDate ? formatDate(attomFacts.lastSaleDate) : "—"
-            }`
-          : "—",
-    },
-    comps: {
-      saleCount: data.saleComps.length,
-      rentalCount: data.rentalComps.length,
-      saleSummary: summarizeComps(data.saleComps, "sale"),
-      rentalSummary: summarizeComps(data.rentalComps, "rent"),
-    },
-    attentionItems,
-  };
 }

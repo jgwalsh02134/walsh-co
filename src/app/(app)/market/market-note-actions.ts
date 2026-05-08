@@ -6,6 +6,10 @@ import {
   hasOpenAIKey,
 } from "@/lib/openai";
 
+// =============================================================
+// Public types
+// =============================================================
+
 export type MarketNoteProperty = {
   address: string;
   city: string;
@@ -44,12 +48,6 @@ export type MarketNoteInput = {
   attentionItems: string[];
 };
 
-export type MarketNoteState = {
-  ok: boolean;
-  message: string;
-  sources?: AiSource[];
-};
-
 export type AiSource = {
   title: string;
   url: string;
@@ -57,88 +55,162 @@ export type AiSource = {
   usedFor?: string;
 };
 
+export type MarketNoteMode = "internal" | "web" | "property";
+
+export type MarketNoteState = {
+  ok: boolean;
+  message: string;
+  sources?: AiSource[];
+  /** Mode badge displayed at the top of the rendered note. */
+  modeLabel?: string;
+};
+
+// =============================================================
+// Shared safety / behaviour clauses
+// =============================================================
+
+const SAFETY_CLAUSE = [
+  "Do not call this an appraisal.",
+  "Do not give legal, tax, zoning, or financial conclusions.",
+  "Do not invent values that are not in the supplied data or the cited sources.",
+  "Use Markdown only. Do not include a meta-preamble; start with the heading specified.",
+].join(" ");
+
+const NO_PARROT_CLAUSE = [
+  "You are NOT being asked to repeat the dashboard.",
+  "The dashboard already shows RentCast, ATTOM, Zillow ZHVI, FRED, Google Maps, Census ACS, and manual values.",
+  "Use those values only as context.",
+  "Return only NEW insights, source conflicts, missing-data warnings, and next checks.",
+  "If a value already shown on the dashboard is restated, it must be to flag a conflict, corroboration, or staleness — never as decoration.",
+].join(" ");
+
+const PREFERRED_SOURCES = [
+  "Prefer official municipal/county/state/federal records, FHFA, FRED, Census, Zillow Research, Redfin Data Center, and reputable housing-market sources.",
+  "Avoid SEO blogs, unverified realtor marketing pages, and undated listings.",
+  "If a source is older than 12 months, label it stale.",
+].join(" ");
+
+// =============================================================
+// Portfolio-level Internal Summary
+// =============================================================
+
 export async function generateMarketNote(
   input: MarketNoteInput
 ): Promise<MarketNoteState> {
-  return runMarketNote(input, false);
-}
-
-export async function generateMarketNoteWithWebSearch(
-  input: MarketNoteInput
-): Promise<MarketNoteState> {
-  return runMarketNote(input, true);
-}
-
-async function runMarketNote(
-  input: MarketNoteInput,
-  webSearch: boolean
-): Promise<MarketNoteState> {
   if (!hasOpenAIKey()) {
-    return { ok: false, message: "OpenAI API key not configured." };
+    return {
+      ok: false,
+      message: "OpenAI API key not configured.",
+      modeLabel: "Internal Summary",
+    };
   }
 
   const prompt = [
-    "Create a short internal market analysis for the J.G. Walsh & Co. Market Tracker.",
-    "Use only the supplied portfolio/property data unless web search is explicitly enabled.",
-    "Do not call this an appraisal. Do not make legal, zoning, or financial conclusions.",
-    "Return Markdown only, using this structure:",
-    "# Market Note",
-    "## Executive Takeaway",
-    "- 2-3 bullets max.",
-    "## Property Value Signal",
-    "- House value by source, range/confidence, and source disagreement if visible.",
-    "## Rent Signal",
-    "- Current market rent and rent range/comps if available.",
-    "## Evidence",
-    "- RentCast comps, ATTOM verification, Zillow ZIP trend, and FRED macro context if relevant.",
-    "## Risks / Missing Data",
-    "- Missing assessment/tax, acquisition basis, stale snapshots, unknown condition/renovation scope.",
+    "You are producing an INTERNAL provider summary for the J.G. Walsh & Co. Market Tracker.",
+    "Use only the supplied dashboard data. Do not search the web in this mode.",
+    SAFETY_CLAUSE,
+    "Do not list every value. Pick what matters.",
+    "Required Markdown structure (use exactly these headings):",
+    "# Ψ Internal Market Summary",
+    "## Portfolio Signal",
+    "- 2–3 bullets that highlight the headline takeaway, not raw numbers.",
+    "## Value / Rent Observations",
+    "- Highlight value vs rent disagreement, range tightness, or unusual yield.",
+    "- Do not enumerate every property's numbers — call out what is interesting.",
+    "## Gaps",
+    "- Missing acquisition basis, missing tax/assessment, stale snapshots, missing condition/renovation facts, missing external confirmation.",
     "## Next Checks",
-    "- 3-5 concise actionable checks.",
-    "## Sources",
-    "- Compact internal/provider source list. Use [1], [2] markers only when web search is enabled.",
-    "Keep the whole note concise.",
+    "- 3–5 concrete, short action items.",
+    "End with a one-line note: \"Internal provider summary — no web research.\"",
     "",
+    "Dashboard data (JSON):",
     JSON.stringify(input, null, 2),
   ].join("\n");
 
   try {
-    if (webSearch) {
-      const result = await generateWorkspaceTextWithWebSearch({
-        prompt:
-          prompt +
-          "\nIf web search is useful, use it only for broad current mortgage/rate context and cite sources.",
-      });
-
-      return {
-        ok: true,
-        message: result.outputText || "OpenAI returned no note text.",
-        sources: normalizeAiSources(
-          result.sources,
-          "Current macro / mortgage-rate context"
-        ),
-      };
-    }
-
     const result = await generateWorkspaceText({ prompt });
-
     return {
       ok: true,
       message: result.outputText || "OpenAI returned no note text.",
+      modeLabel: "Internal Summary",
     };
   } catch (error) {
     return {
       ok: false,
-      message:
-        error instanceof Error
-          ? `AI market note failed: ${error.message.slice(0, 220)}`
-          : "AI market note failed.",
+      message: errorMessage(error, "AI internal summary failed"),
+      modeLabel: "Internal Summary",
     };
   }
 }
 
 // =============================================================
-// Per-property AI analysis
+// Portfolio-level Web Research
+// =============================================================
+
+export async function generateMarketNoteWithWebSearch(
+  input: MarketNoteInput
+): Promise<MarketNoteState> {
+  if (!hasOpenAIKey()) {
+    return {
+      ok: false,
+      message: "OpenAI API key not configured.",
+      modeLabel: "Web Research",
+    };
+  }
+
+  const prompt = [
+    "You are producing a WEB-RESEARCHED market intelligence note for the J.G. Walsh & Co. Market Tracker.",
+    NO_PARROT_CLAUSE,
+    SAFETY_CLAUSE,
+    PREFERRED_SOURCES,
+    "Search for: current Albany County / Loudonville (12211) / Menands (12204) housing-market context;",
+    "nearby listing/sale activity if publicly available; FHFA HPI and Zillow Research / Redfin Data Center / Census / FRED context;",
+    "official county/town records that disambiguate property facts; rate environment relevant to small landlords.",
+    "Inline cite with [1], [2], [3] markers ONLY where a claim depends on the cited source.",
+    "Required Markdown structure (use exactly these headings):",
+    "# Ψ Market Intelligence Note",
+    "## Executive Takeaway",
+    "- 2–3 bullets max, each delivering NEW insight beyond the dashboard.",
+    "## External Market Signal",
+    "- Summarize external market evidence. Do not repeat dashboard values unless flagging conflict or staleness.",
+    "## Property-Specific Notes",
+    "### 51 Loudonwood E",
+    "- New external context. Confirmation/conflict vs dashboard. Next check.",
+    "### 16 Momrow Ct",
+    "- New external context. Confirmation/conflict vs dashboard. Next check.",
+    "### 322 Osborne Rd",
+    "- New external context. Confirmation/conflict vs dashboard. Next check.",
+    "## Data Conflicts / Watch Items",
+    "- Source disagreement, missing public-record fields, stale provider data, renovation/condition uncertainty, rent/value mismatch where relevant.",
+    "## Next Checks",
+    "- 3–6 concise action items.",
+    "Do NOT include a Markdown ## Sources section — the UI renders sources separately.",
+    "End with a one-line note: \"Web-researched market note — external sources used.\"",
+    "",
+    "Dashboard data (JSON, context only):",
+    JSON.stringify(input, null, 2),
+  ].join("\n");
+
+  try {
+    const result = await generateWorkspaceTextWithWebSearch({ prompt });
+    return {
+      ok: true,
+      message: result.outputText || "OpenAI returned no note text.",
+      modeLabel: "Web Research",
+      sources: normalizeAiSources(result.sources, "External corroboration / context"),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error, "AI web research failed"),
+      modeLabel: "Web Research",
+    };
+  }
+}
+
+// =============================================================
+// Per-property analysis (used by both the per-property card and
+// the Property Research mode of the main AI panel).
 // =============================================================
 
 export type PropertyNoteInput = {
@@ -192,102 +264,137 @@ export type PropertyNoteInput = {
 export async function generatePropertyAnalysis(
   input: PropertyNoteInput
 ): Promise<MarketNoteState> {
-  return runPropertyAnalysis(input, false);
+  if (!hasOpenAIKey()) {
+    return {
+      ok: false,
+      message: "OpenAI API key not configured.",
+      modeLabel: "Internal Summary",
+    };
+  }
+
+  const prompt = [
+    "You are producing an INTERNAL provider summary for ONE property in the J.G. Walsh & Co. Market Tracker.",
+    "Use only the supplied property data. Do not search the web in this mode.",
+    SAFETY_CLAUSE,
+    `${input.property.isPrivate ? "This property is held privately and is reference-only — exclude from business KPI commentary." : ""}`,
+    "Required Markdown structure (use exactly these headings):",
+    "# Ψ Internal Property Summary",
+    "## Headline",
+    "- 2 bullets max — what stands out about THIS property.",
+    "## Value / Rent",
+    "- Source disagreement, range tightness, yield, ATTOM verification status.",
+    "## Gaps",
+    "- Missing acquisition basis, tax/assessment, stale provider data, renovation/condition uncertainty.",
+    "## Next Checks",
+    "- 3–5 short action items.",
+    "End with a one-line note: \"Internal provider summary — no web research.\"",
+    "",
+    "Property data (JSON):",
+    JSON.stringify(input, null, 2),
+  ].join("\n");
+
+  try {
+    const result = await generateWorkspaceText({ prompt });
+    return {
+      ok: true,
+      message: result.outputText || "OpenAI returned no note text.",
+      modeLabel: "Internal Summary",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error, "AI property summary failed"),
+      modeLabel: "Internal Summary",
+    };
+  }
 }
 
 export async function generatePropertyAnalysisWithWebSearch(
   input: PropertyNoteInput
 ): Promise<MarketNoteState> {
-  return runPropertyAnalysis(input, true);
-}
-
-async function runPropertyAnalysis(
-  input: PropertyNoteInput,
-  webSearch: boolean
-): Promise<MarketNoteState> {
   if (!hasOpenAIKey()) {
-    return { ok: false, message: "OpenAI API key not configured." };
+    return {
+      ok: false,
+      message: "OpenAI API key not configured.",
+      modeLabel: "Property Research",
+    };
   }
 
   const prompt = [
-    "Create an internal property analysis for the J.G. Walsh & Co. Market Tracker.",
-    "Use only the supplied property data unless web search is explicitly enabled.",
-    "Do not call this an appraisal. Do not make legal, zoning, or financial conclusions.",
-    "Be concrete and reference the supplied numbers.",
-    "Return Markdown only, using this structure:",
-    "# Market Note",
-    "## Executive Takeaway",
-    "- 2-3 bullets max.",
-    "## Property Value Signal",
-    "- House value by source, range/confidence, and source disagreement if visible.",
-    "## Rent Signal",
-    "- Current market rent and rent range/comps if available.",
-    "## Evidence",
-    "- RentCast comps, ATTOM verification, Zillow ZIP trend, and FRED macro context if relevant.",
-    "## Risks / Missing Data",
-    "- Missing assessment/tax, acquisition basis, stale snapshots, unknown condition/renovation scope.",
+    "You are producing a WEB-RESEARCHED property research note for ONE property in the J.G. Walsh & Co. Market Tracker.",
+    NO_PARROT_CLAUSE,
+    SAFETY_CLAUSE,
+    PREFERRED_SOURCES,
+    "Use the supplied address, city, ZIP, and dashboard values strictly as CONTEXT.",
+    "Search for: current submarket activity for this ZIP and town; nearby publicly-listed sales / rentals;",
+    "official county/town record context (parcel, assessment, recent sale, permits if discoverable);",
+    "any condition/renovation context if publicly disclosed; FHFA HPI, Zillow Research, Redfin, Census, FRED context relevant to this submarket.",
+    "Inline cite with [1], [2], [3] markers ONLY where a claim depends on the cited source.",
+    "Required Markdown structure (use exactly these headings):",
+    "# Ψ Property Research Note",
+    "## Headline",
+    "- 2–3 bullets, each a NEW external insight beyond the dashboard.",
+    "## Submarket Signal",
+    "- External activity at the ZIP / town level. Note staleness when applicable.",
+    "## Property-Specific Findings",
+    "- New external context. Confirmation or conflict with dashboard values. Verifiable public-record clues.",
+    "## Risks / Watch Items",
+    "- Source disagreement, missing public-record fields, stale provider data, condition/renovation uncertainty, rent/value mismatch.",
     "## Next Checks",
-    "- 3-5 concise actionable checks.",
-    "## Sources",
-    "- Compact internal/provider source list. Use [1], [2] markers only when web search is enabled.",
-    "Keep the whole note concise.",
+    "- 3–6 concrete action items.",
+    "Do NOT include a Markdown ## Sources section — the UI renders sources separately.",
+    "End with a one-line note: \"Web-researched property note — external sources used.\"",
     "",
+    "Property data (JSON, context only):",
     JSON.stringify(input, null, 2),
   ].join("\n");
 
   try {
-    if (webSearch) {
-      const result = await generateWorkspaceTextWithWebSearch({
-        prompt:
-          prompt +
-          "\nIf web search is useful, use it only for broad current mortgage/rate context for the ZIP and cite sources.",
-      });
-      return {
-        ok: true,
-        message: result.outputText || "OpenAI returned no note text.",
-        sources: normalizeAiSources(
-          result.sources,
-          "Current ZIP / macro market context"
-        ),
-      };
-    }
-
-    const result = await generateWorkspaceText({ prompt });
+    const result = await generateWorkspaceTextWithWebSearch({ prompt });
     return {
       ok: true,
       message: result.outputText || "OpenAI returned no note text.",
+      modeLabel: "Property Research",
+      sources: normalizeAiSources(
+        result.sources,
+        `External context for ${input.property.address}`
+      ),
     };
   } catch (error) {
     return {
       ok: false,
-      message:
-        error instanceof Error
-          ? `AI property analysis failed: ${error.message.slice(0, 220)}`
-          : "AI property analysis failed.",
+      message: errorMessage(error, "AI property research failed"),
+      modeLabel: "Property Research",
     };
   }
 }
 
+// =============================================================
+// Helpers
+// =============================================================
+
 function normalizeAiSources(urls: string[], usedFor: string): AiSource[] {
   const seen = new Set<string>();
   const sources: AiSource[] = [];
-
-  for (const url of urls) {
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
+  for (const raw of urls) {
+    if (!raw || seen.has(raw)) continue;
+    seen.add(raw);
     let domain = "source";
+    let title = raw;
     try {
-      domain = new URL(url).hostname.replace(/^www\./, "");
+      const u = new URL(raw);
+      domain = u.hostname.replace(/^www\./, "");
+      const path = u.pathname.replace(/\/$/, "");
+      title = path && path !== "" ? `${domain}${path}` : domain;
     } catch {
       domain = "source";
     }
-    sources.push({
-      title: domain,
-      domain,
-      url,
-      usedFor,
-    });
+    sources.push({ title, domain, url: raw, usedFor });
   }
-
   return sources;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return `${fallback}: ${error.message.slice(0, 220)}`;
+  return `${fallback}.`;
 }

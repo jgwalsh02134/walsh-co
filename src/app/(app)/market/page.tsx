@@ -1371,6 +1371,20 @@ export default async function MarketPage() {
             ? relativeAge(zillowLatestFetchedAt)
             : null,
         }}
+        googleMapsFreshness={{
+          label: "Google Maps",
+          configured: googleMapsKeyConfigured,
+          relative: googleMapsLatestFetchedAt
+            ? relativeAge(googleMapsLatestFetchedAt)
+            : null,
+        }}
+        censusFreshness={{
+          label: "Census ACS",
+          configured: censusKeyConfigured,
+          relative: censusLatestFetchedAt
+            ? relativeAge(censusLatestFetchedAt)
+            : null,
+        }}
         hasManualEntries={manualEntries.size > 0}
         databaseAvailable={dbAvailable}
       />
@@ -1395,57 +1409,47 @@ export default async function MarketPage() {
         freshnessSub="Latest provider snapshot"
       />
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <h2 className="font-display text-lg font-semibold text-[var(--market-text)]">
-              Property comparison
-            </h2>
-            <p className="text-xs text-[var(--market-text-secondary)]">
-              House market value, market rent, ZIP trend, and ATTOM
-              verification — kept on separate pipelines per property.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            {businessCards.map((d) => (
-              <PropertyCard key={d.property.id} data={d} />
-            ))}
-          </div>
-
-          {privateCard ? (
-            <section className="flex flex-col gap-2 pt-2">
-              <div className="flex flex-col gap-1">
-                <h2 className="font-display text-lg font-semibold text-[var(--market-text)]">
-                  Private / Reference Only
-                </h2>
-                <p className="text-xs text-[var(--market-text-secondary)]">
-                  Held outside the business structure. Excluded from portfolio
-                  KPIs and AI portfolio analysis. Shown as reference context only.
-                </p>
-              </div>
-              <PropertyCard data={privateCard} />
-            </section>
-          ) : null}
-        </div>
-
-        <aside className="flex flex-col gap-4">
-          <AiMarketAnalysisPanel input={marketNoteInput} />
-          <NeedsAttentionPanel groups={attentionGroups} />
-        </aside>
-      </div>
-
-      <MacroContextPanel
-        observations={macroObservations}
-        asOf={
-          fredLatestFetchedAt ? relativeAge(fredLatestFetchedAt) : null
-        }
-        empty={
-          fredKeyConfigured
-            ? undefined
-            : "FRED key not configured. Set FRED_API_KEY to enable."
+      <AiMarketAnalysisPanel
+        marketInput={marketNoteInput}
+        propertyCards={
+          privateCard ? [...businessCards, privateCard] : businessCards
         }
       />
+
+      <NeedsAttentionPanel groups={attentionGroups} />
+
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-display text-lg font-semibold text-[var(--market-text)]">
+            Property comparison
+          </h2>
+          <p className="text-xs text-[var(--market-text-secondary)]">
+            House market value, market rent, ZIP trend, and ATTOM
+            verification — kept on separate pipelines per property.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          {businessCards.map((d) => (
+            <PropertyCard key={d.property.id} data={d} />
+          ))}
+        </div>
+
+        {privateCard ? (
+          <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-1">
+              <h2 className="font-display text-lg font-semibold text-[var(--market-text)]">
+                Private / Reference Only
+              </h2>
+              <p className="text-xs text-[var(--market-text-secondary)]">
+                Held outside the business structure. Excluded from portfolio
+                KPIs and AI portfolio analysis. Shown as reference context only.
+              </p>
+            </div>
+            <PropertyCard data={privateCard} />
+          </div>
+        ) : null}
+      </section>
 
       <LocationDemographicsPanel
         geocodes={geocodeRows}
@@ -1459,6 +1463,18 @@ export default async function MarketPage() {
         }
         censusFetchedAt={
           censusLatestFetchedAt ? relativeAge(censusLatestFetchedAt) : null
+        }
+      />
+
+      <MacroContextPanel
+        observations={macroObservations}
+        asOf={
+          fredLatestFetchedAt ? relativeAge(fredLatestFetchedAt) : null
+        }
+        empty={
+          fredKeyConfigured
+            ? undefined
+            : "FRED key not configured. Set FRED_API_KEY to enable."
         }
       />
 

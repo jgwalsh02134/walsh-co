@@ -1,17 +1,36 @@
 "use client";
 
+/**
+ * Renders an AI market note as readable Markdown with compact citations
+ * and copy / plain-text / share controls.
+ *
+ * Two visual variants:
+ *   - "light" — used by the new portfolio AI panel (warm off-white card
+ *     layered over the dark dashboard).
+ *   - "dark"  — used by the per-property card so the AI block continues
+ *     to fit inside an existing dark card without a jarring contrast jump.
+ *
+ * No data fetching here. The state object is produced by server actions
+ * in market-note-actions.ts.
+ */
+
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { AiSource, MarketNoteState } from "../market-note-actions";
+
+type Variant = "light" | "dark";
 
 type AiResponseCardProps = {
   state: MarketNoteState;
+  variant?: Variant;
+  /** Optional disclaimer override; defaults to a neutral label. */
   title?: string;
 };
 
 export function AiResponseCard({
   state,
-  title = "AI-generated internal draft. Verify before relying.",
+  variant = "dark",
+  title = "AI-generated internal draft. Not an appraisal. Verify before relying.",
 }: AiResponseCardProps) {
   const [copied, setCopied] = useState<string | null>(null);
   const [showAllSources, setShowAllSources] = useState(false);
@@ -58,51 +77,106 @@ export function AiResponseCard({
     }
   };
 
+  const tokens = themeTokens(variant);
+
   return (
-    <div className="border border-[var(--market-border)] bg-[var(--market-surface-raised)]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--market-border)] px-3 py-2">
-        <p className="text-[11px] font-semibold text-[var(--market-amber)]">
-          {title}
-        </p>
+    <div
+      className="overflow-hidden border"
+      style={{
+        background: tokens.surface,
+        borderColor: tokens.border,
+        borderRadius: 14,
+        color: tokens.text,
+        boxShadow: variant === "light" ? "0 1px 2px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.06)" : "none",
+      }}
+    >
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2"
+        style={{ borderColor: tokens.border, background: tokens.headerSurface }}
+      >
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          {state.modeLabel ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+              style={{
+                background: tokens.badgeBg,
+                borderColor: tokens.badgeBorder,
+                color: tokens.badgeText,
+              }}
+            >
+              <span aria-hidden style={{ fontFamily: "serif" }}>
+                Ψ
+              </span>
+              {state.modeLabel}
+            </span>
+          ) : null}
+          <p
+            className="text-[11px] font-medium"
+            style={{ color: tokens.textMuted }}
+          >
+            {title}
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {copied ? (
-            <span className="text-[11px] text-[var(--market-cyan)]">
+            <span className="text-[11px]" style={{ color: tokens.accent }}>
               {copied}
             </span>
           ) : null}
-          <AiActionButton
+          <PillButton
             label="Copy Markdown"
             onClick={() => copy("Copied", markdownWithSources)}
+            tokens={tokens}
           />
-          <AiActionButton
+          <PillButton
             label="Copy plain text"
             onClick={() => copy("Copied", plainText)}
+            tokens={tokens}
           />
-          <AiActionButton label="Share" onClick={share} />
+          <PillButton label="Share" onClick={share} tokens={tokens} />
         </div>
       </div>
 
-      <div className="px-3 py-3">
-        <MarkdownView markdown={markdown} />
+      <div className="px-4 py-4 sm:px-5">
+        <MarkdownView markdown={markdown} tokens={tokens} />
       </div>
 
       {sources.length > 0 ? (
-        <div className="border-t border-[var(--market-border)] px-3 py-3">
-          <div className="mb-2 text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+        <div
+          className="border-t px-4 py-3 sm:px-5"
+          style={{ borderColor: tokens.border, background: tokens.footerSurface }}
+        >
+          <div
+            className="mb-2 text-[11px] uppercase tracking-wide"
+            style={{ color: tokens.textMuted }}
+          >
             Sources
           </div>
           <ol className="flex flex-col gap-2">
             {visibleSources.map((source, index) => (
-              <SourceRow key={`${source.url}-${index}`} index={index + 1} source={source} />
+              <SourceRow
+                key={`${source.url}-${index}`}
+                index={index + 1}
+                source={source}
+                tokens={tokens}
+              />
             ))}
           </ol>
           {sources.length > 5 ? (
             <button
               type="button"
               onClick={() => setShowAllSources((v) => !v)}
-              className="mt-3 min-h-[40px] text-xs font-semibold text-[var(--market-cyan)] hover:text-[var(--market-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]"
+              className="mt-3 min-h-[40px] rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{
+                background: tokens.pillSurface,
+                borderColor: tokens.border,
+                color: tokens.text,
+                outlineColor: tokens.accent,
+              }}
             >
-              {showAllSources ? "Show fewer sources" : `Show all sources (${sources.length})`}
+              {showAllSources
+                ? "Show fewer sources"
+                : `Show all sources (${sources.length})`}
             </button>
           ) : null}
         </div>
@@ -111,36 +185,136 @@ export function AiResponseCard({
   );
 }
 
-function AiActionButton({
+// =============================================================
+// Theme tokens
+// =============================================================
+
+type Tokens = {
+  surface: string;
+  headerSurface: string;
+  footerSurface: string;
+  border: string;
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  accent: string;
+  warn: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  pillSurface: string;
+  pillSurfaceHover: string;
+  link: string;
+  citation: string;
+};
+
+function themeTokens(variant: Variant): Tokens {
+  if (variant === "light") {
+    return {
+      surface: "#FBF8F3",
+      headerSurface: "#F5F0E6",
+      footerSurface: "#F8F4EB",
+      border: "#E5DDD0",
+      text: "#1F2937",
+      textSecondary: "#475569",
+      textMuted: "#6B7280",
+      accent: "#2563EB",
+      warn: "#B45309",
+      badgeBg: "#EEF2FF",
+      badgeBorder: "#C7D2FE",
+      badgeText: "#1D4ED8",
+      pillSurface: "#FFFFFF",
+      pillSurfaceHover: "#F3F4F6",
+      link: "#1D4ED8",
+      citation: "#0EA5E9",
+    };
+  }
+  return {
+    surface: "var(--market-surface-raised)",
+    headerSurface: "var(--market-surface-raised)",
+    footerSurface: "var(--market-surface-raised)",
+    border: "var(--market-border)",
+    text: "var(--market-text)",
+    textSecondary: "var(--market-text-secondary)",
+    textMuted: "var(--market-text-muted)",
+    accent: "var(--market-cyan)",
+    warn: "var(--market-amber)",
+    badgeBg: "color-mix(in srgb, var(--market-blue) 22%, transparent)",
+    badgeBorder: "var(--market-border-strong)",
+    badgeText: "var(--market-text)",
+    pillSurface: "var(--market-surface)",
+    pillSurfaceHover: "var(--market-surface-hover)",
+    link: "var(--market-cyan)",
+    citation: "var(--market-cyan)",
+  };
+}
+
+// =============================================================
+// Buttons
+// =============================================================
+
+function PillButton({
   label,
   onClick,
+  tokens,
 }: {
   label: string;
   onClick: () => void;
+  tokens: Tokens;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="min-h-[36px] border border-[var(--market-border)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--market-text-secondary)] transition hover:border-[var(--market-cyan)] hover:text-[var(--market-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]"
+      className="inline-flex min-h-[36px] items-center justify-center rounded-full border px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
+      style={
+        {
+          background: tokens.pillSurface,
+          borderColor: tokens.border,
+          color: tokens.text,
+          outlineColor: tokens.accent,
+          ["--hover-bg" as string]: tokens.pillSurfaceHover,
+        } as CSSProperties
+      }
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = tokens.pillSurfaceHover;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = tokens.pillSurface;
+      }}
     >
       {label}
     </button>
   );
 }
 
-function MarkdownView({ markdown }: { markdown: string }) {
+// =============================================================
+// Markdown renderer (lightweight; covers h1/h2/h3, ul, ol, p, strong,
+// links, and inline [n] citation markers).
+// =============================================================
+
+function MarkdownView({
+  markdown,
+  tokens,
+}: {
+  markdown: string;
+  tokens: Tokens;
+}) {
   const blocks = parseMarkdownBlocks(markdown);
   return (
-    <div className="flex flex-col gap-3 text-sm leading-6 text-[var(--market-text-secondary)]">
+    <div
+      className="flex flex-col gap-3 text-[13.5px] leading-[1.6]"
+      style={{ color: tokens.textSecondary }}
+    >
       {blocks.map((block, index) => {
         if (block.type === "h1") {
           return (
             <h1
               key={index}
-              className="font-display text-xl font-semibold leading-tight text-[var(--market-text)]"
+              className="font-display text-[20px] font-semibold leading-tight"
+              style={{ color: tokens.text }}
             >
-              {renderInline(block.lines[0])}
+              {renderInline(block.lines[0], tokens)}
             </h1>
           );
         }
@@ -148,26 +322,46 @@ function MarkdownView({ markdown }: { markdown: string }) {
           return (
             <h2
               key={index}
-              className="font-display text-base font-semibold leading-tight text-[var(--market-text)]"
+              className="mt-2 font-display text-[15px] font-semibold leading-tight"
+              style={{ color: tokens.text }}
             >
-              {renderInline(block.lines[0])}
+              {renderInline(block.lines[0], tokens)}
             </h2>
+          );
+        }
+        if (block.type === "h3") {
+          return (
+            <h3
+              key={index}
+              className="mt-1 font-display text-[13.5px] font-semibold leading-tight"
+              style={{ color: tokens.text }}
+            >
+              {renderInline(block.lines[0], tokens)}
+            </h3>
           );
         }
         if (block.type === "ul") {
           return (
-            <ul key={index} className="ml-4 flex list-disc flex-col gap-1">
+            <ul
+              key={index}
+              className="ml-5 flex list-disc flex-col gap-1.5 marker:text-current"
+              style={{ color: tokens.textSecondary }}
+            >
               {block.lines.map((line, lineIndex) => (
-                <li key={lineIndex}>{renderInline(line)}</li>
+                <li key={lineIndex}>{renderInline(line, tokens)}</li>
               ))}
             </ul>
           );
         }
         if (block.type === "ol") {
           return (
-            <ol key={index} className="ml-4 flex list-decimal flex-col gap-1">
+            <ol
+              key={index}
+              className="ml-5 flex list-decimal flex-col gap-1.5 marker:text-current"
+              style={{ color: tokens.textSecondary }}
+            >
               {block.lines.map((line, lineIndex) => (
-                <li key={lineIndex}>{renderInline(line)}</li>
+                <li key={lineIndex}>{renderInline(line, tokens)}</li>
               ))}
             </ol>
           );
@@ -177,7 +371,7 @@ function MarkdownView({ markdown }: { markdown: string }) {
             {block.lines.map((line, lineIndex) => (
               <span key={lineIndex}>
                 {lineIndex > 0 ? <br /> : null}
-                {renderInline(line)}
+                {renderInline(line, tokens)}
               </span>
             ))}
           </p>
@@ -188,7 +382,7 @@ function MarkdownView({ markdown }: { markdown: string }) {
 }
 
 type MarkdownBlock = {
-  type: "h1" | "h2" | "p" | "ul" | "ol";
+  type: "h1" | "h2" | "h3" | "p" | "ul" | "ol";
   lines: string[];
 };
 
@@ -216,6 +410,12 @@ function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
     if (!line) {
       flushParagraph();
       flushList();
+      continue;
+    }
+    if (line.startsWith("### ")) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "h3", lines: [line.replace(/^###\s+/, "")] });
       continue;
     }
     if (line.startsWith("## ")) {
@@ -257,7 +457,7 @@ function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
   return blocks;
 }
 
-function renderInline(text: string): ReactNode[] {
+function renderInline(text: string, tokens: Tokens): ReactNode[] {
   const parts: ReactNode[] = [];
   const pattern = /(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)|\[\d+\])/g;
   let lastIndex = 0;
@@ -270,7 +470,11 @@ function renderInline(text: string): ReactNode[] {
     const token = match[0];
     if (token.startsWith("**")) {
       parts.push(
-        <strong key={`${match.index}-${token}`} className="font-semibold text-[var(--market-text)]">
+        <strong
+          key={`${match.index}-${token}`}
+          className="font-semibold"
+          style={{ color: tokens.text }}
+        >
           {token.slice(2, -2)}
         </strong>
       );
@@ -283,7 +487,8 @@ function renderInline(text: string): ReactNode[] {
             href={linkMatch[2]}
             target="_blank"
             rel="noreferrer"
-            className="text-[var(--market-cyan)] underline-offset-4 hover:underline"
+            className="underline-offset-4 hover:underline"
+            style={{ color: tokens.link }}
           >
             {linkMatch[1]}
           </a>
@@ -291,7 +496,11 @@ function renderInline(text: string): ReactNode[] {
       }
     } else {
       parts.push(
-        <span key={`${match.index}-${token}`} className="font-data text-[var(--market-cyan)]">
+        <span
+          key={`${match.index}-${token}`}
+          className="font-data text-[12px] align-super"
+          style={{ color: tokens.citation }}
+        >
           {token}
         </span>
       );
@@ -305,20 +514,38 @@ function renderInline(text: string): ReactNode[] {
   return parts;
 }
 
-function SourceRow({ index, source }: { index: number; source: AiSource }) {
+// =============================================================
+// Source row
+// =============================================================
+
+function SourceRow({
+  index,
+  source,
+  tokens,
+}: {
+  index: number;
+  source: AiSource;
+  tokens: Tokens;
+}) {
   return (
     <li className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 text-xs">
-      <span className="font-data text-[var(--market-cyan)]">[{index}]</span>
+      <span className="font-data text-[12px]" style={{ color: tokens.citation }}>
+        [{index}]
+      </span>
       <div className="min-w-0">
         <a
           href={source.url}
           target="_blank"
           rel="noreferrer"
-          className="font-semibold text-[var(--market-text)] underline-offset-4 hover:underline"
+          className="block truncate font-semibold underline-offset-4 hover:underline"
+          style={{ color: tokens.text }}
         >
           {source.title || source.domain}
         </a>
-        <div className="text-[11px] text-[var(--market-text-muted)]">
+        <div
+          className="mt-0.5 truncate text-[11px]"
+          style={{ color: tokens.textMuted }}
+        >
           {source.domain}
           {source.usedFor ? ` · ${source.usedFor}` : ""}
         </div>
@@ -326,6 +553,10 @@ function SourceRow({ index, source }: { index: number; source: AiSource }) {
     </li>
   );
 }
+
+// =============================================================
+// Plain-text / Markdown helpers for clipboard / share
+// =============================================================
 
 function appendSources(markdown: string, sources: AiSource[]): string {
   if (sources.length === 0) return markdown;
@@ -345,6 +576,9 @@ function markdownToPlainText(markdown: string, sources: AiSource[]): string {
     .trim();
   if (sources.length === 0) return stripped;
   return `${stripped}\n\nSources:\n${sources
-    .map((source, index) => `[${index + 1}] ${source.title || source.domain}: ${source.url}`)
+    .map(
+      (source, index) =>
+        `[${index + 1}] ${source.title || source.domain}: ${source.url}`
+    )
     .join("\n")}`;
 }
