@@ -125,12 +125,34 @@ function getClientSecret(): string {
 }
 
 /**
- * Compute the absolute redirect URI from the inbound request URL.
- * Google requires an exact match with one of the configured redirect
- * URIs in the OAuth client.
+ * Compute the absolute redirect URI to send to Google.
+ *
+ * Google requires the value at consent and the value at token exchange
+ * to match EXACTLY one of the redirect URIs registered on the OAuth
+ * client. The inbound request origin is unreliable on Railway because
+ * the container is reached over `localhost:<PORT>` (typically 8080)
+ * even though Cloudflare Access proxies the public `app.walshco.ltd`
+ * traffic to it — so deriving from `request.nextUrl.origin` produced
+ * `https://localhost:8080/api/auth/google/callback` and Google
+ * rejected it with `redirect_uri_mismatch`.
+ *
+ * Resolution order:
+ *   1. `GOOGLE_OAUTH_REDIRECT_URI` (preferred, set on Railway).
+ *      Used verbatim — no normalization, no path mutation.
+ *   2. Derived from `origin` — kept for local development where the
+ *      browser-visible origin matches the server's bound origin.
+ *   3. `http://localhost:3000/api/auth/google/callback` — last-resort
+ *      default for `next dev` when nothing else is available.
+ *
+ * Both the OAuth start route and the callback route call this helper
+ * so the value at consent and the value at token exchange are
+ * guaranteed to be identical.
  */
-export function computeRedirectUri(origin: string): string {
-  return new URL("/api/auth/google/callback", origin).toString();
+export function computeRedirectUri(origin?: string): string {
+  const fromEnv = process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim();
+  if (fromEnv) return fromEnv;
+  if (origin) return new URL("/api/auth/google/callback", origin).toString();
+  return "http://localhost:3000/api/auth/google/callback";
 }
 
 // =============================================================
