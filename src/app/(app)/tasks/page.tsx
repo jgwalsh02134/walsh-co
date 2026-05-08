@@ -1,3 +1,4 @@
+import { DraftEmailButton } from "@/components/draft-email-button";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 import {
@@ -7,6 +8,7 @@ import {
   type Task,
   type TaskLane,
 } from "@/lib/mock-data";
+import { hasGraphToken } from "@/lib/microsoft-graph";
 import { priorityLabels, statusTokens } from "@/lib/status";
 
 const laneDescriptions: Record<TaskLane, string> = {
@@ -29,7 +31,15 @@ function PriorityTag({ priority }: { priority: keyof typeof priorityLabels }) {
   );
 }
 
-function TaskList({ items, isDone = false }: { items: Task[]; isDone?: boolean }) {
+function TaskList({
+  items,
+  isDone = false,
+  showFollowUpDraft = false,
+}: {
+  items: Task[];
+  isDone?: boolean;
+  showFollowUpDraft?: boolean;
+}) {
   if (items.length === 0) {
     return (
       <p className="px-5 py-6 text-center text-xs text-[var(--color-text-muted)]">
@@ -37,6 +47,7 @@ function TaskList({ items, isDone = false }: { items: Task[]; isDone?: boolean }
       </p>
     );
   }
+  const graphAvailable = hasGraphToken();
   return (
     <ul className="divide-y divide-[var(--color-border)]">
       {items.map((t) => (
@@ -63,6 +74,31 @@ function TaskList({ items, isDone = false }: { items: Task[]; isDone?: boolean }
           </div>
           {t.notes ? (
             <p className="text-xs text-[var(--color-text-muted)]">{t.notes}</p>
+          ) : null}
+          {showFollowUpDraft && !isDone ? (
+            <div className="mt-1">
+              <DraftEmailButton
+                graphAvailable={graphAvailable}
+                to={null}
+                subject={`Follow-up: ${t.title}`}
+                body={[
+                  `Hi,`,
+                  "",
+                  `Following up on "${t.title}" — context: ${t.context}.`,
+                  t.notes ? `\nDetails: ${t.notes}` : "",
+                  t.dueDate ? `\nTarget: ${t.dueDate}.` : "",
+                  "",
+                  "Could you share the latest status when you have a moment?",
+                  "",
+                  "Thanks,",
+                ]
+                  .filter((line) => line !== "")
+                  .join("\n")}
+                context={{ kind: "task", label: t.title }}
+                compact
+                label="Draft follow-up email"
+              />
+            </div>
           ) : null}
         </li>
       ))}
@@ -107,7 +143,7 @@ export default function TasksPage() {
           description={`${waiting.length} · ${laneDescriptions.waiting}`}
           padded={false}
         >
-          <TaskList items={waiting} />
+          <TaskList items={waiting} showFollowUpDraft />
         </SectionPanel>
 
         <SectionPanel

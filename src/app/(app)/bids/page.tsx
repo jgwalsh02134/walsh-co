@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { DraftEmailButton } from "@/components/draft-email-button";
 import { MetricTile } from "@/components/metric-tile";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 import { ToneTag } from "@/components/tone-tag";
 import { trackedProperties } from "@/lib/market-data";
+import { hasGraphToken } from "@/lib/microsoft-graph";
 import {
   bids,
   documents,
@@ -321,7 +323,8 @@ function BidList({
 }
 
 function BidRow({ bid }: { bid: Bid }) {
-  const lifecycle = LIFECYCLE_META[lifecycleFor(bid)];
+  const lifecycleId = lifecycleFor(bid);
+  const lifecycle = LIFECYCLE_META[lifecycleId];
   const tradeLabel = bid.tradeCategory
     ? TRADE_LABEL[bid.tradeCategory]
     : bid.trade;
@@ -336,6 +339,8 @@ function BidRow({ bid }: { bid: Bid }) {
     bid.completenessPct != null
       ? `${bid.completenessPct}% complete`
       : "Completeness not set";
+  const showClarificationDraft = lifecycleId === "needs_clarification";
+  const graphAvailable = hasGraphToken();
 
   return (
     <li className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)]">
@@ -405,6 +410,40 @@ function BidRow({ bid }: { bid: Bid }) {
               </span>{" "}
               {bid.nextAction}
             </p>
+          ) : null}
+
+          {showClarificationDraft ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <DraftEmailButton
+                graphAvailable={graphAvailable}
+                to={null}
+                subject={`Bid clarification: ${bid.contractor} — ${tradeLabel}${
+                  property ? ` (${property.address})` : ""
+                }`}
+                body={[
+                  `Hi ${bid.contractor},`,
+                  "",
+                  `Following up on your ${tradeLabel.toLowerCase()} proposal${
+                    bid.dateReceived ? ` received ${bid.dateReceived}` : ""
+                  }${property ? ` for ${property.address}` : ""}.`,
+                  "",
+                  bid.nextAction
+                    ? `Open question: ${bid.nextAction}`
+                    : "We have a few clarifying questions before we can finalize a decision.",
+                  "",
+                  "Could you confirm scope, exclusions, and any line items not yet itemized? We want to compare bids on a like-for-like basis.",
+                  "",
+                  "Thanks,",
+                ].join("\n")}
+                context={{
+                  kind: "bid",
+                  label: `${bid.contractor} — ${tradeLabel}`,
+                  propertyAddress: property?.address ?? null,
+                }}
+                compact
+                label="Draft clarification email"
+              />
+            </div>
           ) : null}
         </div>
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Contact } from "@prisma/client";
+import { DraftEmailButton } from "@/components/draft-email-button";
 import {
   emailHref,
   formatAddress,
@@ -11,6 +12,7 @@ import {
   phoneHref,
   websiteHref,
 } from "@/lib/contact-format";
+import { hasGraphToken } from "@/lib/microsoft-graph";
 import {
   complianceStatusLabels,
   contactCategoryLabels,
@@ -179,6 +181,24 @@ export function ContactDetail({ contact }: { contact: Contact }) {
           Edit
         </Link>
       </div>
+
+      {emailLabel ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--workspace-text-secondary)]">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+            Outlook
+          </span>
+          <DraftEmailButton
+            graphAvailable={hasGraphToken()}
+            to={contact.email ?? null}
+            subject={`Note for ${formatContactName(contact) || contact.displayName}`}
+            body={`Hi ${formatContactName(contact) || contact.displayName},\n\n`}
+            context={{
+              kind: "contact",
+              label: formatContactName(contact) || contact.displayName,
+            }}
+          />
+        </div>
+      ) : null}
 
       <section className="flex flex-col">
         <SectionHeading>Contact</SectionHeading>
