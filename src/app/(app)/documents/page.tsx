@@ -1,158 +1,361 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
-import { documents, type DocumentRecord } from "@/lib/mock-data";
-import { statusTokens } from "@/lib/status";
+import { ToneTag } from "@/components/tone-tag";
+import {
+  documents,
+  type DocumentCategory,
+  type DocumentExtractionStatus,
+  type DocumentRecord,
+} from "@/lib/mock-data";
+import { trackedProperties } from "@/lib/market-data";
+import type { StatusTone } from "@/lib/status";
 
-const verificationLabels: Record<
+// =============================================================
+// Category metadata
+// =============================================================
+
+type CategoryMeta = {
+  id: DocumentCategory | "all";
+  label: string;
+};
+
+const CATEGORIES: CategoryMeta[] = [
+  { id: "all", label: "All documents" },
+  { id: "inspection", label: "Inspection" },
+  { id: "contractor_bid", label: "Contractor bid" },
+  { id: "survey", label: "Survey" },
+  { id: "deed_title", label: "Deed / title" },
+  { id: "tax_assessment", label: "Tax / assessment" },
+  { id: "permit", label: "Permit" },
+  { id: "insurance", label: "Insurance" },
+  { id: "lease_rental", label: "Lease / rental" },
+  { id: "receipt_invoice", label: "Receipt / invoice" },
+  { id: "photo_media", label: "Photo / media" },
+  { id: "other", label: "Other" },
+];
+
+const CATEGORY_LABEL: Record<DocumentCategory, string> = {
+  inspection: "Inspection",
+  contractor_bid: "Contractor bid",
+  survey: "Survey",
+  deed_title: "Deed / title",
+  tax_assessment: "Tax / assessment",
+  permit: "Permit",
+  insurance: "Insurance",
+  lease_rental: "Lease / rental",
+  receipt_invoice: "Receipt / invoice",
+  photo_media: "Photo / media",
+  other: "Other",
+};
+
+// =============================================================
+// Extraction status metadata
+// =============================================================
+
+const EXTRACTION_LABEL: Record<
+  DocumentExtractionStatus,
+  { label: string; tone: StatusTone }
+> = {
+  not_started: { label: "Extraction: not started", tone: "neutral" },
+  draft_ready: { label: "AI draft ready", tone: "info" },
+  reviewed: { label: "Reviewed", tone: "success" },
+};
+
+const VERIFIED_LABEL: Record<
   DocumentRecord["verified"],
-  { label: string; tone: keyof typeof statusTokens }
+  { label: string; tone: StatusTone } | null
 > = {
   verified: { label: "Verified", tone: "success" },
   needs_verification: { label: "Needs verification", tone: "warning" },
-  not_required: { label: "—", tone: "neutral" },
+  not_required: null,
 };
 
-type Category = {
-  title: string;
-  description: string;
-  match: (doc: DocumentRecord) => boolean;
-};
+// =============================================================
+// Page
+// =============================================================
 
-const categories: Category[] = [
-  {
-    title: "Deeds",
-    description: "Property deeds and title records.",
-    match: () => false,
-  },
-  {
-    title: "Insurance",
-    description: "Property insurance policies and declarations.",
-    match: () => false,
-  },
-  {
-    title: "Permits",
-    description: "Building, demolition, and other municipal permits.",
-    match: (d) => d.type === "Permit",
-  },
-  {
-    title: "Contracts",
-    description: "Executed agreements with contractors and professionals.",
-    match: (d) => d.type === "Contract",
-  },
-  {
-    title: "COIs",
-    description: "Certificates of insurance and workers comp.",
-    match: (d) => d.type === "COI",
-  },
-  {
-    title: "Bids / Proposals",
-    description: "Contractor proposals and bid documents.",
-    match: (d) => d.type === "Proposal",
-  },
-  {
-    title: "Invoices",
-    description: "Invoices, lien waivers, and payment records.",
-    match: () => false,
-  },
-  {
-    title: "Photos",
-    description: "Site photography and existing-conditions documentation.",
-    match: (d) => d.type === "Photo",
-  },
-  {
-    title: "Tax Records",
-    description: "Property tax bills, assessments, and exemption records.",
-    match: () => false,
-  },
-  {
-    title: "Inspection Reports",
-    description:
-      "Pre-purchase, pre-construction, and progress inspection reports.",
-    match: (d) => d.type === "Inspection",
-  },
-];
+type SearchParams = Promise<{ category?: string }>;
 
-function ToneTag({ label, tone }: { label: string; tone: keyof typeof statusTokens }) {
-  const t = statusTokens[tone];
-  return (
-    <span
-      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
-      style={{ background: t.background, color: t.text, borderColor: t.border }}
-    >
-      {label}
-    </span>
-  );
-}
+export default async function DocumentsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { category: rawCategory } = await searchParams;
+  const activeCategory: DocumentCategory | "all" = isCategoryId(rawCategory)
+    ? rawCategory
+    : "all";
 
-function DocList({ docs }: { docs: DocumentRecord[] }) {
-  if (docs.length === 0) {
-    return (
-      <p className="text-sm text-[var(--color-text-muted)]">
-        Nothing on file yet.
-      </p>
-    );
-  }
-  return (
-    <ul className="flex flex-col divide-y divide-[var(--color-border)]">
-      {docs.map((doc) => {
-        const meta = verificationLabels[doc.verified];
-        return (
-          <li
-            key={doc.id}
-            className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-          >
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-[var(--color-text)]">
-                {doc.name}
-              </span>
-              <span className="text-xs text-[var(--color-text-muted)]">
-                {doc.linkedTo} · {doc.date}
-              </span>
-            </div>
-            {doc.verified !== "not_required" ? (
-              <ToneTag label={meta.label} tone={meta.tone} />
-            ) : null}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+  const filtered =
+    activeCategory === "all"
+      ? documents
+      : documents.filter((d) => d.category === activeCategory);
 
-export default function DocumentsPage() {
-  const unverified = documents.filter((d) => d.verified === "needs_verification");
+  const counts = {
+    total: documents.length,
+    needsReview: documents.filter((d) => d.verified === "needs_verification")
+      .length,
+    draftsReady: documents.filter((d) => d.extractionStatus === "draft_ready")
+      .length,
+    notStarted: documents.filter(
+      (d) => d.extractionStatus === "not_started" || !d.extractionStatus
+    ).length,
+  };
 
   return (
     <>
       <PageHeader
         eyebrow="Documents"
-        title="Document vault"
-        description="Organize deeds, insurance, permits, contracts, COIs, bids, invoices, photos, tax records, and inspection reports."
+        title="Document workspace"
+        description="A central library for property records, contracts, permits, insurance, bids, and supporting media. AI extraction surfaces facts, risks, and action items as draft notes you review before relying on."
+        primaryAction={
+          <button
+            type="button"
+            disabled
+            aria-disabled
+            title="File upload is not wired in this build."
+            className="inline-flex min-h-[40px] cursor-not-allowed items-center justify-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface-soft)] px-3.5 py-2 text-sm font-medium text-[var(--workspace-text-secondary)]"
+          >
+            Upload document
+          </button>
+        }
       />
 
+      <SampleBanner total={counts.total} />
+
       <SectionPanel
-        title="Unverified Documents"
-        description={`${unverified.length} document${
-          unverified.length === 1 ? "" : "s"
-        } need${unverified.length === 1 ? "s" : ""} verification.`}
+        title="Library"
+        description={`${counts.total} documents on file · ${counts.draftsReady} AI drafts ready to review · ${counts.needsReview} need verification.`}
       >
-        <DocList docs={unverified} />
+        <CategoryFilters active={activeCategory} />
+        <DocumentList docs={filtered} activeCategory={activeCategory} />
       </SectionPanel>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {categories.map((cat) => {
-          const matched = documents.filter(cat.match);
-          return (
-            <SectionPanel
-              key={cat.title}
-              title={cat.title}
-              description={cat.description}
-            >
-              <DocList docs={matched} />
-            </SectionPanel>
-          );
-        })}
-      </div>
+      <ExtractionPanel />
     </>
   );
+}
+
+// =============================================================
+// Sample banner
+// =============================================================
+
+function SampleBanner({ total }: { total: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] px-4 py-3 text-sm shadow-[var(--shadow-card-ring)]">
+      <ToneTag label="Sample data" tone="neutral" />
+      <span className="text-[var(--workspace-text-secondary)]">
+        {total} sample documents shown. File upload, full-text storage, and AI
+        extraction are placeholders in this first-pass build.
+      </span>
+    </div>
+  );
+}
+
+// =============================================================
+// Category filter chips (server-rendered, search-params driven)
+// =============================================================
+
+function CategoryFilters({ active }: { active: CategoryMeta["id"] }) {
+  return (
+    <nav
+      aria-label="Filter documents by category"
+      className="-mx-1 flex flex-wrap gap-2 pb-3"
+    >
+      {CATEGORIES.map((cat) => {
+        const isActive = active === cat.id;
+        const href =
+          cat.id === "all"
+            ? "/documents"
+            : `/documents?category=${encodeURIComponent(cat.id)}`;
+        return (
+          <Link
+            key={cat.id}
+            href={href}
+            aria-current={isActive ? "page" : undefined}
+            className={`inline-flex min-h-[36px] items-center justify-center rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] ${
+              isActive
+                ? "border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
+                : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--workspace-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--workspace-text)]"
+            }`}
+          >
+            {cat.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+// =============================================================
+// Document list
+// =============================================================
+
+function DocumentList({
+  docs,
+  activeCategory,
+}: {
+  docs: DocumentRecord[];
+  activeCategory: CategoryMeta["id"];
+}) {
+  if (docs.length === 0) {
+    return (
+      <div className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] px-4 py-6 text-center text-sm text-[var(--workspace-text-secondary)] shadow-[var(--shadow-card-ring)]">
+        No documents in this category yet.
+        {activeCategory !== "all" ? (
+          <>
+            {" "}
+            <Link
+              href="/documents"
+              className="font-semibold text-[var(--color-primary)] hover:underline"
+            >
+              Show all
+            </Link>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <ul className="flex flex-col divide-y divide-[color-mix(in_srgb,var(--color-border)_60%,transparent)]">
+      {docs.map((doc) => (
+        <DocumentRow key={doc.id} doc={doc} />
+      ))}
+    </ul>
+  );
+}
+
+function DocumentRow({ doc }: { doc: DocumentRecord }) {
+  const verified = VERIFIED_LABEL[doc.verified];
+  const extraction = doc.extractionStatus
+    ? EXTRACTION_LABEL[doc.extractionStatus]
+    : EXTRACTION_LABEL.not_started;
+  const property =
+    doc.propertySlug !== undefined
+      ? trackedProperties.find((p) => p.slug === doc.propertySlug) ?? null
+      : null;
+
+  return (
+    <li className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-sm font-semibold text-[var(--workspace-text)] [overflow-wrap:anywhere]">
+          {doc.name}
+        </span>
+        <span className="text-xs text-[var(--workspace-text-secondary)]">
+          {doc.linkedTo}
+          {" · "}
+          {doc.date}
+          {doc.lastReviewed ? (
+            <>
+              {" · "}
+              <span className="text-[var(--workspace-text-muted)]">
+                last reviewed {doc.lastReviewed}
+              </span>
+            </>
+          ) : null}
+        </span>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {doc.category ? (
+            <ToneTag label={CATEGORY_LABEL[doc.category]} tone="neutral" />
+          ) : null}
+          {property ? (
+            <Link
+              href={`/properties/${property.slug}`}
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+            >
+              {property.address}
+            </Link>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex flex-col items-start gap-1.5 sm:items-end">
+        {verified ? <ToneTag label={verified.label} tone={verified.tone} /> : null}
+        <ToneTag label={extraction.label} tone={extraction.tone} />
+      </div>
+    </li>
+  );
+}
+
+// =============================================================
+// AI Extraction placeholder panel
+// =============================================================
+
+const EXTRACTION_ACTIONS: {
+  label: string;
+  description: string;
+}[] = [
+  {
+    label: "Extract document facts",
+    description:
+      "Read the document and propose document type, parties, dates, costs, and reference numbers as a draft for review.",
+  },
+  {
+    label: "Find risks",
+    description:
+      "Surface clauses, liabilities, exclusions, expirations, and missing information that warrant attention.",
+  },
+  {
+    label: "Create tasks",
+    description:
+      "Suggest follow-up tasks (signatures, COIs, permits to obtain, replies due) — never written to the database without your approval.",
+  },
+  {
+    label: "Link to budget",
+    description:
+      "Map line items, prices, and committed amounts to budget categories for review.",
+  },
+  {
+    label: "Draft contractor questions",
+    description:
+      "Generate questions to send back to the vendor or municipality based on what is unclear or missing.",
+  },
+];
+
+function ExtractionPanel() {
+  return (
+    <SectionPanel
+      title="AI document extraction"
+      description="Runs only when you click an action. Output is a draft review — verify before relying."
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {EXTRACTION_ACTIONS.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            disabled
+            aria-disabled
+            title="Extraction is not wired in this first-pass build."
+            className="flex cursor-not-allowed flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 text-left shadow-[var(--shadow-card-ring)] transition-colors"
+          >
+            <span className="text-sm font-semibold text-[var(--workspace-text)]">
+              {a.label}
+            </span>
+            <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+              {a.description}
+            </span>
+            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              First pass · not yet wired
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-[12px] text-[var(--workspace-text-secondary)]">
+        Future extraction will produce: document type, linked property,
+        vendor / contact, dates, costs, risks, permit / code questions,
+        action items, and missing information — all surfaced as draft
+        notes you can edit, accept, or discard before anything is saved.
+      </p>
+    </SectionPanel>
+  );
+}
+
+// =============================================================
+// Helpers
+// =============================================================
+
+function isCategoryId(value: unknown): value is CategoryMeta["id"] {
+  if (typeof value !== "string") return false;
+  return CATEGORIES.some((c) => c.id === value);
 }

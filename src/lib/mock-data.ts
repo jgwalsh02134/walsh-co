@@ -101,6 +101,29 @@ export type Task = {
   notes?: string;
 };
 
+/**
+ * Document category — user-facing taxonomy for the document workspace
+ * filter chips. Wider than `DocumentRecord.type` (which is the legacy
+ * fine-grained classification kept for the renovation page).
+ */
+export type DocumentCategory =
+  | "inspection"
+  | "contractor_bid"
+  | "survey"
+  | "deed_title"
+  | "tax_assessment"
+  | "permit"
+  | "insurance"
+  | "lease_rental"
+  | "receipt_invoice"
+  | "photo_media"
+  | "other";
+
+export type DocumentExtractionStatus =
+  | "not_started"
+  | "draft_ready"
+  | "reviewed";
+
 export type DocumentRecord = {
   id: string;
   name: string;
@@ -116,6 +139,14 @@ export type DocumentRecord = {
   linkedTo: string;
   verified: "verified" | "needs_verification" | "not_required";
   date: string;
+  /** New optional fields for the document workspace foundation. */
+  category?: DocumentCategory;
+  /** Slug of a tracked property in src/lib/market-data.ts, when this
+   *  document belongs to a specific property. */
+  propertySlug?: string;
+  extractionStatus?: DocumentExtractionStatus;
+  /** Free-form last-reviewed string (e.g. "Apr 24"). */
+  lastReviewed?: string;
 };
 
 export type BudgetCategory = {
@@ -465,6 +496,10 @@ export const documents: DocumentRecord[] = [
     linkedTo: "Loudonville Architecture",
     verified: "verified",
     date: "Apr 09",
+    category: "other",
+    propertySlug: "322-osborne",
+    extractionStatus: "reviewed",
+    lastReviewed: "Apr 11",
   },
   {
     id: "d2",
@@ -473,6 +508,10 @@ export const documents: DocumentRecord[] = [
     linkedTo: "Mohawk Electric LLC",
     verified: "verified",
     date: "Apr 24",
+    category: "insurance",
+    propertySlug: "322-osborne",
+    extractionStatus: "draft_ready",
+    lastReviewed: "Apr 25",
   },
   {
     id: "d3",
@@ -481,6 +520,9 @@ export const documents: DocumentRecord[] = [
     linkedTo: "Northline Roofing Co.",
     verified: "needs_verification",
     date: "Apr 27",
+    category: "contractor_bid",
+    propertySlug: "322-osborne",
+    extractionStatus: "draft_ready",
   },
   {
     id: "d4",
@@ -489,6 +531,9 @@ export const documents: DocumentRecord[] = [
     linkedTo: "Adirondack Plumbing",
     verified: "needs_verification",
     date: "Apr 18",
+    category: "insurance",
+    propertySlug: "322-osborne",
+    extractionStatus: "not_started",
   },
   {
     id: "d5",
@@ -497,6 +542,9 @@ export const documents: DocumentRecord[] = [
     linkedTo: "Town of Loudonville",
     verified: "needs_verification",
     date: "Apr 22",
+    category: "permit",
+    propertySlug: "322-osborne",
+    extractionStatus: "not_started",
   },
   {
     id: "d6",
@@ -505,6 +553,10 @@ export const documents: DocumentRecord[] = [
     linkedTo: "Loudonville Architecture",
     verified: "verified",
     date: "Apr 26",
+    category: "permit",
+    propertySlug: "322-osborne",
+    extractionStatus: "reviewed",
+    lastReviewed: "Apr 27",
   },
   {
     id: "d7",
@@ -513,6 +565,9 @@ export const documents: DocumentRecord[] = [
     linkedTo: "322 Osborne Rd",
     verified: "not_required",
     date: "Apr 28",
+    category: "photo_media",
+    propertySlug: "322-osborne",
+    extractionStatus: "not_started",
   },
   {
     id: "d8",
@@ -521,6 +576,67 @@ export const documents: DocumentRecord[] = [
     linkedTo: "322 Osborne Rd",
     verified: "needs_verification",
     date: "Apr 25",
+    category: "inspection",
+    propertySlug: "322-osborne",
+    extractionStatus: "draft_ready",
+  },
+  {
+    id: "d9",
+    name: "51 Loudonwood — homeowner deed",
+    type: "Report",
+    linkedTo: "51 Loudonwood E",
+    verified: "verified",
+    date: "Mar 02",
+    category: "deed_title",
+    propertySlug: "51-loudonwood",
+    extractionStatus: "reviewed",
+    lastReviewed: "Mar 03",
+  },
+  {
+    id: "d10",
+    name: "16 Momrow — 2025 tax bill",
+    type: "Report",
+    linkedTo: "Town of Menands",
+    verified: "needs_verification",
+    date: "Apr 14",
+    category: "tax_assessment",
+    propertySlug: "16-momrow",
+    extractionStatus: "draft_ready",
+  },
+  {
+    id: "d11",
+    name: "16 Momrow — current lease (tenant)",
+    type: "Contract",
+    linkedTo: "16 Momrow Ct",
+    verified: "verified",
+    date: "Jan 15",
+    category: "lease_rental",
+    propertySlug: "16-momrow",
+    extractionStatus: "reviewed",
+    lastReviewed: "Jan 17",
+  },
+  {
+    id: "d12",
+    name: "51 Loudonwood — boundary survey",
+    type: "Report",
+    linkedTo: "Albany County Surveyors",
+    verified: "verified",
+    date: "Feb 28",
+    category: "survey",
+    propertySlug: "51-loudonwood",
+    extractionStatus: "reviewed",
+    lastReviewed: "Mar 01",
+  },
+  {
+    id: "d13",
+    name: "Adirondack Plumbing — invoice #2041",
+    type: "Report",
+    linkedTo: "Adirondack Plumbing",
+    verified: "needs_verification",
+    date: "Apr 30",
+    category: "receipt_invoice",
+    propertySlug: "322-osborne",
+    extractionStatus: "not_started",
   },
 ];
 
