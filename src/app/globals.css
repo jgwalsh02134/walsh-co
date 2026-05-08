@@ -248,11 +248,21 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
+  /* Premium SaaS card radius (~22px). Used for the landing-grid cards
+     so they read as elevated surfaces, closer to the Linear/Stripe/
+     Vercel scale. */
+  --radius-2xl: 22px;
 
-  /* Shadows tinted with the new warm text color so they read warmer. */
-  --shadow-card: 0 1px 2px rgba(36, 35, 31, 0.04);
-  --shadow-card-hover: 0 4px 12px rgba(36, 35, 31, 0.08),
-    0 1px 2px rgba(36, 35, 31, 0.04);
+  /* Layered shadow tokens. Warm-tinted to match the cream background.
+     Resting cards use a tight 1-2px stack; hover layers a softer
+     ambient lift on top to read as an interactive surface. */
+  --shadow-card: 0 1px 3px rgba(36, 35, 31, 0.05),
+    0 1px 2px rgba(36, 35, 31, 0.025);
+  --shadow-card-hover: 0 10px 15px -3px rgba(36, 35, 31, 0.07),
+    0 4px 6px -4px rgba(36, 35, 31, 0.05);
+  /* Subtle inner border used on top of the white card surface so the
+     edge reads cleanly against any background, including darker rails. */
+  --shadow-card-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
   --shadow-rail: 0 1px 0 rgba(36, 35, 31, 0.04);
 }
 

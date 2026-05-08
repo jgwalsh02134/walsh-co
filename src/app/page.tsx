@@ -21,60 +21,58 @@ export default function Home() {
             </span>
             {productName}
           </span>
-          <h1 className="font-display text-3xl leading-tight text-[var(--color-text)] sm:text-4xl md:text-5xl">
+          <h1 className="font-display text-3xl font-semibold leading-tight tracking-tight text-[var(--workspace-text)] sm:text-4xl md:text-5xl">
             {productTitle}
           </h1>
-          <p className="max-w-2xl text-base text-[var(--color-text-muted)] sm:text-lg">
+          <p className="max-w-2xl text-base leading-relaxed text-[var(--workspace-text-secondary)] sm:text-lg">
             {productSubtitle}
           </p>
         </header>
 
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {landingCards.map((card) => (
             <li key={card.href} className="contents">
               <Link
                 href={card.href}
-                className="group flex h-full min-h-[160px] flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-card-hover)] sm:p-6"
+                className="group relative flex h-full min-h-[180px] flex-col gap-4 rounded-[var(--radius-2xl)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card),var(--shadow-card-ring)] transition-[transform,box-shadow,background-color] duration-150 ease-out will-change-transform hover:-translate-y-1 hover:bg-[var(--color-surface)] hover:shadow-[var(--shadow-card-hover),var(--shadow-card-ring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] motion-reduce:hover:translate-y-0 motion-reduce:transition-none sm:p-6"
               >
                 {card.blueprintIcon ? (
-                  // Blueprint art is a fixed-color illustration, so we
-                  // give it a neutral surface to sit on — the warm
-                  // workspace palette doesn't fight the Icons8 blue.
-                  // Light opacity keeps the title visually dominant.
+                  // Blueprint illustration sits on a tinted squircle so
+                  // the icon container reads as an intentional surface,
+                  // not a thin wireframe. The container shifts to the
+                  // primary-soft tint on hover for a subtle brand cue.
                   <span
                     aria-hidden
-                    className="inline-flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-soft)]"
+                    className="inline-flex h-14 w-14 items-center justify-center rounded-[18px] bg-[var(--color-surface-soft)] transition-colors duration-150 group-hover:bg-[var(--color-primary-soft)]"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={card.blueprintIcon}
                       alt=""
-                      className="h-11 w-11 opacity-90"
+                      className="h-11 w-11"
                       loading="lazy"
                     />
                   </span>
                 ) : (
-                  // Fallback to the original Lucide icon badge when no
-                  // blueprint asset is provided for this card.
                   <span
                     aria-hidden
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-[16px] bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
                   >
                     {card.icon}
                   </span>
                 )}
                 <div className="flex flex-1 flex-col gap-1.5">
-                  <h2 className="text-lg font-semibold text-[var(--color-text)]">
+                  <h2 className="text-[17px] font-semibold leading-snug text-[var(--workspace-text)]">
                     {card.title}
                   </h2>
-                  <p className="text-sm leading-6 text-[var(--color-text-muted)]">
+                  <p className="text-[13.5px] leading-[1.55] text-[var(--workspace-text-secondary)]">
                     {card.description}
                   </p>
                 </div>
                 <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-primary)]">
                   Open
                   <span
-                    className="transition-transform group-hover:translate-x-0.5"
+                    className="inline-flex transition-transform duration-150 ease-out group-hover:translate-x-1 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
                     aria-hidden
                   >
                     {icons.arrowRight}

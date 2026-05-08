@@ -108,13 +108,13 @@ export function TopBar() {
                     href={item.href}
                     onClick={close}
                     aria-current={active ? "page" : undefined}
-                    className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium ${
+                    className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-colors duration-150 ${
                       active
-                        ? "bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
+                        ? "bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-soft)]"
                     }`}
                   >
-                    <span className={active ? "text-[var(--color-text-inverse)]" : "text-[var(--color-text-muted)]"}>
+                    <span className={active ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}>
                       {item.icon}
                     </span>
                     <span>{item.label}</span>
@@ -131,13 +131,13 @@ export function TopBar() {
                     href={item.href}
                     onClick={close}
                     aria-current={active ? "page" : undefined}
-                    className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium ${
+                    className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-colors duration-150 ${
                       active
-                        ? "bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
+                        ? "bg-[var(--color-primary-soft)] text-[var(--color-primary)]"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-soft)]"
                     }`}
                   >
-                    <span className={active ? "text-[var(--color-text-inverse)]" : "text-[var(--color-text-muted)]"}>
+                    <span className={active ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}>
                       {item.icon}
                     </span>
                     <span>{item.label}</span>
