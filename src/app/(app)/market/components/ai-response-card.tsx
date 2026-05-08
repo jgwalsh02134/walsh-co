@@ -105,7 +105,11 @@ export function AiResponseCard({
       >
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           {state.providerLabel ? (
-            <ProviderChip label={state.providerLabel} tokens={tokens} />
+            <ProviderChip
+              label={state.providerLabel}
+              tokens={tokens}
+              variant={variant}
+            />
           ) : null}
           {state.modeLabel ? (
             <span
@@ -120,18 +124,6 @@ export function AiResponseCard({
                 Ψ
               </span>
               {state.modeLabel}
-            </span>
-          ) : null}
-          {state.notWired ? (
-            <span
-              className="inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-              style={{
-                background: tokens.warnBg,
-                borderColor: tokens.warnBorder,
-                color: tokens.warn,
-              }}
-            >
-              Not wired yet
             </span>
           ) : null}
         </div>
@@ -168,7 +160,7 @@ export function AiResponseCard({
             <MarkdownView markdown={markdown} tokens={tokens} />
           </div>
 
-          {sources.length > 0 ? (
+          {sources.length > 0 || state.expectedSources ? (
             <div
               className="border-t px-4 py-3 sm:px-5"
               style={{
@@ -182,33 +174,44 @@ export function AiResponseCard({
               >
                 Sources
               </div>
-              <ol className="flex flex-col gap-2">
-                {visibleSources.map((source, index) => (
-                  <SourceRow
-                    key={`${source.url}-${index}`}
-                    index={index + 1}
-                    source={source}
-                    tokens={tokens}
-                  />
-                ))}
-              </ol>
-              {sources.length > 5 ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAllSources((v) => !v)}
-                  className="mt-3 min-h-[40px] rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={{
-                    background: tokens.pillSurface,
-                    borderColor: tokens.border,
-                    color: tokens.text,
-                    outlineColor: tokens.accent,
-                  }}
+              {sources.length === 0 ? (
+                <p
+                  className="text-[12px] italic"
+                  style={{ color: tokens.textMuted }}
                 >
-                  {showAllSources
-                    ? "Show fewer sources"
-                    : `Show all sources (${sources.length})`}
-                </button>
-              ) : null}
+                  No external sources returned by provider.
+                </p>
+              ) : (
+                <>
+                  <ol className="flex flex-col gap-2">
+                    {visibleSources.map((source, index) => (
+                      <SourceRow
+                        key={`${source.url}-${index}`}
+                        index={index + 1}
+                        source={source}
+                        tokens={tokens}
+                      />
+                    ))}
+                  </ol>
+                  {sources.length > 5 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllSources((v) => !v)}
+                      className="mt-3 min-h-[40px] rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
+                      style={{
+                        background: tokens.pillSurface,
+                        borderColor: tokens.border,
+                        color: tokens.text,
+                        outlineColor: tokens.accent,
+                      }}
+                    >
+                      {showAllSources
+                        ? "Show fewer sources"
+                        : `Show all sources (${sources.length})`}
+                    </button>
+                  ) : null}
+                </>
+              )}
             </div>
           ) : null}
         </>
@@ -301,14 +304,24 @@ function themeTokens(variant: Variant): Tokens {
 function ProviderChip({
   label,
   tokens,
+  variant,
 }: {
   label: "OpenAI" | "Grok";
   tokens: Tokens;
+  variant: Variant;
 }) {
+  // The chip surface is light in both variants (pill on white) on the
+  // light card; on the dark card it sits on the raised surface. Use the
+  // black icon variant on the light pill, white on dark.
+  const useDark = variant === "dark";
   const iconSrc =
     label === "Grok"
-      ? "/icons/workspace/xai-icon-black.svg"
-      : null;
+      ? useDark
+        ? "/icons/workspace/xai-icon-white.svg"
+        : "/icons/workspace/xai-icon-black.svg"
+      : useDark
+      ? "/icons/workspace/openai-icon-white.svg"
+      : "/icons/workspace/openai-icon-black.svg";
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
@@ -318,21 +331,15 @@ function ProviderChip({
         color: tokens.text,
       }}
     >
-      {iconSrc ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={iconSrc}
-          alt=""
-          aria-hidden
-          width={12}
-          height={12}
-          style={{ display: "inline-block" }}
-        />
-      ) : (
-        <span aria-hidden style={{ fontWeight: 700 }}>
-          ◎
-        </span>
-      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={iconSrc}
+        alt=""
+        aria-hidden
+        width={12}
+        height={12}
+        style={{ display: "inline-block" }}
+      />
       {label}
     </span>
   );

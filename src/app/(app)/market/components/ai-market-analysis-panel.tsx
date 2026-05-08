@@ -249,34 +249,46 @@ function ProviderSegmented({
           active={provider === "openai"}
           onClick={() => onChange("openai")}
           label="OpenAI"
+          icon={
+            <ProviderIcon
+              src={
+                provider === "openai"
+                  ? "/icons/workspace/openai-icon-white.svg"
+                  : "/icons/workspace/openai-icon-black.svg"
+              }
+            />
+          }
         />
         <ProviderButton
           active={provider === "xai"}
           onClick={() => xaiAvailable && onChange("xai")}
           label="Grok"
           icon={
-            <span
-              aria-hidden
-              className="inline-flex h-3 w-3 items-center justify-center"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={
-                  provider === "xai"
-                    ? "/icons/workspace/xai-icon-white.svg"
-                    : "/icons/workspace/xai-icon-black.svg"
-                }
-                alt=""
-                width={12}
-                height={12}
-              />
-            </span>
+            <ProviderIcon
+              src={
+                provider === "xai"
+                  ? "/icons/workspace/xai-icon-white.svg"
+                  : "/icons/workspace/xai-icon-black.svg"
+              }
+            />
           }
           disabled={!xaiAvailable}
           tooltip={xaiAvailable ? undefined : "xAI API key not configured."}
         />
       </div>
     </div>
+  );
+}
+
+function ProviderIcon({ src }: { src: string }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" width={14} height={14} />
+    </span>
   );
 }
 

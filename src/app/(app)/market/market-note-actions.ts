@@ -7,7 +7,8 @@ import {
 } from "@/lib/openai";
 import {
   generateXaiMarketText,
-  generateXaiMarketTextWithSearch,
+  generateXaiMarketTextWithWebSearch,
+  generateXaiPropertyResearch,
   hasXaiKey,
 } from "@/lib/xai";
 
@@ -72,8 +73,11 @@ export type MarketNoteState = {
   modeLabel?: string;
   /** Provider that produced this note. */
   providerLabel?: "OpenAI" | "Grok";
-  /** True when the provider/mode combination is intentionally not wired. */
-  notWired?: boolean;
+  /** True when this mode would normally return citations. The renderer
+   *  uses this to show "No external sources returned by provider" inside
+   *  the sources block when `sources` comes back empty, instead of
+   *  silently hiding the block. */
+  expectedSources?: boolean;
 };
 
 /** Server-side check used by the page to gate the Grok provider option. */
@@ -216,13 +220,13 @@ export async function generateMarketNoteWithWebSearch(
   ].join("\n");
 
   try {
-    const result = await runWebSearch(provider, prompt);
+    const result = await runWebSearch(provider, prompt, "market");
     return {
-      ok: result.notWired ? false : true,
+      ok: true,
       message: result.outputText || `${providerLabel} returned no note text.`,
       modeLabel: "Web research",
       providerLabel,
-      notWired: result.notWired,
+      expectedSources: true,
       sources: normalizeAiSources(
         result.sources,
         "External corroboration / context"
@@ -388,13 +392,13 @@ export async function generatePropertyAnalysisWithWebSearch(
   ].join("\n");
 
   try {
-    const result = await runWebSearch(provider, prompt);
+    const result = await runWebSearch(provider, prompt, "property");
     return {
-      ok: result.notWired ? false : true,
+      ok: true,
       message: result.outputText || `${providerLabel} returned no note text.`,
       modeLabel: "Property research",
       providerLabel,
-      notWired: result.notWired,
+      expectedSources: true,
       sources: normalizeAiSources(
         result.sources,
         `External context for ${input.property.address}`
@@ -418,8 +422,9 @@ type InternalResult = { outputText: string };
 type WebSearchResult = {
   outputText: string;
   sources: string[];
-  notWired?: boolean;
 };
+
+type WebSearchContext = "market" | "property";
 
 function providerLabelFor(provider: AiProvider): "OpenAI" | "Grok" {
   return provider === "xai" ? "Grok" : "OpenAI";
@@ -446,14 +451,17 @@ async function runInternal(
 
 async function runWebSearch(
   provider: AiProvider,
-  prompt: string
+  prompt: string,
+  context: WebSearchContext = "market"
 ): Promise<WebSearchResult> {
   if (provider === "xai") {
-    const result = await generateXaiMarketTextWithSearch({ prompt });
+    const result =
+      context === "property"
+        ? await generateXaiPropertyResearch({ prompt })
+        : await generateXaiMarketTextWithWebSearch({ prompt });
     return {
       outputText: result.outputText,
       sources: result.sources,
-      notWired: result.notWired,
     };
   }
   const result = await generateWorkspaceTextWithWebSearch({ prompt });

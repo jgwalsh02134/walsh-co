@@ -4,21 +4,23 @@
  * Mirrors the public surface of src/lib/openai.ts so the Market Tracker
  * server actions can route between providers behind a uniform API.
  *
- * - XAI_API_KEY  (required)
- * - XAI_MODEL    (default: grok-4.3)
- * - XAI_BASE_URL (default: https://api.x.ai/v1)
+ * Configuration:
+ *   - XAI_API_KEY  (required)
+ *   - XAI_MODEL    (default: grok-4.3)
+ *   - XAI_BASE_URL (default: https://api.x.ai/v1)
  *
- * xAI exposes an OpenAI-compatible chat-completions API, so we reuse the
- * installed openai SDK with a different baseURL + apiKey rather than
- * adding a new dependency.
+ * xAI exposes an OpenAI-compatible Responses API at the configured base
+ * URL, so we reuse the installed `openai` SDK and only swap baseURL +
+ * apiKey rather than adding a new dependency.
  *
- * Web/search mode is intentionally NOT wired in this pass — xAI Live
- * Search uses a non-OpenAI `search_parameters` body that the SDK does
- * not type, and the spec instructs us to return a clear "not wired"
- * state rather than fake citations.
+ * Web search uses the Responses API tool `web_search`. Internal generation
+ * uses the same Responses API without tools. X-search is exposed as an
+ * optional helper but is NOT wired into the user-facing UI in this pass —
+ * adding a button without a clear UX would introduce dead-ends.
  */
 
 import OpenAI from "openai";
+import type { Response } from "openai/resources/responses/responses";
 
 if (typeof window !== "undefined") {
   throw new Error(
@@ -44,10 +46,7 @@ export type XaiTextResult = {
 };
 
 export type XaiSearchResult = XaiTextResult & {
-  /** Always [] in this revision — xAI search is not wired yet. */
   sources: string[];
-  /** True when the call returned a "not wired" stub instead of generation. */
-  notWired?: boolean;
 };
 
 export function hasXaiKey(): boolean {
@@ -76,41 +75,86 @@ export function getXaiClient(): OpenAI {
   return client;
 }
 
+// ---------- Internal generation (no tools) ----------
+
 export async function generateXaiMarketText(
   input: XaiTextInput | string
 ): Promise<XaiTextResult> {
   const normalized = normalizeInput(input);
-
-  const completion = await getXaiClient().chat.completions.create({
+  const response = await getXaiClient().responses.create({
     model: xaiModelName(),
-    messages: [
-      {
-        role: "system",
-        content: normalized.instructions ?? defaultInstructions(),
-      },
-      { role: "user", content: normalized.prompt },
-    ],
-    max_tokens: MAX_OUTPUT_TOKENS,
+    instructions: normalized.instructions ?? defaultInstructions(),
+    input: normalized.prompt,
+    max_output_tokens: MAX_OUTPUT_TOKENS,
+    store: false,
   });
 
-  const outputText = completion.choices?.[0]?.message?.content?.trim() ?? "";
-  return { outputText };
+  return { outputText: outputText(response) };
+}
+
+// ---------- Web research ----------
+
+export async function generateXaiMarketTextWithWebSearch(
+  input: XaiTextInput | string
+): Promise<XaiSearchResult> {
+  return runResponsesWithTool(input, "web_search");
 }
 
 /**
- * xAI search mode — NOT WIRED in this revision.
- *
- * Returns a clearly-labelled stub instead of fabricating results. Callers
- * surface the message via the existing MarketNoteState shape.
+ * Property research is the same Responses-API + web_search call; the
+ * caller injects the property context into the prompt. This export
+ * exists so server actions can route by intent rather than by tool
+ * name.
  */
-export async function generateXaiMarketTextWithSearch(
-  _input: XaiTextInput | string
+export async function generateXaiPropertyResearch(
+  input: XaiTextInput | string
 ): Promise<XaiSearchResult> {
+  return runResponsesWithTool(input, "web_search");
+}
+
+/**
+ * Optional X-search helper. Not wired into the UI — exposed so that
+ * server-side experiments can opt in without spreading the cast.
+ */
+export async function generateXaiMarketTextWithXSearch(
+  input: XaiTextInput | string
+): Promise<XaiSearchResult> {
+  return runResponsesWithTool(input, "x_search");
+}
+
+// ---------- Internals ----------
+
+type XaiToolName = "web_search" | "x_search";
+
+async function runResponsesWithTool(
+  input: XaiTextInput | string,
+  toolName: XaiToolName
+): Promise<XaiSearchResult> {
+  const normalized = normalizeInput(input);
+
+  // The OpenAI SDK's typed `tools` array uses OpenAI's tool registry
+  // (web_search, file_search, etc.). xAI accepts the same JSON shape at
+  // the wire level, but the union type does not declare every xAI tool.
+  // Cast narrowly here, with a matching comment, to avoid a broad `any`.
+  const tools = [{ type: toolName }] as unknown as Parameters<
+    OpenAI["responses"]["create"]
+  >[0]["tools"];
+
+  const response = await getXaiClient().responses.create({
+    model: xaiModelName(),
+    instructions:
+      normalized.instructions ??
+      `${defaultInstructions()} Cite public sources when search is used.`,
+    input: normalized.prompt,
+    max_output_tokens: MAX_OUTPUT_TOKENS,
+    store: false,
+    tools,
+    tool_choice: "auto",
+  });
+
   return {
-    outputText:
-      "xAI web/search mode is not wired yet. Use OpenAI for web research, or run the xAI internal summary instead.",
-    sources: [],
-    notWired: true,
+    outputText: outputText(response),
+    sources: sourceUrls(response),
   };
 }
 
@@ -126,4 +170,52 @@ function defaultInstructions(): string {
 function normalizeInput(input: XaiTextInput | string): XaiTextInput {
   if (typeof input === "string") return { prompt: input };
   return input;
+}
+
+function outputText(response: Response): string {
+  return response.output_text?.trim() || "";
+}
+
+/**
+ * Extract URL citations + tool-call source URLs from a Responses-API
+ * response. Defensive against partial/unknown shapes returned by xAI.
+ */
+function sourceUrls(response: Response): string[] {
+  const urls = new Set<string>();
+
+  for (const item of response.output ?? []) {
+    if (item.type === "message") {
+      for (const part of item.content ?? []) {
+        if (part.type !== "output_text") continue;
+        for (const annotation of part.annotations ?? []) {
+          if (annotation.type === "url_citation") urls.add(annotation.url);
+        }
+      }
+      continue;
+    }
+
+    // Best-effort extraction from any tool-call style item: web_search,
+    // x_search, or future variants. The OpenAI SDK types only declare a
+    // subset, so we read structurally rather than by tagged type.
+    const candidate = item as unknown as {
+      type?: string;
+      action?: {
+        type?: string;
+        url?: string;
+        sources?: Array<{ url?: string }>;
+      };
+    };
+    const action = candidate.action;
+    if (!action) continue;
+    if (Array.isArray(action.sources)) {
+      for (const source of action.sources) {
+        if (source?.url) urls.add(source.url);
+      }
+    }
+    if (typeof action.url === "string" && action.url.length > 0) {
+      urls.add(action.url);
+    }
+  }
+
+  return Array.from(urls);
 }
