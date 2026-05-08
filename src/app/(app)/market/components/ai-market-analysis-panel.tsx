@@ -20,8 +20,10 @@
  *   - Disclaimers are calm: one short footer line, not flashing warnings.
  *   - API keys are never sent to the client; the parent page tells us
  *     boolean availability for each provider.
- *   - xAI web/property research currently returns a "not wired yet" note
- *     instead of fabricating sources; UI surfaces this clearly.
+ *   - Both providers wire all three modes: OpenAI uses the Responses API
+ *     with `web_search`; xAI uses the same Responses API shape against
+ *     its OpenAI-compatible base URL. Source extraction normalizes both
+ *     into the AiSource shape used by the response card.
  */
 
 import { useMemo, useState, useTransition } from "react";
@@ -103,9 +105,7 @@ export function AiMarketAnalysisPanel({
 
   const helper =
     mode === "web" || mode === "property"
-      ? provider === "xai"
-        ? "Grok web research is not wired yet. Use OpenAI for web research, or run a Grok internal summary."
-        : "Web research looks for external corroboration, conflicts, and missing context beyond the dashboard data."
+      ? "Web research looks for external corroboration, conflicts, and missing context beyond the dashboard data."
       : "Interprets what is already on the dashboard. No web search.";
 
   return (
