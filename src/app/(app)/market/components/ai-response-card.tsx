@@ -2,7 +2,7 @@
 
 /**
  * Renders an AI market note as readable Markdown with compact citations
- * and copy / plain-text / share controls.
+ * and a small set of macOS-style controls (Copy, Share, Minimize, Clear).
  *
  * Two visual variants:
  *   - "light" — used by the new portfolio AI panel (warm off-white card
@@ -10,8 +10,12 @@
  *   - "dark"  — used by the per-property card so the AI block continues
  *     to fit inside an existing dark card without a jarring contrast jump.
  *
- * No data fetching here. The state object is produced by server actions
- * in market-note-actions.ts.
+ * Disclaimer language is intentionally calm: one short footer line, not a
+ * flashing warning. Detailed safety constraints live in the prompts on
+ * the server, not in the UI chrome.
+ *
+ * No data fetching here; state is produced by server actions in
+ * market-note-actions.ts.
  */
 
 import { useMemo, useState } from "react";
@@ -23,33 +27,35 @@ type Variant = "light" | "dark";
 type AiResponseCardProps = {
   state: MarketNoteState;
   variant?: Variant;
-  /** Optional disclaimer override; defaults to a neutral label. */
-  title?: string;
+  /** Optional handler — when present, a Clear button is shown that
+   *  removes the rendered output. The parent owns this state. */
+  onClear?: () => void;
+  /** Optional override for the calm one-liner under the output. */
+  footerNote?: string;
 };
 
 export function AiResponseCard({
   state,
   variant = "dark",
-  title = "AI-generated internal draft. Not an appraisal. Verify before relying.",
+  onClear,
+  footerNote = "Use as research support; verify key facts before decisions.",
 }: AiResponseCardProps) {
   const [copied, setCopied] = useState<string | null>(null);
+  const [minimized, setMinimized] = useState(false);
   const [showAllSources, setShowAllSources] = useState(false);
   const markdown = state.message || "";
   const sources = state.sources ?? [];
   const visibleSources = showAllSources ? sources : sources.slice(0, 5);
-  const plainText = useMemo(
-    () => markdownToPlainText(markdown, sources),
-    [markdown, sources]
-  );
-  const markdownWithSources = useMemo(
-    () => appendSources(markdown, sources),
+
+  const copyText = useMemo(
+    () => buildCopyText(markdown, sources),
     [markdown, sources]
   );
 
-  const copy = async (label: string, value: string) => {
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(value);
-      setCopied(label);
+      await navigator.clipboard.writeText(copyText);
+      setCopied("Copied");
       window.setTimeout(() => setCopied(null), 1600);
     } catch {
       setCopied("Copy failed");
@@ -60,14 +66,14 @@ export function AiResponseCard({
   const share = async () => {
     const payload = {
       title: "Market Tracker AI analysis",
-      text: plainText,
+      text: copyText,
     };
     try {
       if (navigator.share) {
         await navigator.share(payload);
         setCopied("Shared");
       } else {
-        await navigator.clipboard.writeText(plainText);
+        await navigator.clipboard.writeText(copyText);
         setCopied("Copied");
       }
       window.setTimeout(() => setCopied(null), 1600);
@@ -87,14 +93,20 @@ export function AiResponseCard({
         borderColor: tokens.border,
         borderRadius: 14,
         color: tokens.text,
-        boxShadow: variant === "light" ? "0 1px 2px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.06)" : "none",
+        boxShadow:
+          variant === "light"
+            ? "0 1px 2px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.06)"
+            : "none",
       }}
     >
       <div
-        className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2"
+        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-3 py-2 sm:px-4"
         style={{ borderColor: tokens.border, background: tokens.headerSurface }}
       >
         <div className="flex flex-wrap items-center gap-2 min-w-0">
+          {state.providerLabel ? (
+            <ProviderChip label={state.providerLabel} tokens={tokens} />
+          ) : null}
           {state.modeLabel ? (
             <span
               className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
@@ -110,77 +122,104 @@ export function AiResponseCard({
               {state.modeLabel}
             </span>
           ) : null}
-          <p
-            className="text-[11px] font-medium"
-            style={{ color: tokens.textMuted }}
-          >
-            {title}
-          </p>
+          {state.notWired ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+              style={{
+                background: tokens.warnBg,
+                borderColor: tokens.warnBorder,
+                color: tokens.warn,
+              }}
+            >
+              Not wired yet
+            </span>
+          ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {copied ? (
             <span className="text-[11px]" style={{ color: tokens.accent }}>
               {copied}
             </span>
           ) : null}
           <PillButton
-            label="Copy Markdown"
-            onClick={() => copy("Copied", markdownWithSources)}
+            label={minimized ? "Expand" : "Minimize"}
+            onClick={() => setMinimized((v) => !v)}
             tokens={tokens}
+            ariaPressed={minimized}
           />
-          <PillButton
-            label="Copy plain text"
-            onClick={() => copy("Copied", plainText)}
-            tokens={tokens}
-          />
+          <PillButton label="Copy" onClick={copy} tokens={tokens} />
           <PillButton label="Share" onClick={share} tokens={tokens} />
-        </div>
-      </div>
-
-      <div className="px-4 py-4 sm:px-5">
-        <MarkdownView markdown={markdown} tokens={tokens} />
-      </div>
-
-      {sources.length > 0 ? (
-        <div
-          className="border-t px-4 py-3 sm:px-5"
-          style={{ borderColor: tokens.border, background: tokens.footerSurface }}
-        >
-          <div
-            className="mb-2 text-[11px] uppercase tracking-wide"
-            style={{ color: tokens.textMuted }}
-          >
-            Sources
-          </div>
-          <ol className="flex flex-col gap-2">
-            {visibleSources.map((source, index) => (
-              <SourceRow
-                key={`${source.url}-${index}`}
-                index={index + 1}
-                source={source}
-                tokens={tokens}
-              />
-            ))}
-          </ol>
-          {sources.length > 5 ? (
-            <button
-              type="button"
-              onClick={() => setShowAllSources((v) => !v)}
-              className="mt-3 min-h-[40px] rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{
-                background: tokens.pillSurface,
-                borderColor: tokens.border,
-                color: tokens.text,
-                outlineColor: tokens.accent,
-              }}
-            >
-              {showAllSources
-                ? "Show fewer sources"
-                : `Show all sources (${sources.length})`}
-            </button>
+          {onClear ? (
+            <PillButton label="Clear" onClick={onClear} tokens={tokens} />
           ) : null}
         </div>
-      ) : null}
+      </div>
+
+      {minimized ? (
+        <div
+          className="px-4 py-2 text-[12px]"
+          style={{ color: tokens.textMuted }}
+        >
+          Output minimized. Use Expand to read it again, or Clear to remove it.
+        </div>
+      ) : (
+        <>
+          <div className="px-4 py-4 sm:px-5">
+            <MarkdownView markdown={markdown} tokens={tokens} />
+          </div>
+
+          {sources.length > 0 ? (
+            <div
+              className="border-t px-4 py-3 sm:px-5"
+              style={{
+                borderColor: tokens.border,
+                background: tokens.footerSurface,
+              }}
+            >
+              <div
+                className="mb-2 text-[11px] uppercase tracking-wide"
+                style={{ color: tokens.textMuted }}
+              >
+                Sources
+              </div>
+              <ol className="flex flex-col gap-2">
+                {visibleSources.map((source, index) => (
+                  <SourceRow
+                    key={`${source.url}-${index}`}
+                    index={index + 1}
+                    source={source}
+                    tokens={tokens}
+                  />
+                ))}
+              </ol>
+              {sources.length > 5 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllSources((v) => !v)}
+                  className="mt-3 min-h-[40px] rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{
+                    background: tokens.pillSurface,
+                    borderColor: tokens.border,
+                    color: tokens.text,
+                    outlineColor: tokens.accent,
+                  }}
+                >
+                  {showAllSources
+                    ? "Show fewer sources"
+                    : `Show all sources (${sources.length})`}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
+
+      <div
+        className="border-t px-4 py-2 text-[11px] sm:px-5"
+        style={{ borderColor: tokens.border, color: tokens.textMuted }}
+      >
+        {footerNote}
+      </div>
     </div>
   );
 }
@@ -199,6 +238,8 @@ type Tokens = {
   textMuted: string;
   accent: string;
   warn: string;
+  warnBg: string;
+  warnBorder: string;
   badgeBg: string;
   badgeBorder: string;
   badgeText: string;
@@ -220,6 +261,8 @@ function themeTokens(variant: Variant): Tokens {
       textMuted: "#6B7280",
       accent: "#2563EB",
       warn: "#B45309",
+      warnBg: "#FEF3C7",
+      warnBorder: "#FCD34D",
       badgeBg: "#EEF2FF",
       badgeBorder: "#C7D2FE",
       badgeText: "#1D4ED8",
@@ -239,6 +282,8 @@ function themeTokens(variant: Variant): Tokens {
     textMuted: "var(--market-text-muted)",
     accent: "var(--market-cyan)",
     warn: "var(--market-amber)",
+    warnBg: "color-mix(in srgb, var(--market-amber) 22%, transparent)",
+    warnBorder: "var(--market-border-strong)",
     badgeBg: "color-mix(in srgb, var(--market-blue) 22%, transparent)",
     badgeBorder: "var(--market-border-strong)",
     badgeText: "var(--market-text)",
@@ -250,22 +295,69 @@ function themeTokens(variant: Variant): Tokens {
 }
 
 // =============================================================
-// Buttons
+// Provider chip
+// =============================================================
+
+function ProviderChip({
+  label,
+  tokens,
+}: {
+  label: "OpenAI" | "Grok";
+  tokens: Tokens;
+}) {
+  const iconSrc =
+    label === "Grok"
+      ? "/icons/workspace/xai-icon-black.svg"
+      : null;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+      style={{
+        background: tokens.pillSurface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      }}
+    >
+      {iconSrc ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={iconSrc}
+          alt=""
+          aria-hidden
+          width={12}
+          height={12}
+          style={{ display: "inline-block" }}
+        />
+      ) : (
+        <span aria-hidden style={{ fontWeight: 700 }}>
+          ◎
+        </span>
+      )}
+      {label}
+    </span>
+  );
+}
+
+// =============================================================
+// Pill button
 // =============================================================
 
 function PillButton({
   label,
   onClick,
   tokens,
+  ariaPressed,
 }: {
   label: string;
   onClick: () => void;
   tokens: Tokens;
+  ariaPressed?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={ariaPressed}
       className="inline-flex min-h-[36px] items-center justify-center rounded-full border px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
       style={
         {
@@ -273,7 +365,6 @@ function PillButton({
           borderColor: tokens.border,
           color: tokens.text,
           outlineColor: tokens.accent,
-          ["--hover-bg" as string]: tokens.pillSurfaceHover,
         } as CSSProperties
       }
       onMouseEnter={(e) => {
@@ -289,8 +380,7 @@ function PillButton({
 }
 
 // =============================================================
-// Markdown renderer (lightweight; covers h1/h2/h3, ul, ol, p, strong,
-// links, and inline [n] citation markers).
+// Markdown renderer
 // =============================================================
 
 function MarkdownView({
@@ -303,7 +393,7 @@ function MarkdownView({
   const blocks = parseMarkdownBlocks(markdown);
   return (
     <div
-      className="flex flex-col gap-3 text-[13.5px] leading-[1.6]"
+      className="flex flex-col gap-3 text-[14px] leading-[1.65] [overflow-wrap:anywhere]"
       style={{ color: tokens.textSecondary }}
     >
       {blocks.map((block, index) => {
@@ -322,7 +412,7 @@ function MarkdownView({
           return (
             <h2
               key={index}
-              className="mt-2 font-display text-[15px] font-semibold leading-tight"
+              className="mt-2 font-display text-[16px] font-semibold leading-tight"
               style={{ color: tokens.text }}
             >
               {renderInline(block.lines[0], tokens)}
@@ -333,7 +423,7 @@ function MarkdownView({
           return (
             <h3
               key={index}
-              className="mt-1 font-display text-[13.5px] font-semibold leading-tight"
+              className="mt-1 font-display text-[14.5px] font-semibold leading-tight"
               style={{ color: tokens.text }}
             >
               {renderInline(block.lines[0], tokens)}
@@ -487,7 +577,7 @@ function renderInline(text: string, tokens: Tokens): ReactNode[] {
             href={linkMatch[2]}
             target="_blank"
             rel="noreferrer"
-            className="underline-offset-4 hover:underline"
+            className="break-words underline-offset-4 hover:underline"
             style={{ color: tokens.link }}
           >
             {linkMatch[1]}
@@ -555,19 +645,11 @@ function SourceRow({
 }
 
 // =============================================================
-// Plain-text / Markdown helpers for clipboard / share
+// Copy text builder — Markdown-flavoured plain text with sources
+// inlined at the bottom. Pastes cleanly into email and Docs.
 // =============================================================
 
-function appendSources(markdown: string, sources: AiSource[]): string {
-  if (sources.length === 0) return markdown;
-  const sourceLines = sources.map(
-    (source, index) =>
-      `[${index + 1}] ${source.title || source.domain} (${source.domain}) - ${source.url}`
-  );
-  return `${markdown.trim()}\n\n## Sources\n${sourceLines.join("\n")}`;
-}
-
-function markdownToPlainText(markdown: string, sources: AiSource[]): string {
+function buildCopyText(markdown: string, sources: AiSource[]): string {
   const stripped = markdown
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -575,10 +657,9 @@ function markdownToPlainText(markdown: string, sources: AiSource[]): string {
     .replace(/^[-*]\s+/gm, "- ")
     .trim();
   if (sources.length === 0) return stripped;
-  return `${stripped}\n\nSources:\n${sources
-    .map(
-      (source, index) =>
-        `[${index + 1}] ${source.title || source.domain}: ${source.url}`
-    )
-    .join("\n")}`;
+  const sourceLines = sources.map(
+    (source, index) =>
+      `[${index + 1}] ${source.title || source.domain} — ${source.url}`
+  );
+  return `${stripped}\n\nSources:\n${sourceLines.join("\n")}`;
 }

@@ -61,19 +61,21 @@ function SnapshotCard({
   emphasized?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1 border border-[var(--market-border)] bg-[var(--market-surface)] p-3 sm:p-4">
-      <div className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+    <div className="flex min-w-0 flex-col gap-1 border border-[var(--market-border)] bg-[var(--market-surface)] p-3 sm:p-4">
+      <div className="truncate text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
         {label}
       </div>
       <div
-        className={`font-data tabular-nums leading-tight text-[var(--market-text)] ${
-          emphasized ? "text-2xl font-semibold sm:text-[28px]" : "text-xl font-semibold"
+        className={`font-data tabular-nums leading-tight text-[var(--market-text)] [overflow-wrap:anywhere] ${
+          emphasized
+            ? "text-lg font-semibold sm:text-2xl lg:text-[26px]"
+            : "text-base font-semibold sm:text-lg"
         }`}
       >
         {value}
       </div>
       {sub ? (
-        <div className="text-[11px] text-[var(--market-text-secondary)]">
+        <div className="text-[11px] text-[var(--market-text-secondary)] [overflow-wrap:anywhere]">
           {sub}
         </div>
       ) : null}

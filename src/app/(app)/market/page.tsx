@@ -36,6 +36,7 @@ import {
   type GoogleGeocodeNormalized,
   hasGoogleMapsServerKey,
 } from "@/lib/google-maps";
+import { hasXaiKey } from "@/lib/xai";
 import {
   FRED_SERIES,
   FRED_SERIES_LABELS,
@@ -714,6 +715,7 @@ export default async function MarketPage() {
   const zillowUrlConfigured = hasZillowZhviUrl();
   const googleMapsKeyConfigured = hasGoogleMapsServerKey();
   const censusKeyConfigured = hasCensusKey();
+  const xaiKeyConfigured = hasXaiKey();
   const zhviSeries = getZhviSeries(latestZillowSnapshot);
   const fredObservations = getFredObservations(latestFredSnapshot);
   const macroObservations: MacroSeriesObservation[] = fredObservations
@@ -1414,6 +1416,7 @@ export default async function MarketPage() {
         propertyCards={
           privateCard ? [...businessCards, privateCard] : businessCards
         }
+        xaiAvailable={xaiKeyConfigured}
       />
 
       <NeedsAttentionPanel groups={attentionGroups} />

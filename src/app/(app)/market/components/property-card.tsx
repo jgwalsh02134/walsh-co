@@ -445,16 +445,16 @@ function Metric({
         {label}
       </div>
       <div
-        className={`mt-1 truncate font-data tabular-nums text-[var(--market-text)] ${
+        className={`mt-1 font-data tabular-nums leading-tight text-[var(--market-text)] [overflow-wrap:anywhere] ${
           emphasized
-            ? "text-xl font-semibold sm:text-2xl"
+            ? "text-lg font-semibold sm:text-xl lg:text-2xl"
             : "text-base font-medium"
         }`}
       >
         {value}
       </div>
       {sub ? (
-        <div className="mt-0.5 truncate text-[11px] text-[var(--market-text-secondary)]">
+        <div className="mt-0.5 text-[11px] text-[var(--market-text-secondary)] [overflow-wrap:anywhere]">
           {sub}
         </div>
       ) : null}
@@ -844,10 +844,10 @@ function CompsList({
           key={`${c.address ?? ""}-${i}`}
           className="flex flex-col gap-1 px-3 py-2 sm:grid sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)] sm:items-baseline sm:gap-3"
         >
-          <span className="truncate text-xs text-[var(--market-text)]">
+          <span className="text-xs text-[var(--market-text)] [overflow-wrap:anywhere]">
             {c.address ?? dash}
           </span>
-          <span className="font-data text-sm font-semibold tabular-nums text-[var(--market-text)] sm:text-right">
+          <span className="font-data text-sm font-semibold tabular-nums text-[var(--market-text)] [overflow-wrap:anywhere] sm:text-right">
             {kind === "sale"
               ? c.amount != null
                 ? formatCurrency(c.amount)
@@ -856,7 +856,7 @@ function CompsList({
               ? `${formatCurrency(c.amount)}/mo`
               : "Rent not returned"}
           </span>
-          <span className="font-data text-[11px] tabular-nums text-[var(--market-text-muted)] sm:text-right">
+          <span className="font-data text-[11px] tabular-nums text-[var(--market-text-muted)] [overflow-wrap:anywhere] sm:text-right">
             {[
               c.beds != null ? `${c.beds}bd` : null,
               c.baths != null ? `${c.baths}ba` : null,

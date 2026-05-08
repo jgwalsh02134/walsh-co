@@ -167,7 +167,7 @@ export function LocationDemographicsPanel({
                     ) : null}
                   </div>
                   {row.status === "SUCCESS" ? (
-                    <dl className="mt-0.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
+                    <dl className="mt-0.5 grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-[11px]">
                       <Stat label="Population" value={formatInt(row.totalPopulation)} />
                       <Stat
                         label="Median income"
@@ -211,8 +211,10 @@ export function LocationDemographicsPanel({
 function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
     <>
-      <dt className="text-[var(--market-text-muted)]">{label}</dt>
-      <dd className="text-right font-data tabular-nums text-[var(--market-text)]">
+      <dt className="min-w-0 truncate text-[var(--market-text-muted)]">
+        {label}
+      </dt>
+      <dd className="min-w-0 text-right font-data tabular-nums text-[var(--market-text)] [overflow-wrap:anywhere]">
         {value}
       </dd>
     </>

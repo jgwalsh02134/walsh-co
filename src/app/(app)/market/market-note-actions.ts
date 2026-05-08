@@ -5,6 +5,11 @@ import {
   generateWorkspaceTextWithWebSearch,
   hasOpenAIKey,
 } from "@/lib/openai";
+import {
+  generateXaiMarketText,
+  generateXaiMarketTextWithSearch,
+  hasXaiKey,
+} from "@/lib/xai";
 
 // =============================================================
 // Public types
@@ -57,13 +62,24 @@ export type AiSource = {
 
 export type MarketNoteMode = "internal" | "web" | "property";
 
+export type AiProvider = "openai" | "xai";
+
 export type MarketNoteState = {
   ok: boolean;
   message: string;
   sources?: AiSource[];
   /** Mode badge displayed at the top of the rendered note. */
   modeLabel?: string;
+  /** Provider that produced this note. */
+  providerLabel?: "OpenAI" | "Grok";
+  /** True when the provider/mode combination is intentionally not wired. */
+  notWired?: boolean;
 };
+
+/** Server-side check used by the page to gate the Grok provider option. */
+export async function isXaiProviderAvailable(): Promise<boolean> {
+  return hasXaiKey();
+}
 
 // =============================================================
 // Shared safety / behaviour clauses
@@ -95,13 +111,17 @@ const PREFERRED_SOURCES = [
 // =============================================================
 
 export async function generateMarketNote(
-  input: MarketNoteInput
+  input: MarketNoteInput,
+  provider: AiProvider = "openai"
 ): Promise<MarketNoteState> {
-  if (!hasOpenAIKey()) {
+  const providerLabel = providerLabelFor(provider);
+  const keyMissing = providerKeyMissing(provider);
+  if (keyMissing) {
     return {
       ok: false,
-      message: "OpenAI API key not configured.",
-      modeLabel: "Internal Summary",
+      message: keyMissing,
+      modeLabel: "Internal summary",
+      providerLabel,
     };
   }
 
@@ -121,24 +141,25 @@ export async function generateMarketNote(
     "- Missing acquisition basis, missing tax/assessment, stale snapshots, missing condition/renovation facts, missing external confirmation.",
     "## Next Checks",
     "- 3–5 concrete, short action items.",
-    "End with a one-line note: \"Internal provider summary — no web research.\"",
     "",
     "Dashboard data (JSON):",
     JSON.stringify(input, null, 2),
   ].join("\n");
 
   try {
-    const result = await generateWorkspaceText({ prompt });
+    const result = await runInternal(provider, prompt);
     return {
       ok: true,
-      message: result.outputText || "OpenAI returned no note text.",
-      modeLabel: "Internal Summary",
+      message: result.outputText || `${providerLabel} returned no note text.`,
+      modeLabel: "Internal summary",
+      providerLabel,
     };
   } catch (error) {
     return {
       ok: false,
       message: errorMessage(error, "AI internal summary failed"),
-      modeLabel: "Internal Summary",
+      modeLabel: "Internal summary",
+      providerLabel,
     };
   }
 }
@@ -148,13 +169,17 @@ export async function generateMarketNote(
 // =============================================================
 
 export async function generateMarketNoteWithWebSearch(
-  input: MarketNoteInput
+  input: MarketNoteInput,
+  provider: AiProvider = "openai"
 ): Promise<MarketNoteState> {
-  if (!hasOpenAIKey()) {
+  const providerLabel = providerLabelFor(provider);
+  const keyMissing = providerKeyMissing(provider);
+  if (keyMissing) {
     return {
       ok: false,
-      message: "OpenAI API key not configured.",
-      modeLabel: "Web Research",
+      message: keyMissing,
+      modeLabel: "Web research",
+      providerLabel,
     };
   }
 
@@ -185,25 +210,30 @@ export async function generateMarketNoteWithWebSearch(
     "## Next Checks",
     "- 3–6 concise action items.",
     "Do NOT include a Markdown ## Sources section — the UI renders sources separately.",
-    "End with a one-line note: \"Web-researched market note — external sources used.\"",
     "",
     "Dashboard data (JSON, context only):",
     JSON.stringify(input, null, 2),
   ].join("\n");
 
   try {
-    const result = await generateWorkspaceTextWithWebSearch({ prompt });
+    const result = await runWebSearch(provider, prompt);
     return {
-      ok: true,
-      message: result.outputText || "OpenAI returned no note text.",
-      modeLabel: "Web Research",
-      sources: normalizeAiSources(result.sources, "External corroboration / context"),
+      ok: result.notWired ? false : true,
+      message: result.outputText || `${providerLabel} returned no note text.`,
+      modeLabel: "Web research",
+      providerLabel,
+      notWired: result.notWired,
+      sources: normalizeAiSources(
+        result.sources,
+        "External corroboration / context"
+      ),
     };
   } catch (error) {
     return {
       ok: false,
       message: errorMessage(error, "AI web research failed"),
-      modeLabel: "Web Research",
+      modeLabel: "Web research",
+      providerLabel,
     };
   }
 }
@@ -262,13 +292,17 @@ export type PropertyNoteInput = {
 };
 
 export async function generatePropertyAnalysis(
-  input: PropertyNoteInput
+  input: PropertyNoteInput,
+  provider: AiProvider = "openai"
 ): Promise<MarketNoteState> {
-  if (!hasOpenAIKey()) {
+  const providerLabel = providerLabelFor(provider);
+  const keyMissing = providerKeyMissing(provider);
+  if (keyMissing) {
     return {
       ok: false,
-      message: "OpenAI API key not configured.",
-      modeLabel: "Internal Summary",
+      message: keyMissing,
+      modeLabel: "Internal summary",
+      providerLabel,
     };
   }
 
@@ -287,36 +321,41 @@ export async function generatePropertyAnalysis(
     "- Missing acquisition basis, tax/assessment, stale provider data, renovation/condition uncertainty.",
     "## Next Checks",
     "- 3–5 short action items.",
-    "End with a one-line note: \"Internal provider summary — no web research.\"",
     "",
     "Property data (JSON):",
     JSON.stringify(input, null, 2),
   ].join("\n");
 
   try {
-    const result = await generateWorkspaceText({ prompt });
+    const result = await runInternal(provider, prompt);
     return {
       ok: true,
-      message: result.outputText || "OpenAI returned no note text.",
-      modeLabel: "Internal Summary",
+      message: result.outputText || `${providerLabel} returned no note text.`,
+      modeLabel: "Internal summary",
+      providerLabel,
     };
   } catch (error) {
     return {
       ok: false,
       message: errorMessage(error, "AI property summary failed"),
-      modeLabel: "Internal Summary",
+      modeLabel: "Internal summary",
+      providerLabel,
     };
   }
 }
 
 export async function generatePropertyAnalysisWithWebSearch(
-  input: PropertyNoteInput
+  input: PropertyNoteInput,
+  provider: AiProvider = "openai"
 ): Promise<MarketNoteState> {
-  if (!hasOpenAIKey()) {
+  const providerLabel = providerLabelFor(provider);
+  const keyMissing = providerKeyMissing(provider);
+  if (keyMissing) {
     return {
       ok: false,
-      message: "OpenAI API key not configured.",
-      modeLabel: "Property Research",
+      message: keyMissing,
+      modeLabel: "Property research",
+      providerLabel,
     };
   }
 
@@ -343,18 +382,19 @@ export async function generatePropertyAnalysisWithWebSearch(
     "## Next Checks",
     "- 3–6 concrete action items.",
     "Do NOT include a Markdown ## Sources section — the UI renders sources separately.",
-    "End with a one-line note: \"Web-researched property note — external sources used.\"",
     "",
     "Property data (JSON, context only):",
     JSON.stringify(input, null, 2),
   ].join("\n");
 
   try {
-    const result = await generateWorkspaceTextWithWebSearch({ prompt });
+    const result = await runWebSearch(provider, prompt);
     return {
-      ok: true,
-      message: result.outputText || "OpenAI returned no note text.",
-      modeLabel: "Property Research",
+      ok: result.notWired ? false : true,
+      message: result.outputText || `${providerLabel} returned no note text.`,
+      modeLabel: "Property research",
+      providerLabel,
+      notWired: result.notWired,
       sources: normalizeAiSources(
         result.sources,
         `External context for ${input.property.address}`
@@ -364,9 +404,60 @@ export async function generatePropertyAnalysisWithWebSearch(
     return {
       ok: false,
       message: errorMessage(error, "AI property research failed"),
-      modeLabel: "Property Research",
+      modeLabel: "Property research",
+      providerLabel,
     };
   }
+}
+
+// =============================================================
+// Provider routing
+// =============================================================
+
+type InternalResult = { outputText: string };
+type WebSearchResult = {
+  outputText: string;
+  sources: string[];
+  notWired?: boolean;
+};
+
+function providerLabelFor(provider: AiProvider): "OpenAI" | "Grok" {
+  return provider === "xai" ? "Grok" : "OpenAI";
+}
+
+function providerKeyMissing(provider: AiProvider): string | null {
+  if (provider === "xai") {
+    return hasXaiKey() ? null : "xAI API key not configured.";
+  }
+  return hasOpenAIKey() ? null : "OpenAI API key not configured.";
+}
+
+async function runInternal(
+  provider: AiProvider,
+  prompt: string
+): Promise<InternalResult> {
+  if (provider === "xai") {
+    const result = await generateXaiMarketText({ prompt });
+    return { outputText: result.outputText };
+  }
+  const result = await generateWorkspaceText({ prompt });
+  return { outputText: result.outputText };
+}
+
+async function runWebSearch(
+  provider: AiProvider,
+  prompt: string
+): Promise<WebSearchResult> {
+  if (provider === "xai") {
+    const result = await generateXaiMarketTextWithSearch({ prompt });
+    return {
+      outputText: result.outputText,
+      sources: result.sources,
+      notWired: result.notWired,
+    };
+  }
+  const result = await generateWorkspaceTextWithWebSearch({ prompt });
+  return { outputText: result.outputText, sources: result.sources };
 }
 
 // =============================================================

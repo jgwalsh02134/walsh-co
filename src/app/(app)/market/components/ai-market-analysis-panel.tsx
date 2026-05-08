@@ -4,16 +4,24 @@
  * Ψ Market Intelligence Assistant
  *
  * Light-surface AI research panel that sits above the property cards.
- * Three modes:
  *
+ * Provider:
+ *   • OpenAI (default)
+ *   • Grok / xAI (optional, only shown when XAI_API_KEY is configured server-side)
+ *
+ * Mode:
  *   • Internal Summary  — interprets what is already on the dashboard.
- *   • Web Research      — finds NEW external context, conflicts, and
- *                         next checks beyond the dashboard.
- *   • Property Research — same, but scoped to one selected property.
+ *   • Web Research      — finds NEW external context, conflicts, next checks.
+ *   • Property Research — same, scoped to one selected property.
  *
- * Visual goal: looks like a focused research note layered on top of
- * the dark dashboard, not another dark provider card. macOS-style
- * pill buttons, segmented mode selector, soft shadow, light surface.
+ * UX rules baked in:
+ *   - The output card supports Minimize and Clear, so users do not have
+ *     to scroll past long AI answers to reach property cards on mobile.
+ *   - Disclaimers are calm: one short footer line, not flashing warnings.
+ *   - API keys are never sent to the client; the parent page tells us
+ *     boolean availability for each provider.
+ *   - xAI web/property research currently returns a "not wired yet" note
+ *     instead of fabricating sources; UI surfaces this clearly.
  */
 
 import { useMemo, useState, useTransition } from "react";
@@ -21,6 +29,7 @@ import {
   generateMarketNote,
   generateMarketNoteWithWebSearch,
   generatePropertyAnalysisWithWebSearch,
+  type AiProvider,
   type MarketNoteInput,
   type MarketNoteState,
 } from "../market-note-actions";
@@ -32,15 +41,20 @@ type Mode = "internal" | "web" | "property";
 
 export type AiMarketAnalysisPanelProps = {
   marketInput: MarketNoteInput;
-  /** All tracked properties (business + private). Property-research mode
+  /** Tracked properties (business + private). The Property Research mode
    *  uses this list to populate the property selector. */
   propertyCards: PropertyCardData[];
+  /** True when XAI_API_KEY is configured on the server. The page passes
+   *  this in; the panel never reads server env directly. */
+  xaiAvailable: boolean;
 };
 
 export function AiMarketAnalysisPanel({
   marketInput,
   propertyCards,
+  xaiAvailable,
 }: AiMarketAnalysisPanelProps) {
+  const [provider, setProvider] = useState<AiProvider>("openai");
   const [mode, setMode] = useState<Mode>("internal");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
     propertyCards.find((c) => !c.property.isPrivate)?.property.id ??
@@ -60,20 +74,21 @@ export function AiMarketAnalysisPanel({
     startTransition(async () => {
       let result: MarketNoteState;
       if (mode === "internal") {
-        result = await generateMarketNote(marketInput);
+        result = await generateMarketNote(marketInput, provider);
       } else if (mode === "web") {
-        result = await generateMarketNoteWithWebSearch(marketInput);
+        result = await generateMarketNoteWithWebSearch(marketInput, provider);
       } else {
         if (!selected) {
           setState({
             ok: false,
             message: "Select a property to research.",
-            modeLabel: "Property Research",
+            modeLabel: "Property research",
+            providerLabel: provider === "xai" ? "Grok" : "OpenAI",
           });
           return;
         }
         const input = buildPropertyNoteInput(selected);
-        result = await generatePropertyAnalysisWithWebSearch(input);
+        result = await generatePropertyAnalysisWithWebSearch(input, provider);
       }
       setState(result);
     });
@@ -85,12 +100,13 @@ export function AiMarketAnalysisPanel({
       : mode === "web"
       ? "Research market with web"
       : "Research selected property";
+
   const helper =
     mode === "web" || mode === "property"
-      ? "Web research looks for external corroboration, conflicts, and missing context beyond the dashboard data."
-      : mode === "internal"
-      ? "Interprets what is already on the dashboard. No web search."
-      : null;
+      ? provider === "xai"
+        ? "Grok web research is not wired yet. Use OpenAI for web research, or run a Grok internal summary."
+        : "Web research looks for external corroboration, conflicts, and missing context beyond the dashboard data."
+      : "Interprets what is already on the dashboard. No web search.";
 
   return (
     <section
@@ -106,13 +122,13 @@ export function AiMarketAnalysisPanel({
       }}
     >
       <header
-        className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-start sm:justify-between"
+        className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5"
         style={{
           background: "linear-gradient(180deg, #FFFEF9 0%, #FBF8F3 100%)",
           borderBottom: "1px solid #E5DDD0",
         }}
       >
-        <div className="flex items-start gap-3 min-w-0">
+        <div className="flex min-w-0 items-start gap-3">
           <span
             aria-hidden
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl font-semibold"
@@ -133,29 +149,23 @@ export function AiMarketAnalysisPanel({
               Market Intelligence Assistant
             </h2>
             <p
-              className="mt-0.5 text-[12.5px] leading-snug"
+              className="mt-0.5 text-[12.5px] leading-snug [overflow-wrap:anywhere]"
               style={{ color: "#475569" }}
             >
-              Researches external context, source conflicts, and next checks
-              beyond the provider dashboard.
+              Finds external context, conflicts, and next checks beyond the
+              provider dashboard.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-            style={{
-              background: "#FFFFFF",
-              borderColor: "#E5DDD0",
-              color: "#475569",
-            }}
-          >
-            Server-only · non-autonomous
-          </span>
-        </div>
       </header>
 
-      <div className="flex flex-col gap-4 px-5 py-4">
+      <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
+        <ProviderSegmented
+          provider={provider}
+          onChange={setProvider}
+          xaiAvailable={xaiAvailable}
+        />
+
         <ModeSegmented mode={mode} onChange={setMode} />
 
         {mode === "property" ? (
@@ -166,12 +176,12 @@ export function AiMarketAnalysisPanel({
           />
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <button
             type="button"
             disabled={pending || (mode === "property" && !selected)}
             onClick={run}
-            className="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-[13px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full px-4 py-2 text-[13px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             style={{
               background: "#2563EB",
               color: "#FFFFFF",
@@ -181,20 +191,128 @@ export function AiMarketAnalysisPanel({
           >
             {pending ? "Generating…" : ctaLabel}
           </button>
-          {helper ? (
-            <p className="text-[11.5px]" style={{ color: "#6B7280" }}>
-              {helper}
-            </p>
-          ) : null}
+          <p
+            className="text-[11.5px] leading-snug [overflow-wrap:anywhere]"
+            style={{ color: "#6B7280" }}
+          >
+            {helper}
+          </p>
         </div>
 
         {state ? (
-          <AiResponseCard state={state} variant="light" />
+          <AiResponseCard
+            state={state}
+            variant="light"
+            onClear={() => setState(null)}
+          />
         ) : (
           <EmptyHint />
         )}
+
+        <p className="text-[11px]" style={{ color: "#9CA3AF" }}>
+          Research mode uses configured AI providers only when you click
+          Generate.
+        </p>
       </div>
     </section>
+  );
+}
+
+// =============================================================
+// Provider segmented control (OpenAI / Grok)
+// =============================================================
+
+function ProviderSegmented({
+  provider,
+  onChange,
+  xaiAvailable,
+}: {
+  provider: AiProvider;
+  onChange: (p: AiProvider) => void;
+  xaiAvailable: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span
+        className="text-[11px] font-semibold uppercase tracking-wider"
+        style={{ color: "#6B7280" }}
+      >
+        AI provider
+      </span>
+      <div
+        role="tablist"
+        aria-label="AI provider"
+        className="inline-flex w-full max-w-full overflow-x-auto rounded-full border p-1"
+        style={{ background: "#FFFFFF", borderColor: "#E5DDD0" }}
+      >
+        <ProviderButton
+          active={provider === "openai"}
+          onClick={() => onChange("openai")}
+          label="OpenAI"
+        />
+        <ProviderButton
+          active={provider === "xai"}
+          onClick={() => xaiAvailable && onChange("xai")}
+          label="Grok"
+          icon={
+            <span
+              aria-hidden
+              className="inline-flex h-3 w-3 items-center justify-center"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={
+                  provider === "xai"
+                    ? "/icons/workspace/xai-icon-white.svg"
+                    : "/icons/workspace/xai-icon-black.svg"
+                }
+                alt=""
+                width={12}
+                height={12}
+              />
+            </span>
+          }
+          disabled={!xaiAvailable}
+          tooltip={xaiAvailable ? undefined : "xAI API key not configured."}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProviderButton({
+  active,
+  onClick,
+  label,
+  icon,
+  disabled,
+  tooltip,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon?: React.ReactNode;
+  disabled?: boolean;
+  tooltip?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      disabled={disabled}
+      title={tooltip}
+      onClick={onClick}
+      className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      style={{
+        background: active ? "#1F2937" : "transparent",
+        color: active ? "#FBF8F3" : "#475569",
+        outlineColor: "#2563EB",
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -210,27 +328,35 @@ function ModeSegmented({
   onChange: (mode: Mode) => void;
 }) {
   return (
-    <div
-      role="tablist"
-      aria-label="AI mode"
-      className="inline-flex w-full max-w-full overflow-x-auto rounded-full border p-1"
-      style={{ background: "#FFFFFF", borderColor: "#E5DDD0" }}
-    >
-      <SegmentButton
-        active={mode === "internal"}
-        onClick={() => onChange("internal")}
-        label="Internal Summary"
-      />
-      <SegmentButton
-        active={mode === "web"}
-        onClick={() => onChange("web")}
-        label="Web Research"
-      />
-      <SegmentButton
-        active={mode === "property"}
-        onClick={() => onChange("property")}
-        label="Property Research"
-      />
+    <div className="flex flex-col gap-1.5">
+      <span
+        className="text-[11px] font-semibold uppercase tracking-wider"
+        style={{ color: "#6B7280" }}
+      >
+        Mode
+      </span>
+      <div
+        role="tablist"
+        aria-label="AI mode"
+        className="inline-flex w-full max-w-full overflow-x-auto rounded-full border p-1"
+        style={{ background: "#FFFFFF", borderColor: "#E5DDD0" }}
+      >
+        <SegmentButton
+          active={mode === "internal"}
+          onClick={() => onChange("internal")}
+          label="Internal summary"
+        />
+        <SegmentButton
+          active={mode === "web"}
+          onClick={() => onChange("web")}
+          label="Web research"
+        />
+        <SegmentButton
+          active={mode === "property"}
+          onClick={() => onChange("property")}
+          label="Property research"
+        />
+      </div>
     </div>
   );
 }
@@ -263,7 +389,7 @@ function SegmentButton({
 }
 
 // =============================================================
-// Property picker (visible only in Property Research mode)
+// Property picker
 // =============================================================
 
 function PropertyPicker({
@@ -282,7 +408,7 @@ function PropertyPicker({
     <div className="flex flex-col gap-1.5">
       <label
         htmlFor="ai-property-picker"
-        className="text-[11.5px] font-semibold uppercase tracking-wide"
+        className="text-[11px] font-semibold uppercase tracking-wider"
         style={{ color: "#6B7280" }}
       >
         Research property
@@ -291,7 +417,7 @@ function PropertyPicker({
         id="ai-property-picker"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="min-h-[44px] rounded-full border bg-white px-4 py-2 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="min-h-[44px] w-full rounded-full border bg-white px-4 py-2 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{
           borderColor: "#E5DDD0",
           color: "#1F2937",
@@ -333,19 +459,8 @@ function EmptyHint() {
       }}
     >
       <p>
-        Pick a mode and run. The note appears here and will include an
-        <strong className="px-1" style={{ color: "#0F172A" }}>
-          Internal
-        </strong>
-        or
-        <strong className="px-1" style={{ color: "#0F172A" }}>
-          Web Research
-        </strong>
-        badge so you know where the analysis came from.
-      </p>
-      <p className="mt-1.5" style={{ color: "#6B7280" }}>
-        AI never refreshes providers or writes to the database, and never sees
-        API keys.
+        Pick a provider and mode, then run. The note appears here with a small
+        provider and mode badge so you know where the analysis came from.
       </p>
     </div>
   );
