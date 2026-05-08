@@ -69,10 +69,14 @@ import {
 } from "@/lib/zillow-research";
 import { AiMarketAnalysisPanel } from "./components/ai-market-analysis-panel";
 import {
-  DataCoveragePanel,
   type CoverageRow,
   type RoadmapRow,
 } from "./components/data-coverage-panel";
+import { MarketTrackerSettings } from "./components/market-tracker-settings";
+import {
+  SourceStatusRow,
+  type SourceStatus,
+} from "./components/source-status-row";
 import {
   LocationDemographicsPanel,
   type CensusRow,
@@ -95,10 +99,7 @@ import {
   type SerializableValuationPoint,
 } from "./components/property-card";
 import { type ValuationPoint } from "./components/property-valuation-chart";
-import {
-  SourceDiagnosticsPanel,
-  type SourceDiagnosticsRow,
-} from "./components/source-diagnostics-panel";
+import { type SourceDiagnosticsRow } from "./components/source-diagnostics-panel";
 import type { MarketNoteInput } from "./market-note-actions";
 
 export const dynamic = "force-dynamic";
@@ -819,6 +820,12 @@ export default async function MarketPage() {
   );
   const censusHasSuccess = censusSnapshots.some((s) => s.status === "SUCCESS");
 
+  const statusKind = (
+    hasSuccess: boolean,
+    keyConf: boolean
+  ): SourceStatus["kind"] =>
+    hasSuccess ? "connected" : keyConf ? "configured" : "missing";
+
   const rentCastSnapshotsExist = rentCastByProperty.size > 0;
   const attomSnapshotsExist = attomByProperty.size > 0;
   const fredSnapshotExists =
@@ -865,6 +872,24 @@ export default async function MarketPage() {
       lastRefreshed = zillowLatestFetchedAt
         ? relativeAge(zillowLatestFetchedAt)
         : null;
+    } else if (s.id === "google-maps") {
+      status = googleMapsHasSuccess
+        ? "Connected"
+        : googleMapsKeyConfigured
+        ? "Planned"
+        : "Not connected";
+      lastRefreshed = googleMapsLatestFetchedAt
+        ? relativeAge(googleMapsLatestFetchedAt)
+        : null;
+    } else if (s.id === "census-acs") {
+      status = censusHasSuccess
+        ? "Connected"
+        : censusKeyConfigured
+        ? "Planned"
+        : "Not connected";
+      lastRefreshed = censusLatestFetchedAt
+        ? relativeAge(censusLatestFetchedAt)
+        : null;
     }
     return { ...s, status, lastRefreshed };
   });
@@ -873,6 +898,24 @@ export default async function MarketPage() {
     manual: dynamicSources.filter((s) => s.status === "Manual").length,
     total: dynamicSources.length,
   };
+
+  const sourceStatuses: SourceStatus[] = [
+    {
+      label: "RentCast",
+      kind: statusKind(rentCastSnapshotsExist, keyConfigured),
+    },
+    { label: "ATTOM", kind: statusKind(attomSnapshotsExist, attomKeyConfigured) },
+    { label: "Zillow", kind: statusKind(zillowSnapshotExists, zillowUrlConfigured) },
+    { label: "FRED", kind: statusKind(fredSnapshotExists, fredKeyConfigured) },
+    {
+      label: "Google Maps",
+      kind: statusKind(googleMapsHasSuccess, googleMapsKeyConfigured),
+    },
+    {
+      label: "Census",
+      kind: statusKind(censusHasSuccess, censusKeyConfigured),
+    },
+  ];
 
   // ---------- Per-property analysis (server-side build) ----------
   type PropertyAnalysis = {
@@ -1345,48 +1388,6 @@ export default async function MarketPage() {
   return (
     <div className="market-shell -mx-4 -my-6 flex flex-col gap-5 px-3 py-4 sm:-mx-6 sm:-my-8 sm:px-5 sm:py-5 lg:-mx-8 lg:-my-10 lg:gap-6 lg:px-6 lg:py-6">
       <MarketHeader
-        rentCastFreshness={{
-          label: "RentCast",
-          configured: keyConfigured,
-          relative: rentCastLatestFetchedAt
-            ? relativeAge(rentCastLatestFetchedAt)
-            : null,
-        }}
-        attomFreshness={{
-          label: "ATTOM",
-          configured: attomKeyConfigured,
-          relative: attomLatestFetchedAt
-            ? relativeAge(attomLatestFetchedAt)
-            : null,
-        }}
-        fredFreshness={{
-          label: "FRED",
-          configured: fredKeyConfigured,
-          relative: fredLatestFetchedAt
-            ? relativeAge(fredLatestFetchedAt)
-            : null,
-        }}
-        zillowFreshness={{
-          label: "Zillow ZHVI",
-          configured: zillowUrlConfigured,
-          relative: zillowLatestFetchedAt
-            ? relativeAge(zillowLatestFetchedAt)
-            : null,
-        }}
-        googleMapsFreshness={{
-          label: "Google Maps",
-          configured: googleMapsKeyConfigured,
-          relative: googleMapsLatestFetchedAt
-            ? relativeAge(googleMapsLatestFetchedAt)
-            : null,
-        }}
-        censusFreshness={{
-          label: "Census ACS",
-          configured: censusKeyConfigured,
-          relative: censusLatestFetchedAt
-            ? relativeAge(censusLatestFetchedAt)
-            : null,
-        }}
         hasManualEntries={manualEntries.size > 0}
         databaseAvailable={dbAvailable}
       />
@@ -1410,6 +1411,8 @@ export default async function MarketPage() {
         }
         freshnessSub="Latest provider snapshot"
       />
+
+      <SourceStatusRow sources={sourceStatuses} />
 
       <AiMarketAnalysisPanel
         marketInput={marketNoteInput}
@@ -1481,9 +1484,18 @@ export default async function MarketPage() {
         }
       />
 
-      <DataCoveragePanel rows={dataCoverageRows} roadmap={roadmapRows} />
-
-      <SourceDiagnosticsPanel sources={dynamicSources} counts={counts} />
+      <MarketTrackerSettings
+        rentCastConfigured={keyConfigured}
+        attomConfigured={attomKeyConfigured}
+        fredConfigured={fredKeyConfigured}
+        zillowConfigured={zillowUrlConfigured}
+        googleMapsConfigured={googleMapsKeyConfigured}
+        censusConfigured={censusKeyConfigured}
+        coverageRows={dataCoverageRows}
+        roadmapRows={roadmapRows}
+        diagnosticsSources={dynamicSources}
+        diagnosticsCounts={counts}
+      />
     </div>
   );
 }

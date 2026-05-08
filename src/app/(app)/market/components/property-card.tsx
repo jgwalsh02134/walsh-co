@@ -205,11 +205,11 @@ const TABS = ["overview", "chart", "comps", "records", "trend"] as const;
 type TabId = (typeof TABS)[number];
 
 const TAB_LABELS: Record<TabId, string> = {
-  overview: "Overview",
+  overview: "Summary",
   chart: "Chart",
   comps: "Comps",
   records: "Records",
-  trend: "Trend",
+  trend: "Area trend",
 };
 
 // =============================================================
@@ -238,7 +238,7 @@ export function PropertyCard({
 
   const stale = isStaleIso(lastRefreshedIso, 30);
   const verificationLabel = verification.verifiedByAttom
-    ? "ATTOM verified"
+    ? "Public record matched"
     : property.factsNeedVerification || property.zipNeedsVerification
     ? "Records pending"
     : "Manual notes";
@@ -288,7 +288,7 @@ export function PropertyCard({
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--market-text-muted)]">
               <span>
-                Zillow ZHVI{" "}
+                Area trend{" "}
                 <span className="font-data text-[var(--market-text)]">
                   {trend.zip ? `ZIP ${trend.zip}` : dash}
                 </span>
@@ -302,7 +302,7 @@ export function PropertyCard({
               >
                 1Y {formatPctChange(trend.yoyChange)}
               </span>
-              <span>Trend context only</span>
+              <span>Area context only</span>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1 text-right">
@@ -317,13 +317,18 @@ export function PropertyCard({
               {stale ? " · stale" : ""}
             </span>
             <span
-              className={`text-[11px] font-semibold ${
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                 verification.verifiedByAttom
-                  ? "text-[var(--market-positive-dark)]"
+                  ? "border-[var(--market-border-strong)] bg-[var(--market-surface-raised)] text-[var(--market-text-secondary)]"
                   : property.factsNeedVerification || property.zipNeedsVerification
-                  ? "text-[var(--market-amber)]"
-                  : "text-[var(--market-text-secondary)]"
+                  ? "border-[var(--market-amber)] bg-transparent text-[var(--market-amber)]"
+                  : "border-[var(--market-border)] bg-transparent text-[var(--market-text-secondary)]"
               }`}
+              title={
+                verification.verifiedByAttom
+                  ? "Record source: ATTOM"
+                  : undefined
+              }
             >
               {verificationLabel}
             </span>
@@ -405,7 +410,9 @@ function PropertyMetricStrip({ data }: { data: PropertyCardData }) {
       <Metric
         label="Confidence"
         value={
-          house.confidence != null ? `${Math.round(house.confidence)}/100` : dash
+          house.confidence != null
+            ? `${Math.round(house.confidence)}/100`
+            : "Not provided"
         }
         sub={
           house.source === "ATTOM AVM"
@@ -414,6 +421,8 @@ function PropertyMetricStrip({ data }: { data: PropertyCardData }) {
             ? "RentCast AVM"
             : house.source === "Manual"
             ? "Manual underwriting"
+            : house.confidence == null
+            ? "Source did not return a confidence value"
             : "no value source"
         }
       />
@@ -480,7 +489,7 @@ function PropertyTabs({
       role="tablist"
       id={tablistId}
       aria-label="Property detail sections"
-      className="flex gap-1 overflow-x-auto border-b border-[var(--market-border)] bg-[var(--market-bg)] px-2 py-2 sm:px-3"
+      className="flex gap-2 overflow-x-auto border-b border-[var(--market-border)] bg-[var(--market-bg)] px-3 py-3 sm:px-4"
     >
       {TABS.map((tabId) => {
         const isActive = active === tabId;
@@ -494,11 +503,11 @@ function PropertyTabs({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(tabId)}
             className={[
-              "inline-flex shrink-0 items-center justify-center border px-3 py-2 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)] sm:text-sm",
-              "min-h-[40px]",
+              "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border px-4 py-2 text-[13px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]",
+              "min-h-[44px] min-w-[88px]",
               isActive
-                ? "border-[var(--market-cyan)] bg-[var(--market-surface-raised)] text-[var(--market-text)]"
-                : "border-transparent bg-transparent text-[var(--market-text-secondary)] hover:border-[var(--market-border-strong)] hover:text-[var(--market-text)]",
+                ? "border-[var(--market-cyan)] bg-[var(--market-cyan)] text-[var(--market-bg)]"
+                : "border-[var(--market-border-strong)] bg-[var(--market-surface)] text-[var(--market-text)] hover:border-[var(--market-cyan)] hover:bg-[var(--market-surface-raised)]",
             ].join(" ")}
           >
             {TAB_LABELS[tabId]}
@@ -931,27 +940,50 @@ function RecordsPanel({ data }: { data: PropertyCardData }) {
   if (populated.length === 0) {
     return (
       <p className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3 text-xs text-[var(--market-text-muted)]">
-        ATTOM record returned, but year built / size / tax fields were not
-        included.
+        ATTOM matched the parcel record, but selected building / tax fields
+        were not returned.
       </p>
     );
   }
 
+  // If ATTOM matched but most building/tax fields are missing, surface a
+  // calmer notice instead of a sparse table-of-dashes feel.
+  const buildingTaxFields = [
+    "Year built",
+    "Building size",
+    "Assessed value",
+    "Annual taxes",
+    "Last sale price",
+    "Last sale date",
+  ];
+  const populatedBuildingTax = populated.filter((i) =>
+    buildingTaxFields.includes(i.label)
+  ).length;
+  const showPartialNotice = populatedBuildingTax === 0;
+
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      {populated.map((item) => (
-        <div
-          key={item.label}
-          className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3"
-        >
-          <div className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
-            {item.label}
+    <div className="flex flex-col gap-3">
+      {showPartialNotice ? (
+        <p className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3 text-xs text-[var(--market-text-muted)]">
+          ATTOM matched the parcel record, but selected building / tax
+          fields (year built, size, assessment, taxes) were not returned.
+        </p>
+      ) : null}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {populated.map((item) => (
+          <div
+            key={item.label}
+            className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3"
+          >
+            <div className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
+              {item.label}
+            </div>
+            <div className="mt-1 break-words font-data text-sm tabular-nums text-[var(--market-text)]">
+              {item.value}
+            </div>
           </div>
-          <div className="mt-1 break-words font-data text-sm tabular-nums text-[var(--market-text)]">
-            {item.value}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -967,13 +999,17 @@ function TrendPanel({ data }: { data: PropertyCardData }) {
       <div className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="font-display text-sm font-semibold text-[var(--market-text)]">
-            ZIP {trend.zip ?? "—"} value trend
+            ZIP Home Value Trend
           </div>
           <div className="text-[11px] text-[var(--market-text-muted)]">
             {trend.latestDate ? `as of ${formatDate(trend.latestDate)}` : "no data"}
           </div>
         </div>
-        <div className="mt-3 font-data text-2xl font-semibold tabular-nums text-[var(--market-text)]">
+        <p className="mt-1 text-[11px] text-[var(--market-text-muted)]">
+          Area trend only — not this property&rsquo;s estimate.
+          {trend.zip ? ` ZIP ${trend.zip} home-value index.` : ""}
+        </p>
+        <div className="mt-3 font-data text-2xl font-semibold tabular-nums text-[var(--market-text)] [overflow-wrap:anywhere]">
           {formatCurrency(trend.latestValue)}
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -982,8 +1018,7 @@ function TrendPanel({ data }: { data: PropertyCardData }) {
           <ChangeChip label="5Y" value={trend.fiveYearChange} />
         </div>
         <p className="mt-2 text-[11px] text-[var(--market-text-muted)]">
-          Zillow ZHVI ZIP-level home value index. Trend context only — not a
-          property estimate.
+          Source: Zillow ZHVI (ZIP-level home value index).
         </p>
       </div>
 

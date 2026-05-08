@@ -248,6 +248,9 @@ type Tokens = {
   badgeText: string;
   pillSurface: string;
   pillSurfaceHover: string;
+  pillBorder: string;
+  pillShadow: string;
+  pillShadowHover: string;
   link: string;
   citation: string;
 };
@@ -270,7 +273,11 @@ function themeTokens(variant: Variant): Tokens {
       badgeBorder: "#C7D2FE",
       badgeText: "#1D4ED8",
       pillSurface: "#FFFFFF",
-      pillSurfaceHover: "#F3F4F6",
+      pillSurfaceHover: "#F9FAFB",
+      pillBorder: "#D1D5DB",
+      pillShadow: "0 1px 1px rgba(15,23,42,0.04)",
+      pillShadowHover:
+        "0 1px 1px rgba(15,23,42,0.04), 0 2px 6px rgba(15,23,42,0.06)",
       link: "#1D4ED8",
       citation: "#0EA5E9",
     };
@@ -292,6 +299,9 @@ function themeTokens(variant: Variant): Tokens {
     badgeText: "var(--market-text)",
     pillSurface: "var(--market-surface)",
     pillSurfaceHover: "var(--market-surface-hover)",
+    pillBorder: "var(--market-border-strong)",
+    pillShadow: "none",
+    pillShadowHover: "0 1px 4px rgba(0,0,0,0.25)",
     link: "var(--market-cyan)",
     citation: "var(--market-cyan)",
   };
@@ -365,20 +375,23 @@ function PillButton({
       type="button"
       onClick={onClick}
       aria-pressed={ariaPressed}
-      className="inline-flex min-h-[36px] items-center justify-center rounded-full border px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="inline-flex min-h-[36px] items-center justify-center rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2"
       style={
         {
           background: tokens.pillSurface,
-          borderColor: tokens.border,
+          borderColor: tokens.pillBorder,
           color: tokens.text,
           outlineColor: tokens.accent,
+          boxShadow: tokens.pillShadow,
         } as CSSProperties
       }
       onMouseEnter={(e) => {
         e.currentTarget.style.background = tokens.pillSurfaceHover;
+        e.currentTarget.style.boxShadow = tokens.pillShadowHover;
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = tokens.pillSurface;
+        e.currentTarget.style.boxShadow = tokens.pillShadow;
       }}
     >
       {label}

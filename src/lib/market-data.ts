@@ -45,7 +45,7 @@ export const trackedProperties: TrackedProperty[] = [
     factsNeedVerification: false,
     assetRole: "Active Rental",
     kind: "business",
-    notes: "Cash-flowing investment property.",
+    notes: "Active rental asset.",
   },
   {
     id: "momrow-16",
@@ -57,7 +57,7 @@ export const trackedProperties: TrackedProperty[] = [
     factsNeedVerification: false,
     assetRole: "Active Rental",
     kind: "business",
-    notes: "Cash-flowing investment property.",
+    notes: "Active rental asset.",
   },
   {
     id: "osborne-322",

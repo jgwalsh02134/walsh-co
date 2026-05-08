@@ -131,17 +131,17 @@ export const marketSources: MarketSource[] = [
     envVarName: "FRED_API_KEY",
   },
   {
-    id: "mapbox",
-    name: "Google Maps / Mapbox",
+    id: "google-maps",
+    name: "Google Maps",
     category: "Maps",
     status: "Not connected",
     intendedUse:
-      "Geocoding, walkability context, neighborhood maps and overlays.",
+      "Geocoding and lat/lng context for tracked properties.",
     priority: 7,
     requiresApiKey: true,
-    envVarName: "MAPBOX_TOKEN",
+    envVarName: "GOOGLE_MAPS_SERVER_API_KEY",
     notes:
-      "Token is optional for low-volume static maps; required for production.",
+      "Server-only Geocoding API key. Used for context only — never as a valuation source.",
   },
   {
     id: "zillow-research",
@@ -182,7 +182,7 @@ export const sectionSources: Record<MarketSection, string[]> = {
   rentEstimates: ["rentcast", "manual-internal"],
   salesComparables: ["attom", "rentcast"],
   rentalComparables: ["rentcast"],
-  neighborhoodSignals: ["census-acs", "mapbox", "manual-internal"],
+  neighborhoodSignals: ["census-acs", "google-maps", "manual-internal"],
   forecasts: ["rentcast", "manual-internal"],
   taxAssessment: ["attom", "manual-internal"],
   riskIndicators: ["climatecheck", "manual-internal"],

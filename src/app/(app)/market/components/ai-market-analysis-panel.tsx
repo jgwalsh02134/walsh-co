@@ -73,26 +73,51 @@ export function AiMarketAnalysisPanel({
 
   const run = () => {
     setState(null);
+    // Capture the mode + provider at request time so the rendered badges
+    // always reflect what the user clicked, even if a future server-side
+    // label drifts. Prevents "Web research selected, output reads
+    // Internal summary" mismatches.
+    const requestedMode = mode;
+    const requestedProvider = provider;
+    const requestedModeLabel: "Internal summary" | "Web research" | "Property research" =
+      requestedMode === "internal"
+        ? "Internal summary"
+        : requestedMode === "web"
+        ? "Web research"
+        : "Property research";
+    const requestedProviderLabel: "OpenAI" | "Grok" =
+      requestedProvider === "xai" ? "Grok" : "OpenAI";
+
     startTransition(async () => {
       let result: MarketNoteState;
-      if (mode === "internal") {
-        result = await generateMarketNote(marketInput, provider);
-      } else if (mode === "web") {
-        result = await generateMarketNoteWithWebSearch(marketInput, provider);
+      if (requestedMode === "internal") {
+        result = await generateMarketNote(marketInput, requestedProvider);
+      } else if (requestedMode === "web") {
+        result = await generateMarketNoteWithWebSearch(
+          marketInput,
+          requestedProvider
+        );
       } else {
         if (!selected) {
           setState({
             ok: false,
             message: "Select a property to research.",
-            modeLabel: "Property research",
-            providerLabel: provider === "xai" ? "Grok" : "OpenAI",
+            modeLabel: requestedModeLabel,
+            providerLabel: requestedProviderLabel,
           });
           return;
         }
         const input = buildPropertyNoteInput(selected);
-        result = await generatePropertyAnalysisWithWebSearch(input, provider);
+        result = await generatePropertyAnalysisWithWebSearch(
+          input,
+          requestedProvider
+        );
       }
-      setState(result);
+      setState({
+        ...result,
+        modeLabel: requestedModeLabel,
+        providerLabel: requestedProviderLabel,
+      });
     });
   };
 
