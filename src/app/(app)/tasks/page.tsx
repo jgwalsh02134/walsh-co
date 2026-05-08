@@ -161,7 +161,12 @@ export default async function TasksPage() {
           description={`${today.length} · ${laneDescriptions.today}`}
           padded={false}
         >
-          <TaskList items={today} />
+          <TaskList
+            items={today}
+            showFollowUpDraft
+            gmailEnabled={gmailEnabled}
+            gmailConnected={gmailConnected}
+          />
         </SectionPanel>
 
         <SectionPanel
@@ -169,7 +174,12 @@ export default async function TasksPage() {
           description={`${thisWeek.length} · ${laneDescriptions.this_week}`}
           padded={false}
         >
-          <TaskList items={thisWeek} />
+          <TaskList
+            items={thisWeek}
+            showFollowUpDraft
+            gmailEnabled={gmailEnabled}
+            gmailConnected={gmailConnected}
+          />
         </SectionPanel>
 
         <SectionPanel

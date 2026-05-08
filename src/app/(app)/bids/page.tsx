@@ -370,6 +370,8 @@ function BidRow({
       ? `${bid.completenessPct}% complete`
       : "Completeness not set";
   const showClarificationDraft = lifecycleId === "needs_clarification";
+  const showGmailDraft =
+    lifecycleId !== "draft" && lifecycleId !== "archived";
   const graphAvailable = hasGraphToken();
 
   return (
@@ -442,69 +444,78 @@ function BidRow({
             </p>
           ) : null}
 
-          {showClarificationDraft ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <DraftEmailButton
-                graphAvailable={graphAvailable}
-                to={null}
-                subject={`Bid clarification: ${bid.contractor} — ${tradeLabel}${
-                  property ? ` (${property.address})` : ""
-                }`}
-                body={[
+          {showGmailDraft || showClarificationDraft
+            ? (() => {
+                const subject = showClarificationDraft
+                  ? `Bid clarification: ${bid.contractor} — ${tradeLabel}${
+                      property ? ` (${property.address})` : ""
+                    }`
+                  : `${bid.contractor} — ${tradeLabel}${
+                      property ? ` (${property.address})` : ""
+                    }`;
+                const body = [
                   `Hi ${bid.contractor},`,
                   "",
                   `Following up on your ${tradeLabel.toLowerCase()} proposal${
                     bid.dateReceived ? ` received ${bid.dateReceived}` : ""
                   }${property ? ` for ${property.address}` : ""}.`,
                   "",
-                  bid.nextAction
-                    ? `Open question: ${bid.nextAction}`
-                    : "We have a few clarifying questions before we can finalize a decision.",
+                  showClarificationDraft
+                    ? bid.nextAction
+                      ? `Open question: ${bid.nextAction}`
+                      : "We have a few clarifying questions before we can finalize a decision."
+                    : bid.nextAction
+                    ? `Note: ${bid.nextAction}`
+                    : "",
                   "",
-                  "Could you confirm scope, exclusions, and any line items not yet itemized? We want to compare bids on a like-for-like basis.",
-                  "",
-                  "Thanks,",
-                ].join("\n")}
-                context={{
-                  kind: "bid",
-                  label: `${bid.contractor} — ${tradeLabel}`,
-                  propertyAddress: property?.address ?? null,
-                }}
-                compact
-                label="Draft clarification email"
-              />
-              <GmailDraftButton
-                enabled={gmailEnabled}
-                connected={gmailConnected}
-                to={null}
-                subject={`Bid clarification: ${bid.contractor} — ${tradeLabel}${
-                  property ? ` (${property.address})` : ""
-                }`}
-                body={[
-                  `Hi ${bid.contractor},`,
-                  "",
-                  `Following up on your ${tradeLabel.toLowerCase()} proposal${
-                    bid.dateReceived ? ` received ${bid.dateReceived}` : ""
-                  }${property ? ` for ${property.address}` : ""}.`,
-                  "",
-                  bid.nextAction
-                    ? `Open question: ${bid.nextAction}`
-                    : "We have a few clarifying questions before we can finalize a decision.",
-                  "",
-                  "Could you confirm scope, exclusions, and any line items not yet itemized? We want to compare bids on a like-for-like basis.",
+                  showClarificationDraft
+                    ? "Could you confirm scope, exclusions, and any line items not yet itemized? We want to compare bids on a like-for-like basis."
+                    : "",
                   "",
                   "Thanks,",
-                ].join("\n")}
-                context={{
-                  kind: "bid",
-                  label: `${bid.contractor} — ${tradeLabel}`,
-                }}
-                compact
-                label="Draft clarification email"
-                returnTo="/bids"
-              />
-            </div>
-          ) : null}
+                ]
+                  .filter((line) => line !== "")
+                  .join("\n");
+                const label = showClarificationDraft
+                  ? "Draft clarification email"
+                  : "Draft email";
+                return (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {showClarificationDraft ? (
+                      <DraftEmailButton
+                        graphAvailable={graphAvailable}
+                        to={null}
+                        subject={subject}
+                        body={body}
+                        context={{
+                          kind: "bid",
+                          label: `${bid.contractor} — ${tradeLabel}`,
+                          propertyAddress: property?.address ?? null,
+                        }}
+                        compact
+                        label={label}
+                      />
+                    ) : null}
+                    {showGmailDraft ? (
+                      <GmailDraftButton
+                        enabled={gmailEnabled}
+                        connected={gmailConnected}
+                        to={null}
+                        subject={subject}
+                        body={body}
+                        context={{
+                          kind: "bid",
+                          label: `${bid.contractor} — ${tradeLabel}`,
+                        }}
+                        compact
+                        label={label}
+                        returnTo="/bids"
+                      />
+                    ) : null}
+                  </div>
+                );
+              })()
+            : null}
         </div>
 
         <div className="flex flex-col items-start gap-2 sm:items-end">

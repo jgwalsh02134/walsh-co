@@ -143,7 +143,7 @@ function DraftStatus({
         }
       >
         <GmailIcon />
-        Saved as Gmail draft · open
+        Saved to Gmail Drafts.
       </a>
     );
   }
