@@ -66,6 +66,41 @@ export type Contractor = {
   notes: string;
 };
 
+/**
+ * User-facing lifecycle status for the contractor-comparison workspace.
+ * Distinct from the legacy `BidStatus` (which is consumed by
+ * `Contractor.bidStatus` and the existing `bidStatusLabels` map). New
+ * UI prefers `lifecycle`; existing UI stays on `status`.
+ */
+export type BidLifecycleStatus =
+  | "draft"
+  | "requested"
+  | "received"
+  | "under_review"
+  | "needs_clarification"
+  | "accepted"
+  | "rejected"
+  | "archived";
+
+/**
+ * User-facing trade category for the contractor-comparison workspace.
+ * Wider grouping than `Trade` (which is the fine-grained classification
+ * kept for the renovation page's existing usage).
+ */
+export type BidTradeCategory =
+  | "general_contractor"
+  | "electrical"
+  | "plumbing"
+  | "hvac"
+  | "masonry"
+  | "roofing"
+  | "painting"
+  | "flooring"
+  | "windows_doors"
+  | "sitework_drainage"
+  | "inspection_testing"
+  | "other";
+
 export type Bid = {
   id: string;
   contractorId: string;
@@ -79,6 +114,22 @@ export type Bid = {
   risk: RiskLevel;
   status: BidStatus;
   decision: "pending" | "approved" | "rejected";
+
+  /** New optional fields for the contractor-comparison workspace. All
+   *  optional so existing /renovation rendering keeps type-checking. */
+  lifecycle?: BidLifecycleStatus;
+  tradeCategory?: BidTradeCategory;
+  /** Slug of a tracked property (src/lib/market-data.ts). */
+  propertySlug?: string;
+  /** Free-form date string for when the bid was received (e.g. "Apr 27"). */
+  dateReceived?: string;
+  /** 0–100 completeness signal — how much of the requested scope the
+   *  bid actually addresses. Higher is better. */
+  completenessPct?: number;
+  /** Optional document id (in `documents`) representing the bid PDF. */
+  linkedDocumentId?: string;
+  /** Short next-action note shown on the comparison row. */
+  nextAction?: string;
 };
 
 export type TaskLane = "today" | "this_week" | "waiting" | "done";
@@ -317,6 +368,13 @@ export const bids: Bid[] = [
     risk: "low",
     status: "shortlisted",
     decision: "pending",
+    lifecycle: "under_review",
+    tradeCategory: "roofing",
+    propertySlug: "322-osborne",
+    dateReceived: "Apr 27",
+    completenessPct: 85,
+    linkedDocumentId: "d3",
+    nextAction: "Confirm decking allowance",
   },
   {
     id: "bid-roof-2",
@@ -331,6 +389,12 @@ export const bids: Bid[] = [
     risk: "medium",
     status: "received",
     decision: "pending",
+    lifecycle: "needs_clarification",
+    tradeCategory: "roofing",
+    propertySlug: "322-osborne",
+    dateReceived: "May 02",
+    completenessPct: 70,
+    nextAction: "Ask about gutter line item",
   },
   {
     id: "bid-plumb-1",
@@ -345,6 +409,12 @@ export const bids: Bid[] = [
     risk: "high",
     status: "received",
     decision: "pending",
+    lifecycle: "needs_clarification",
+    tradeCategory: "plumbing",
+    propertySlug: "322-osborne",
+    dateReceived: "May 04",
+    completenessPct: 60,
+    nextAction: "Trench-work scope unclear; request clarification",
   },
   {
     id: "bid-elec-1",
@@ -359,6 +429,13 @@ export const bids: Bid[] = [
     risk: "low",
     status: "awarded",
     decision: "approved",
+    lifecycle: "accepted",
+    tradeCategory: "electrical",
+    propertySlug: "322-osborne",
+    dateReceived: "Apr 21",
+    completenessPct: 95,
+    linkedDocumentId: "d2",
+    nextAction: "Schedule kickoff",
   },
   {
     id: "bid-fram-1",
@@ -373,6 +450,90 @@ export const bids: Bid[] = [
     risk: "low",
     status: "shortlisted",
     decision: "pending",
+    lifecycle: "under_review",
+    tradeCategory: "general_contractor",
+    propertySlug: "322-osborne",
+    dateReceived: "May 06",
+    completenessPct: 80,
+    nextAction: "Compare against framing-only bid",
+  },
+  {
+    id: "bid-hvac-1",
+    contractorId: "ctr-hvac-1",
+    contractor: "Empire HVAC Services",
+    trade: "HVAC",
+    amount: 26000,
+    startDate: "Jun 16",
+    durationDays: 10,
+    includes: ["Equipment", "Ductwork", "Thermostats"],
+    excludes: ["Gas line work"],
+    risk: "medium",
+    status: "requested",
+    decision: "pending",
+    lifecycle: "requested",
+    tradeCategory: "hvac",
+    propertySlug: "322-osborne",
+    completenessPct: 0,
+    nextAction: "Awaiting proposal",
+  },
+  {
+    id: "bid-mason-1",
+    contractorId: "ctr-mason-1",
+    contractor: "Albany Masonry & Stone",
+    trade: "Masonry",
+    amount: 18750,
+    startDate: "May 26",
+    durationDays: 8,
+    includes: ["Foundation patch", "Chimney crown rebuild"],
+    excludes: ["Structural underpinning"],
+    risk: "medium",
+    status: "received",
+    decision: "pending",
+    lifecycle: "received",
+    tradeCategory: "masonry",
+    propertySlug: "322-osborne",
+    dateReceived: "May 09",
+    completenessPct: 75,
+    nextAction: "Site walkthrough scheduled",
+  },
+  {
+    id: "bid-paint-1",
+    contractorId: "ctr-paint-1",
+    contractor: "True North Painting",
+    trade: "Painting",
+    amount: 14200,
+    startDate: "Jul 07",
+    durationDays: 6,
+    includes: ["Interior prep", "Two coats premium", "Trim & doors"],
+    excludes: ["Exterior", "Wallpaper removal"],
+    risk: "low",
+    status: "declined",
+    decision: "rejected",
+    lifecycle: "rejected",
+    tradeCategory: "painting",
+    propertySlug: "322-osborne",
+    dateReceived: "May 03",
+    completenessPct: 90,
+    nextAction: "Bid declined — over budget",
+  },
+  {
+    id: "bid-site-1",
+    contractorId: "ctr-site-1",
+    contractor: "Adirondack Excavation",
+    trade: "Concrete",
+    amount: 0,
+    startDate: "—",
+    durationDays: 0,
+    includes: ["Drainage scope TBD"],
+    excludes: [],
+    risk: "medium",
+    status: "none",
+    decision: "pending",
+    lifecycle: "draft",
+    tradeCategory: "sitework_drainage",
+    propertySlug: "322-osborne",
+    completenessPct: 0,
+    nextAction: "Draft RFP — site grading + french drain",
   },
 ];
 
