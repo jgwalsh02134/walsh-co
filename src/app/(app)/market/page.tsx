@@ -29,6 +29,14 @@ import {
   hasAttomKey,
 } from "@/lib/attom";
 import {
+  type CensusAcsNormalized,
+  hasCensusKey,
+} from "@/lib/census";
+import {
+  type GoogleGeocodeNormalized,
+  hasGoogleMapsServerKey,
+} from "@/lib/google-maps";
+import {
   FRED_SERIES,
   FRED_SERIES_LABELS,
   type FredObservation,
@@ -64,6 +72,11 @@ import {
   type CoverageRow,
   type RoadmapRow,
 } from "./components/data-coverage-panel";
+import {
+  LocationDemographicsPanel,
+  type CensusRow,
+  type GeocodeRow,
+} from "./components/location-demographics-panel";
 import {
   MacroContextPanel,
   type MacroSeriesObservation,
@@ -213,6 +226,15 @@ function relativeAge(value: unknown): string {
   if (days < 30) return `${days}d ago`;
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
+}
+
+function censusOrMapsCoverageStatus(
+  hasSuccess: boolean,
+  keyConfigured: boolean
+): "Connected" | "Planned" | "Missing" {
+  if (hasSuccess) return "Connected";
+  if (keyConfigured) return "Planned";
+  return "Missing";
 }
 
 function isStale(value: unknown, daysThreshold: number): boolean {
@@ -592,6 +614,8 @@ export default async function MarketPage() {
   let allAttomSnapshots: MarketSourceSnapshot[] = [];
   let latestFredSnapshot: MarketSourceSnapshot | null = null;
   let latestZillowSnapshot: MarketSourceSnapshot | null = null;
+  let googleMapsSnapshots: MarketSourceSnapshot[] = [];
+  let censusSnapshots: MarketSourceSnapshot[] = [];
   let dbAvailable = true;
   try {
     const [
@@ -602,6 +626,8 @@ export default async function MarketPage() {
       attomAvmHistorySnapshots,
       fredLatest,
       zillowLatest,
+      googleMapsLatest,
+      censusLatest,
     ] = await Promise.all([
       getManualEntryMap(),
       prisma.marketSourceSnapshot.findMany({
@@ -632,12 +658,24 @@ export default async function MarketPage() {
         where: { provider: "ZILLOW_RESEARCH" },
         orderBy: { fetchedAt: "desc" },
       }),
+      prisma.marketSourceSnapshot.findMany({
+        where: { provider: "GOOGLE_MAPS", sourceType: "GEOCODE" },
+        orderBy: { fetchedAt: "desc" },
+        take: 100,
+      }),
+      prisma.marketSourceSnapshot.findMany({
+        where: { provider: "CENSUS_ACS", sourceType: "DEMOGRAPHICS" },
+        orderBy: { fetchedAt: "desc" },
+        take: 100,
+      }),
     ]);
     manualEntries = manualMap;
     allRecentSnapshots = recentSnapshots;
     allAttomSnapshots = attomSnapshots;
     latestFredSnapshot = fredLatest;
     latestZillowSnapshot = zillowLatest;
+    googleMapsSnapshots = googleMapsLatest;
+    censusSnapshots = censusLatest;
     for (const snap of recentSnapshots) {
       if (rentCastByProperty.has(snap.propertyId)) continue;
       if (snap.status === "SUCCESS")
@@ -674,6 +712,8 @@ export default async function MarketPage() {
   const attomKeyConfigured = hasAttomKey();
   const fredKeyConfigured = hasFredKey();
   const zillowUrlConfigured = hasZillowZhviUrl();
+  const googleMapsKeyConfigured = hasGoogleMapsServerKey();
+  const censusKeyConfigured = hasCensusKey();
   const zhviSeries = getZhviSeries(latestZillowSnapshot);
   const fredObservations = getFredObservations(latestFredSnapshot);
   const macroObservations: MacroSeriesObservation[] = fredObservations
@@ -694,6 +734,88 @@ export default async function MarketPage() {
     allAttomSnapshots.length > 0 ? allAttomSnapshots[0].fetchedAt : null;
   const fredLatestFetchedAt = latestFredSnapshot?.fetchedAt ?? null;
   const zillowLatestFetchedAt = latestZillowSnapshot?.fetchedAt ?? null;
+  const googleMapsLatestFetchedAt =
+    googleMapsSnapshots.length > 0 ? googleMapsSnapshots[0].fetchedAt : null;
+  const censusLatestFetchedAt =
+    censusSnapshots.length > 0 ? censusSnapshots[0].fetchedAt : null;
+
+  const latestGeocodeByProperty = new Map<string, MarketSourceSnapshot>();
+  for (const snap of googleMapsSnapshots) {
+    if (!latestGeocodeByProperty.has(snap.propertyId)) {
+      latestGeocodeByProperty.set(snap.propertyId, snap);
+    }
+  }
+  const latestCensusByZip = new Map<string, MarketSourceSnapshot>();
+  for (const snap of censusSnapshots) {
+    const raw = snap.raw as { zcta?: string } | null;
+    const zip = raw?.zcta;
+    if (typeof zip === "string" && !latestCensusByZip.has(zip)) {
+      latestCensusByZip.set(zip, snap);
+    }
+  }
+
+  const geocodeRows: GeocodeRow[] = trackedProperties.map((p) => {
+    const snap = latestGeocodeByProperty.get(p.id) ?? null;
+    const raw = snap?.raw as
+      | { normalized?: GoogleGeocodeNormalized | null }
+      | null;
+    const normalized = raw?.normalized ?? null;
+    return {
+      propertyId: p.id,
+      propertyLabel: p.address,
+      status: snap
+        ? (snap.status as GeocodeRow["status"])
+        : googleMapsKeyConfigured
+        ? "PENDING"
+        : "MISSING_KEY",
+      formattedAddress: normalized?.formattedAddress ?? null,
+      latitude: normalized?.latitude ?? null,
+      longitude: normalized?.longitude ?? null,
+      locationType: normalized?.locationType ?? null,
+      fetchedAt: snap ? snap.fetchedAt.toISOString() : null,
+      errorMessage: snap?.errorMessage ?? null,
+      isPrivateReference: p.kind === "private",
+    };
+  });
+
+  const trackedZips = Array.from(
+    new Set(
+      trackedProperties
+        .map((p) => p.zip)
+        .filter((z): z is string => typeof z === "string" && z.length > 0)
+    )
+  );
+  const censusRows: CensusRow[] = trackedZips.map((zip) => {
+    const snap = latestCensusByZip.get(zip) ?? null;
+    const raw = snap?.raw as
+      | { normalized?: CensusAcsNormalized | null }
+      | null;
+    const normalized = raw?.normalized ?? null;
+    return {
+      zip,
+      status: snap
+        ? (snap.status as CensusRow["status"])
+        : censusKeyConfigured
+        ? "PENDING"
+        : "MISSING_KEY",
+      name: normalized?.name ?? null,
+      year: normalized?.year ?? null,
+      totalPopulation: normalized?.totalPopulation ?? null,
+      medianHouseholdIncome: normalized?.medianHouseholdIncome ?? null,
+      medianGrossRent: normalized?.medianGrossRent ?? null,
+      medianHomeValue: normalized?.medianHomeValue ?? null,
+      ownerOccupiedPct: normalized?.ownerOccupiedPct ?? null,
+      renterOccupiedPct: normalized?.renterOccupiedPct ?? null,
+      vacancyPct: normalized?.vacancyPct ?? null,
+      fetchedAt: snap ? snap.fetchedAt.toISOString() : null,
+      errorMessage: snap?.errorMessage ?? null,
+    };
+  });
+
+  const googleMapsHasSuccess = googleMapsSnapshots.some(
+    (s) => s.status === "SUCCESS"
+  );
+  const censusHasSuccess = censusSnapshots.some((s) => s.status === "SUCCESS");
 
   const rentCastSnapshotsExist = rentCastByProperty.size > 0;
   const attomSnapshotsExist = attomByProperty.size > 0;
@@ -1160,9 +1282,22 @@ export default async function MarketPage() {
       detail: "Sale/inventory/DOM/price-drop pulse; not connected",
     },
     {
+      name: "Google Maps",
+      status: censusOrMapsCoverageStatus(
+        googleMapsHasSuccess,
+        googleMapsKeyConfigured
+      ),
+      detail:
+        "Geocode + lat/lng context (server-only). Context only — not a valuation source.",
+    },
+    {
       name: "Census ACS",
-      status: "Planned",
-      detail: "Demographics and housing fundamentals; not connected",
+      status: censusOrMapsCoverageStatus(
+        censusHasSuccess,
+        censusKeyConfigured
+      ),
+      detail:
+        "ZCTA demographics: population, income, rent, owner/renter mix. Context only — not a valuation source.",
     },
     {
       name: "Climate risk",
@@ -1309,6 +1444,21 @@ export default async function MarketPage() {
           fredKeyConfigured
             ? undefined
             : "FRED key not configured. Set FRED_API_KEY to enable."
+        }
+      />
+
+      <LocationDemographicsPanel
+        geocodes={geocodeRows}
+        censusRows={censusRows}
+        googleKeyConfigured={googleMapsKeyConfigured}
+        censusKeyConfigured={censusKeyConfigured}
+        geocodeFetchedAt={
+          googleMapsLatestFetchedAt
+            ? relativeAge(googleMapsLatestFetchedAt)
+            : null
+        }
+        censusFetchedAt={
+          censusLatestFetchedAt ? relativeAge(censusLatestFetchedAt) : null
         }
       />
 
