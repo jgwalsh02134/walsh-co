@@ -1,10 +1,21 @@
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+import {
+  hasGoogleClient,
+  isGmailDraftsEnabled,
+  isGoogleConnected,
+} from "@/lib/google-gmail";
 import { hasOpenAIKey } from "@/lib/openai";
+import { GmailIntegrationCard } from "./gmail-integration-card";
 import { OpenAITestPanel } from "./openai-test-panel";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
   const openAIConfigured = hasOpenAIKey();
+  const googleClientConfigured = hasGoogleClient();
+  const gmailDraftsEnabled = isGmailDraftsEnabled();
+  const gmailConnected = gmailDraftsEnabled
+    ? await isGoogleConnected()
+    : false;
 
   return (
     <>
@@ -64,7 +75,14 @@ export default function SettingsPage() {
         title="Integrations"
         description="External services this workspace will connect to."
       >
-        <OpenAITestPanel configured={openAIConfigured} />
+        <div className="flex flex-col gap-4">
+          <OpenAITestPanel configured={openAIConfigured} />
+          <GmailIntegrationCard
+            clientConfigured={googleClientConfigured}
+            draftsEnabled={gmailDraftsEnabled}
+            connected={gmailConnected}
+          />
+        </div>
       </SectionPanel>
 
       <SectionPanel

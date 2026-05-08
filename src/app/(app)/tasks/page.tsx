@@ -1,6 +1,11 @@
 import { DraftEmailButton } from "@/components/draft-email-button";
+import { GmailDraftButton } from "@/components/gmail-draft-button";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+import {
+  isGmailDraftsEnabled,
+  isGoogleConnected,
+} from "@/lib/google-gmail";
 import {
   nextDecisions,
   tasks,
@@ -35,10 +40,14 @@ function TaskList({
   items,
   isDone = false,
   showFollowUpDraft = false,
+  gmailEnabled = false,
+  gmailConnected = false,
 }: {
   items: Task[];
   isDone?: boolean;
   showFollowUpDraft?: boolean;
+  gmailEnabled?: boolean;
+  gmailConnected?: boolean;
 }) {
   if (items.length === 0) {
     return (
@@ -76,7 +85,7 @@ function TaskList({
             <p className="text-xs text-[var(--color-text-muted)]">{t.notes}</p>
           ) : null}
           {showFollowUpDraft && !isDone ? (
-            <div className="mt-1">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <DraftEmailButton
                 graphAvailable={graphAvailable}
                 to={null}
@@ -98,6 +107,29 @@ function TaskList({
                 compact
                 label="Draft follow-up email"
               />
+              <GmailDraftButton
+                enabled={gmailEnabled}
+                connected={gmailConnected}
+                to={null}
+                subject={`Follow-up: ${t.title}`}
+                body={[
+                  `Hi,`,
+                  "",
+                  `Following up on "${t.title}" — context: ${t.context}.`,
+                  t.notes ? `\nDetails: ${t.notes}` : "",
+                  t.dueDate ? `\nTarget: ${t.dueDate}.` : "",
+                  "",
+                  "Could you share the latest status when you have a moment?",
+                  "",
+                  "Thanks,",
+                ]
+                  .filter((line) => line !== "")
+                  .join("\n")}
+                context={{ kind: "task", label: t.title }}
+                compact
+                label="Draft follow-up email"
+                returnTo="/tasks"
+              />
             </div>
           ) : null}
         </li>
@@ -106,12 +138,14 @@ function TaskList({
   );
 }
 
-export default function TasksPage() {
+export default async function TasksPage() {
   const today = tasks.filter((t) => t.lane === "today");
   const thisWeek = tasks.filter((t) => t.lane === "this_week");
   const waiting = tasks.filter((t) => t.lane === "waiting");
   const done = tasks.filter((t) => t.lane === "done");
   const punchList = tasks.filter((t) => t.context === "Punch list");
+  const gmailEnabled = isGmailDraftsEnabled();
+  const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
 
   return (
     <>
@@ -143,7 +177,12 @@ export default function TasksPage() {
           description={`${waiting.length} · ${laneDescriptions.waiting}`}
           padded={false}
         >
-          <TaskList items={waiting} showFollowUpDraft />
+          <TaskList
+            items={waiting}
+            showFollowUpDraft
+            gmailEnabled={gmailEnabled}
+            gmailConnected={gmailConnected}
+          />
         </SectionPanel>
 
         <SectionPanel

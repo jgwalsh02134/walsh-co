@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { DraftEmailButton } from "@/components/draft-email-button";
+import { GmailDraftButton } from "@/components/gmail-draft-button";
 import { MetricTile } from "@/components/metric-tile";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 import { ToneTag } from "@/components/tone-tag";
+import {
+  isGmailDraftsEnabled,
+  isGoogleConnected,
+} from "@/lib/google-gmail";
 import { trackedProperties } from "@/lib/market-data";
 import { hasGraphToken } from "@/lib/microsoft-graph";
 import {
@@ -130,6 +135,9 @@ export default async function BidsPage({
       ? bids
       : bids.filter((b) => b.tradeCategory === activeTrade);
 
+  const gmailEnabled = isGmailDraftsEnabled();
+  const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
+
   // Summary across the unfiltered set so the metrics describe the full
   // pipeline regardless of the current filter.
   const lifecycleCounts: Record<BidLifecycleStatus, number> = {
@@ -224,7 +232,12 @@ export default async function BidsPage({
         } shown.`}
       >
         <TradeFilters active={activeTrade} />
-        <BidList bids={filtered} activeTrade={activeTrade} />
+        <BidList
+          bids={filtered}
+          activeTrade={activeTrade}
+          gmailEnabled={gmailEnabled}
+          gmailConnected={gmailConnected}
+        />
       </SectionPanel>
 
       <AiReviewPanel />
@@ -290,9 +303,13 @@ function TradeFilters({ active }: { active: TradeFilterOption["id"] }) {
 function BidList({
   bids,
   activeTrade,
+  gmailEnabled,
+  gmailConnected,
 }: {
   bids: Bid[];
   activeTrade: TradeFilterOption["id"];
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
 }) {
   if (bids.length === 0) {
     return (
@@ -316,13 +333,26 @@ function BidList({
   return (
     <ul className="flex flex-col gap-3">
       {bids.map((bid) => (
-        <BidRow key={bid.id} bid={bid} />
+        <BidRow
+          key={bid.id}
+          bid={bid}
+          gmailEnabled={gmailEnabled}
+          gmailConnected={gmailConnected}
+        />
       ))}
     </ul>
   );
 }
 
-function BidRow({ bid }: { bid: Bid }) {
+function BidRow({
+  bid,
+  gmailEnabled,
+  gmailConnected,
+}: {
+  bid: Bid;
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
+}) {
   const lifecycleId = lifecycleFor(bid);
   const lifecycle = LIFECYCLE_META[lifecycleId];
   const tradeLabel = bid.tradeCategory
@@ -442,6 +472,36 @@ function BidRow({ bid }: { bid: Bid }) {
                 }}
                 compact
                 label="Draft clarification email"
+              />
+              <GmailDraftButton
+                enabled={gmailEnabled}
+                connected={gmailConnected}
+                to={null}
+                subject={`Bid clarification: ${bid.contractor} — ${tradeLabel}${
+                  property ? ` (${property.address})` : ""
+                }`}
+                body={[
+                  `Hi ${bid.contractor},`,
+                  "",
+                  `Following up on your ${tradeLabel.toLowerCase()} proposal${
+                    bid.dateReceived ? ` received ${bid.dateReceived}` : ""
+                  }${property ? ` for ${property.address}` : ""}.`,
+                  "",
+                  bid.nextAction
+                    ? `Open question: ${bid.nextAction}`
+                    : "We have a few clarifying questions before we can finalize a decision.",
+                  "",
+                  "Could you confirm scope, exclusions, and any line items not yet itemized? We want to compare bids on a like-for-like basis.",
+                  "",
+                  "Thanks,",
+                ].join("\n")}
+                context={{
+                  kind: "bid",
+                  label: `${bid.contractor} — ${tradeLabel}`,
+                }}
+                compact
+                label="Draft clarification email"
+                returnTo="/bids"
               />
             </div>
           ) : null}

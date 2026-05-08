@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Contact } from "@prisma/client";
 import { DraftEmailButton } from "@/components/draft-email-button";
+import { GmailDraftButton } from "@/components/gmail-draft-button";
 import {
   emailHref,
   formatAddress,
@@ -12,6 +13,10 @@ import {
   phoneHref,
   websiteHref,
 } from "@/lib/contact-format";
+import {
+  isGmailDraftsEnabled,
+  isGoogleConnected,
+} from "@/lib/google-gmail";
 import { hasGraphToken } from "@/lib/microsoft-graph";
 import {
   complianceStatusLabels,
@@ -109,7 +114,9 @@ function QuickAction({
   );
 }
 
-export function ContactDetail({ contact }: { contact: Contact }) {
+export async function ContactDetail({ contact }: { contact: Contact }) {
+  const gmailEnabled = isGmailDraftsEnabled();
+  const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
   const status = contactStatusLabels[contact.status];
   const insurance = complianceStatusLabels[contact.insuranceStatus];
   const license = complianceStatusLabels[contact.licenseStatus];
@@ -183,20 +190,39 @@ export function ContactDetail({ contact }: { contact: Contact }) {
       </div>
 
       {emailLabel ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--workspace-text-secondary)]">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-            Outlook
-          </span>
-          <DraftEmailButton
-            graphAvailable={hasGraphToken()}
-            to={contact.email ?? null}
-            subject={`Note for ${formatContactName(contact) || contact.displayName}`}
-            body={`Hi ${formatContactName(contact) || contact.displayName},\n\n`}
-            context={{
-              kind: "contact",
-              label: formatContactName(contact) || contact.displayName,
-            }}
-          />
+        <div className="flex flex-col gap-2 text-xs text-[var(--workspace-text-secondary)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              Outlook
+            </span>
+            <DraftEmailButton
+              graphAvailable={hasGraphToken()}
+              to={contact.email ?? null}
+              subject={`Note for ${formatContactName(contact) || contact.displayName}`}
+              body={`Hi ${formatContactName(contact) || contact.displayName},\n\n`}
+              context={{
+                kind: "contact",
+                label: formatContactName(contact) || contact.displayName,
+              }}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              Gmail
+            </span>
+            <GmailDraftButton
+              enabled={gmailEnabled}
+              connected={gmailConnected}
+              to={contact.email ?? null}
+              subject={`Note for ${formatContactName(contact) || contact.displayName}`}
+              body={`Hi ${formatContactName(contact) || contact.displayName},\n\n`}
+              context={{
+                kind: "contact",
+                label: formatContactName(contact) || contact.displayName,
+              }}
+              returnTo={`/contacts?id=${contact.id}`}
+            />
+          </div>
         </div>
       ) : null}
 
