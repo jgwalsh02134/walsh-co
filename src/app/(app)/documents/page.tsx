@@ -3,11 +3,16 @@ import { GoogleDriveSetupButton } from "@/components/google-drive-setup-button";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 import { ToneTag } from "@/components/tone-tag";
+import { UploadDriveDocumentForm } from "@/components/upload-drive-document-form";
 import {
   getDriveStatus,
   getStoredWorkspaceFoldersForUi,
+  listDriveDocuments,
   suggestedWorkspaceFolders,
+  UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_SIZE_BYTES,
   WORKSPACE_DRIVE_ROOT_NAME,
+  type DriveDocumentSummary,
   type DriveStatusSummary,
 } from "@/lib/google-drive";
 import {
@@ -104,6 +109,14 @@ export default async function DocumentsPage({
   // the encrypted session cookie — no Drive API call is made on render.
   const driveStatus = await getDriveStatus();
   const storedFolders = await getStoredWorkspaceFoldersForUi();
+  const driveDocuments = await listDriveDocuments();
+  const uploadReady =
+    driveStatus.status === "configured" && Boolean(storedFolders?.rootId);
+  const uploadDisabledReason = uploadReady
+    ? ""
+    : driveStatus.status !== "configured"
+    ? "Connect Google with Drive scope to enable uploads."
+    : "Create Drive workspace folder first.";
 
   const counts = {
     total: documents.length,
@@ -123,23 +136,36 @@ export default async function DocumentsPage({
         title="Document workspace"
         description="A central library for property records, contracts, permits, insurance, bids, and supporting media. AI extraction surfaces facts, risks, and action items as draft notes you review before relying on."
         primaryAction={
-          <button
-            type="button"
-            disabled
-            aria-disabled
-            title="File upload is not wired in this build."
-            className="inline-flex min-h-[40px] cursor-not-allowed items-center justify-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface-soft)] px-3.5 py-2 text-sm font-medium text-[var(--workspace-text-secondary)]"
-          >
-            Upload document
-          </button>
+          uploadReady ? (
+            <a
+              href="#upload-document"
+              className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-3.5 py-2 text-sm font-semibold text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+            >
+              Upload document
+            </a>
+          ) : (
+            <span
+              aria-disabled
+              title={uploadDisabledReason}
+              className="inline-flex min-h-[40px] cursor-not-allowed items-center justify-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface-soft)] px-3.5 py-2 text-sm font-medium text-[var(--workspace-text-secondary)]"
+            >
+              Upload document
+            </span>
+          )
         }
       />
 
       <SampleBanner total={counts.total} />
 
+      <DriveDocumentsPanel
+        documents={driveDocuments}
+        uploadReady={uploadReady}
+        uploadDisabledReason={uploadDisabledReason}
+      />
+
       <SectionPanel
-        title="Library"
-        description={`${counts.total} documents on file · ${counts.draftsReady} AI drafts ready to review · ${counts.needsReview} need verification.`}
+        title="Sample document library"
+        description={`${counts.total} sample documents on file · ${counts.draftsReady} AI drafts ready to review · ${counts.needsReview} need verification. Real uploads appear above under "Drive documents".`}
       >
         <CategoryFilters active={activeCategory} />
         <DocumentList docs={filtered} activeCategory={activeCategory} />
@@ -338,6 +364,171 @@ function DocumentGmailDraftPlaceholder() {
       />
       Draft email about this document
     </span>
+  );
+}
+
+// =============================================================
+// Drive documents panel (real uploads)
+// =============================================================
+
+const UPLOAD_CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
+  { value: "contractor_bid", label: "Contractor bid" },
+  { value: "permit", label: "Permit" },
+  { value: "inspection", label: "Inspection" },
+  { value: "survey", label: "Survey" },
+  { value: "deed_title", label: "Deed / title" },
+  { value: "tax_assessment", label: "Tax / assessment" },
+  { value: "insurance", label: "Insurance" },
+  { value: "lease_rental", label: "Lease / rental" },
+  { value: "receipt_invoice", label: "Receipt / invoice" },
+  { value: "photo_media", label: "Photo / media" },
+  { value: "other", label: "Other" },
+];
+
+const EXTRACTION_TONE: Record<string, StatusTone> = {
+  not_started: "neutral",
+  draft_ready: "info",
+  reviewed: "success",
+};
+
+const EXTRACTION_LABEL_BY_KEY: Record<string, string> = {
+  not_started: "Extraction: not started",
+  draft_ready: "AI draft ready",
+  reviewed: "Reviewed",
+};
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatUploadedAt(date: Date): string {
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  });
+  return `${dateFmt.format(date)}, ${timeFmt.format(date)}`;
+}
+
+function DriveDocumentsPanel({
+  documents,
+  uploadReady,
+  uploadDisabledReason,
+}: {
+  documents: DriveDocumentSummary[];
+  uploadReady: boolean;
+  uploadDisabledReason: string;
+}) {
+  const propertyOptions = trackedProperties.map((p) => ({
+    slug: p.slug,
+    address: p.address,
+  }));
+
+  return (
+    <SectionPanel
+      title="Drive documents"
+      description={
+        documents.length === 0
+          ? "No uploads yet. Files uploaded here are saved to your Google Drive workspace folder."
+          : `${documents.length} document${
+              documents.length === 1 ? "" : "s"
+            } uploaded to Google Drive. Adobe extraction is available but not yet wired — files are never processed automatically.`
+      }
+    >
+      <div id="upload-document" className="flex flex-col gap-4 scroll-mt-24">
+        <UploadDriveDocumentForm
+          ready={uploadReady}
+          disabledReason={uploadDisabledReason}
+          categories={UPLOAD_CATEGORY_OPTIONS}
+          properties={propertyOptions}
+          maxBytes={UPLOAD_MAX_SIZE_BYTES}
+          acceptMimeTypes={UPLOAD_ALLOWED_MIME_TYPES as unknown as string[]}
+        />
+
+        {documents.length > 0 ? (
+          <ul className="flex flex-col divide-y divide-[color-mix(in_srgb,var(--color-border)_60%,transparent)]">
+            {documents.map((d) => (
+              <DriveDocumentRow key={d.id} doc={d} />
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </SectionPanel>
+  );
+}
+
+function DriveDocumentRow({ doc }: { doc: DriveDocumentSummary }) {
+  const property = doc.linkedPropertySlug
+    ? trackedProperties.find((p) => p.slug === doc.linkedPropertySlug) ?? null
+    : null;
+  const categoryLabel =
+    UPLOAD_CATEGORY_OPTIONS.find((c) => c.value === doc.category)?.label ??
+    doc.category;
+  const extractionTone = EXTRACTION_TONE[doc.extractionStatus] ?? "neutral";
+  const extractionLabel =
+    EXTRACTION_LABEL_BY_KEY[doc.extractionStatus] ?? doc.extractionStatus;
+  const isPdf = doc.mimeType === "application/pdf";
+
+  return (
+    <li className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-sm font-semibold text-[var(--workspace-text)] [overflow-wrap:anywhere]">
+          {doc.name}
+        </span>
+        <span className="text-xs text-[var(--workspace-text-secondary)]">
+          {formatUploadedAt(doc.uploadedAt)} · {formatSize(doc.sizeBytes)}
+        </span>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <ToneTag label={categoryLabel} tone="neutral" />
+          {property ? (
+            <Link
+              href={`/properties/${property.slug}`}
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+            >
+              {property.address}
+            </Link>
+          ) : null}
+          {isPdf ? (
+            <span
+              aria-disabled
+              title="Adobe extraction is configured but not yet wired. Files are never processed automatically."
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-muted)]"
+            >
+              Adobe extraction · planned
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex flex-col items-start gap-1.5 sm:items-end">
+        <ToneTag label={extractionLabel} tone={extractionTone} />
+        <a
+          href={doc.driveWebUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-[28px] items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/workspace/icons8-google-drive.svg"
+            alt=""
+            aria-hidden
+            width={12}
+            height={12}
+          />
+          Open in Drive
+        </a>
+      </div>
+    </li>
   );
 }
 

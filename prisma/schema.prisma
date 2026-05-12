@@ -165,6 +165,46 @@ model WorkspaceSetting {
   updatedAt DateTime @updatedAt
 }
 
+// ----------------------------------------------------------------------
+// DriveDocument — metadata for a file that has been uploaded to the
+// workspace's Google Drive folder structure.
+//
+// Drive file ids and web URLs come back from Google's `files.create`
+// response. We persist them here so the Documents workspace can list
+// uploaded files across browser sessions and devices without hitting
+// Drive on every page load.
+//
+// `category` and `extractionStatus` are stored as strings rather than
+// Postgres enums so adding/renaming a category does not require a
+// schema migration. Validation lives in app code (see
+// `src/lib/document-categories.ts`-style allowlists).
+//
+// Adobe extraction is intentionally NOT run on upload. `extractionStatus`
+// defaults to "not_started" and is only flipped after an explicit user
+// action (future task — not part of this pass).
+// ----------------------------------------------------------------------
+model DriveDocument {
+  id                  String   @id @default(cuid())
+  name                String
+  /// User-selected document category. Validated against an app-level
+  /// allowlist (see DocumentCategory in src/lib/mock-data.ts).
+  category            String
+  /// Optional slug of a tracked property the file is linked to.
+  linkedPropertySlug  String?
+  driveFileId         String   @unique
+  driveWebUrl         String
+  mimeType            String
+  sizeBytes           Int
+  /// "not_started" | "draft_ready" | "reviewed" — see DocumentExtractionStatus
+  /// in src/lib/mock-data.ts.
+  extractionStatus    String   @default("not_started")
+  uploadedAt          DateTime @default(now())
+
+  @@index([linkedPropertySlug])
+  @@index([category])
+  @@index([uploadedAt])
+}
+
 model MarketSourceSnapshot {
   id                 String    @id @default(cuid())
   propertyId         String

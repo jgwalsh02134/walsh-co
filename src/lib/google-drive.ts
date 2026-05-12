@@ -20,6 +20,7 @@
  *     via `sessionHasScope` and never logs or returns the token.
  */
 
+import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import {
   DRIVE_FILE_SCOPE,
@@ -499,4 +500,354 @@ export async function getStoredWorkspaceFoldersForUi(): Promise<{
     childCount: Object.keys(record.map.children).length,
     lastVerifiedAt: record.map.lastVerifiedAt,
   };
+}
+
+// =============================================================
+// Document upload
+// =============================================================
+
+const DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3";
+
+/**
+ * Map a document category to the top-level workspace folder name. Used
+ * to choose a target folder when the user does not link the upload to a
+ * specific property. Unknown categories fall through to the root.
+ */
+const CATEGORY_TO_FOLDER: Record<string, string> = {
+  contractor_bid: "Bids",
+  permit: "Permits",
+  inspection: "Reports",
+  survey: "Reports",
+  tax_assessment: "Reports",
+  receipt_invoice: "Invoices",
+  photo_media: "Photos",
+  insurance: "Reports",
+  deed_title: "Reports",
+  lease_rental: "Reports",
+  other: "",
+};
+
+export type UploadAllowedMimeType =
+  | "application/pdf"
+  | "image/jpeg"
+  | "image/png"
+  | "image/gif"
+  | "image/webp"
+  | "application/msword"
+  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  | "application/vnd.ms-excel"
+  | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+export const UPLOAD_ALLOWED_MIME_TYPES: UploadAllowedMimeType[] = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
+
+export const UPLOAD_MAX_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+
+export type ResolveTargetFolderInput = {
+  propertyAddress: string | null;
+  category: string;
+};
+
+export type ResolveTargetFolderResult =
+  | { ok: true; folderId: string; targetLabel: string }
+  | { ok: false; message: string };
+
+/**
+ * Resolve which Drive folder a new upload should land in.
+ *   - Property selected → `Properties/{address}`
+ *   - Category mapped → matching top-level folder
+ *   - Otherwise → workspace root
+ *
+ * Reads the persisted folder map only — no Drive API call.
+ */
+export async function resolveTargetFolder(
+  input: ResolveTargetFolderInput
+): Promise<ResolveTargetFolderResult> {
+  const stored = await getStoredWorkspaceFolders();
+  if (!stored || !stored.map.rootId) {
+    return {
+      ok: false,
+      message: "Create Drive workspace folder first.",
+    };
+  }
+  const { map } = stored;
+
+  if (input.propertyAddress) {
+    const key = `Properties/${input.propertyAddress}`;
+    const id = map.children[key];
+    if (id) return { ok: true, folderId: id, targetLabel: key };
+  }
+
+  const folderName = CATEGORY_TO_FOLDER[input.category];
+  if (folderName) {
+    const id = map.children[folderName];
+    if (id) return { ok: true, folderId: id, targetLabel: folderName };
+  }
+
+  return {
+    ok: true,
+    folderId: map.rootId,
+    targetLabel: WORKSPACE_DRIVE_ROOT_NAME,
+  };
+}
+
+export type DriveUploadInput = {
+  accessToken: string;
+  parentId: string;
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+};
+
+export type DriveUploadResult = {
+  id: string;
+  name: string;
+  webViewLink: string;
+  mimeType: string;
+  size: number;
+};
+
+/**
+ * Upload a single file to Drive using the multipart upload endpoint.
+ * One HTTP request, no resumable session needed at this scale. Tokens
+ * never leave this function — the caller passes the resolved access
+ * token from `getValidGoogleSession`.
+ *
+ * Safety:
+ *   - No overwrite. `files.create` only creates new files; an existing
+ *     file with the same name would receive a parallel id rather than
+ *     be modified, so re-uploading is non-destructive.
+ *   - No `files.update` / `files.delete` call exists in this helper.
+ */
+async function uploadFileToDrive(
+  input: DriveUploadInput
+): Promise<DriveUploadResult> {
+  const boundary = `wco_${crypto.randomBytes(16).toString("hex")}`;
+
+  const metadata = JSON.stringify({
+    name: input.fileName,
+    mimeType: input.mimeType,
+    parents: [input.parentId],
+  });
+
+  const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${input.mimeType}\r\n\r\n`;
+  const tail = `\r\n--${boundary}--`;
+  const body = Buffer.concat([
+    Buffer.from(head, "utf-8"),
+    input.buffer,
+    Buffer.from(tail, "utf-8"),
+  ]);
+
+  const url = new URL(`${DRIVE_UPLOAD_BASE}/files`);
+  url.searchParams.set("uploadType", "multipart");
+  url.searchParams.set("fields", "id,name,webViewLink,mimeType,size");
+  url.searchParams.set("supportsAllDrives", "true");
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      "Content-Type": `multipart/related; boundary=${boundary}`,
+      "Content-Length": String(body.length),
+    },
+    body,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Drive files.create (multipart) failed (HTTP ${response.status}).`
+    );
+  }
+  const json = (await response.json()) as {
+    id: string;
+    name: string;
+    webViewLink?: string;
+    mimeType?: string;
+    size?: string;
+  };
+  return {
+    id: json.id,
+    name: json.name,
+    webViewLink: json.webViewLink ?? "",
+    mimeType: json.mimeType ?? input.mimeType,
+    size: typeof json.size === "string" ? Number.parseInt(json.size, 10) : input.buffer.length,
+  };
+}
+
+export type UploadDocumentInput = {
+  fileName: string;
+  mimeType: string;
+  /** File contents. Caller is responsible for size enforcement. */
+  buffer: Buffer;
+  /** App-level category — must match an allowlisted DocumentCategory. */
+  category: string;
+  /** Optional property linkage by slug. */
+  propertySlug: string | null;
+  /** Property address for folder resolution (resolved by caller from slug). */
+  propertyAddress: string | null;
+};
+
+export type UploadDocumentResult =
+  | {
+      ok: true;
+      record: {
+        id: string;
+        name: string;
+        category: string;
+        linkedPropertySlug: string | null;
+        driveFileId: string;
+        driveWebUrl: string;
+        mimeType: string;
+        sizeBytes: number;
+        extractionStatus: string;
+        uploadedAt: Date;
+      };
+      targetLabel: string;
+    }
+  | {
+      ok: false;
+      message: string;
+      needsConnect?: boolean;
+      needsScope?: boolean;
+    };
+
+/**
+ * Upload a document to Drive and persist its metadata. Called by the
+ * server action and runs only on user click. Steps:
+ *   1. Refresh the access token + check drive.file scope.
+ *   2. Resolve the target folder (property/category/root).
+ *   3. Multipart upload to Drive.
+ *   4. Insert one row in `DriveDocument`.
+ *
+ * Adobe extraction is intentionally NOT run here. The record is created
+ * with `extractionStatus: "not_started"`.
+ */
+export async function uploadWorkspaceDocument(
+  input: UploadDocumentInput
+): Promise<UploadDocumentResult> {
+  if (!isDriveStorageEnabled()) {
+    return {
+      ok: false,
+      message:
+        "Google Drive storage is not enabled on the server.",
+    };
+  }
+
+  const auth = await getValidGoogleSession({ requireScope: DRIVE_FILE_SCOPE });
+  if (!auth.ok) {
+    return {
+      ok: false,
+      message: auth.message,
+      needsConnect: auth.needsConnect,
+      needsScope: auth.needsScope,
+    };
+  }
+
+  const target = await resolveTargetFolder({
+    propertyAddress: input.propertyAddress,
+    category: input.category,
+  });
+  if (!target.ok) {
+    return { ok: false, message: target.message };
+  }
+
+  let uploaded: DriveUploadResult;
+  try {
+    uploaded = await uploadFileToDrive({
+      accessToken: auth.session.accessToken,
+      parentId: target.folderId,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      buffer: input.buffer,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? `Drive upload failed: ${error.message.slice(0, 180)}`
+          : "Drive upload failed.",
+    };
+  }
+
+  const record = await prisma.driveDocument.create({
+    data: {
+      name: uploaded.name,
+      category: input.category,
+      linkedPropertySlug: input.propertySlug,
+      driveFileId: uploaded.id,
+      driveWebUrl: uploaded.webViewLink,
+      mimeType: uploaded.mimeType,
+      sizeBytes: uploaded.size,
+    },
+  });
+
+  return {
+    ok: true,
+    record: {
+      id: record.id,
+      name: record.name,
+      category: record.category,
+      linkedPropertySlug: record.linkedPropertySlug,
+      driveFileId: record.driveFileId,
+      driveWebUrl: record.driveWebUrl,
+      mimeType: record.mimeType,
+      sizeBytes: record.sizeBytes,
+      extractionStatus: record.extractionStatus,
+      uploadedAt: record.uploadedAt,
+    },
+    targetLabel: target.targetLabel,
+  };
+}
+
+// =============================================================
+// List uploaded documents (page render)
+// =============================================================
+
+export type DriveDocumentSummary = {
+  id: string;
+  name: string;
+  category: string;
+  linkedPropertySlug: string | null;
+  driveWebUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  extractionStatus: string;
+  uploadedAt: Date;
+};
+
+/**
+ * Return uploaded documents for display on /documents. Safe to call on
+ * page render — only reads Postgres, never touches Drive. Returns an
+ * empty array when the database is unreachable so the page still loads.
+ */
+export async function listDriveDocuments(): Promise<DriveDocumentSummary[]> {
+  try {
+    const rows = await prisma.driveDocument.findMany({
+      orderBy: { uploadedAt: "desc" },
+      take: 200,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      category: r.category,
+      linkedPropertySlug: r.linkedPropertySlug,
+      driveWebUrl: r.driveWebUrl,
+      mimeType: r.mimeType,
+      sizeBytes: r.sizeBytes,
+      extractionStatus: r.extractionStatus,
+      uploadedAt: r.uploadedAt,
+    }));
+  } catch {
+    return [];
+  }
 }
