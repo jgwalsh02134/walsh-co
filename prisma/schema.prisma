@@ -195,10 +195,24 @@ model DriveDocument {
   driveWebUrl         String
   mimeType            String
   sizeBytes           Int
-  /// "not_started" | "draft_ready" | "reviewed" — see DocumentExtractionStatus
-  /// in src/lib/mock-data.ts.
+  /// "not_started" | "extracting" | "draft_ready" | "failed" — drives
+  /// the per-row extraction action UI. Older callers also recognize
+  /// "reviewed" once a user has signed off on the draft.
   extractionStatus    String   @default("not_started")
   uploadedAt          DateTime @default(now())
+
+  /// Adobe PDF Extract result. Stored as JSONB so we keep the full
+  /// `structuredData.json` Adobe returns; the UI reads only fields it
+  /// understands. Optional — only set once an extraction completes.
+  extractedJson       Json?
+  /// Plain-text preview assembled from the extracted elements. Used by
+  /// the UI when the structured fields are still unstructured.
+  extractedText       String?  @db.Text
+  /// Timestamp of the most recent successful extraction.
+  extractedAt         DateTime?
+  /// Sanitized error string from the most recent failed extraction.
+  /// Cleared on the next successful run.
+  extractionError     String?
 
   @@index([linkedPropertySlug])
   @@index([category])

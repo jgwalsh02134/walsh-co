@@ -810,6 +810,79 @@ export async function uploadWorkspaceDocument(
 }
 
 // =============================================================
+// Drive file download (read-only, drive.file scope)
+// =============================================================
+
+export type DriveDownloadResult =
+  | { ok: true; buffer: Buffer; mimeType: string | null }
+  | {
+      ok: false;
+      message: string;
+      needsConnect?: boolean;
+      needsScope?: boolean;
+    };
+
+/**
+ * Download the raw bytes of a Drive file the workspace created. Uses
+ * `files.get?alt=media`, which under the `drive.file` scope only
+ * returns files this OAuth client uploaded — never anything else in
+ * the user's Drive. Read-only: no `files.update` / `files.delete`
+ * call.
+ */
+export async function downloadDriveFileBytes(
+  driveFileId: string
+): Promise<DriveDownloadResult> {
+  const auth = await getValidGoogleSession({ requireScope: DRIVE_FILE_SCOPE });
+  if (!auth.ok) {
+    return {
+      ok: false,
+      message: auth.message,
+      needsConnect: auth.needsConnect,
+      needsScope: auth.needsScope,
+    };
+  }
+
+  const url = new URL(
+    `${DRIVE_API_BASE}/files/${encodeURIComponent(driveFileId)}`
+  );
+  url.searchParams.set("alt", "media");
+  url.searchParams.set("supportsAllDrives", "true");
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${auth.session.accessToken}` },
+      cache: "no-store",
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? `Drive download network error: ${error.message.slice(0, 180)}`
+          : "Drive download network error.",
+    };
+  }
+  if (response.status === 404) {
+    return { ok: false, message: "Drive file not found." };
+  }
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: `Drive download failed (HTTP ${response.status}).`,
+    };
+  }
+
+  const ab = await response.arrayBuffer();
+  return {
+    ok: true,
+    buffer: Buffer.from(ab),
+    mimeType: response.headers.get("content-type"),
+  };
+}
+
+// =============================================================
 // List uploaded documents (page render)
 // =============================================================
 
@@ -818,11 +891,16 @@ export type DriveDocumentSummary = {
   name: string;
   category: string;
   linkedPropertySlug: string | null;
+  driveFileId: string;
   driveWebUrl: string;
   mimeType: string;
   sizeBytes: number;
   extractionStatus: string;
   uploadedAt: Date;
+  extractedJson: unknown | null;
+  extractedText: string | null;
+  extractedAt: Date | null;
+  extractionError: string | null;
 };
 
 /**
@@ -841,11 +919,16 @@ export async function listDriveDocuments(): Promise<DriveDocumentSummary[]> {
       name: r.name,
       category: r.category,
       linkedPropertySlug: r.linkedPropertySlug,
+      driveFileId: r.driveFileId,
       driveWebUrl: r.driveWebUrl,
       mimeType: r.mimeType,
       sizeBytes: r.sizeBytes,
       extractionStatus: r.extractionStatus,
       uploadedAt: r.uploadedAt,
+      extractedJson: r.extractedJson ?? null,
+      extractedText: r.extractedText,
+      extractedAt: r.extractedAt,
+      extractionError: r.extractionError,
     }));
   } catch {
     return [];

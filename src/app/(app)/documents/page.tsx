@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { GoogleDriveSetupButton } from "@/components/google-drive-setup-button";
 import { PageHeader } from "@/components/page-header";
+import { PdfExtractButton } from "@/components/pdf-extract-button";
 import { SectionPanel } from "@/components/section-panel";
 import { ToneTag } from "@/components/tone-tag";
 import { UploadDriveDocumentForm } from "@/components/upload-drive-document-form";
+import { hasAdobePdfServices } from "@/lib/adobe-pdf";
 import {
   getDriveStatus,
   getStoredWorkspaceFoldersForUi,
@@ -118,6 +120,13 @@ export default async function DocumentsPage({
     ? "Connect Google with Drive scope to enable uploads."
     : "Create Drive workspace folder first.";
 
+  const adobeConfigured = hasAdobePdfServices();
+  const extractionReady =
+    adobeConfigured && driveStatus.status === "configured";
+  const extractionDisabledReason = adobeConfigured
+    ? "Reconnect Google with Drive scope to enable extraction."
+    : "Adobe PDF Services not configured.";
+
   const counts = {
     total: documents.length,
     needsReview: documents.filter((d) => d.verified === "needs_verification")
@@ -161,6 +170,8 @@ export default async function DocumentsPage({
         documents={driveDocuments}
         uploadReady={uploadReady}
         uploadDisabledReason={uploadDisabledReason}
+        extractionReady={extractionReady}
+        extractionDisabledReason={extractionDisabledReason}
       />
 
       <SectionPanel
@@ -180,19 +191,6 @@ export default async function DocumentsPage({
 
       <ExtractionPanel />
     </>
-  );
-}
-
-/**
- * Adobe PDF Services env check. Inlined here (rather than added to
- * `src/lib`) because nothing else consumes it yet — we read Boolean
- * presence of the two required env vars without touching their values.
- * No Adobe SDK is imported; no Adobe API call is made on render.
- */
-function hasAdobePdfServices(): boolean {
-  return (
-    Boolean(process.env.ADOBE_PDF_SERVICES_CLIENT_ID?.trim()) &&
-    Boolean(process.env.ADOBE_PDF_SERVICES_CLIENT_SECRET?.trim())
   );
 }
 
@@ -387,14 +385,18 @@ const UPLOAD_CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
 
 const EXTRACTION_TONE: Record<string, StatusTone> = {
   not_started: "neutral",
+  extracting: "review",
   draft_ready: "info",
   reviewed: "success",
+  failed: "warning",
 };
 
 const EXTRACTION_LABEL_BY_KEY: Record<string, string> = {
   not_started: "Extraction: not started",
+  extracting: "Extracting…",
   draft_ready: "AI draft ready",
   reviewed: "Reviewed",
+  failed: "Extraction failed",
 };
 
 function formatSize(bytes: number): string {
@@ -424,10 +426,14 @@ function DriveDocumentsPanel({
   documents,
   uploadReady,
   uploadDisabledReason,
+  extractionReady,
+  extractionDisabledReason,
 }: {
   documents: DriveDocumentSummary[];
   uploadReady: boolean;
   uploadDisabledReason: string;
+  extractionReady: boolean;
+  extractionDisabledReason: string;
 }) {
   const propertyOptions = trackedProperties.map((p) => ({
     slug: p.slug,
@@ -458,7 +464,12 @@ function DriveDocumentsPanel({
         {documents.length > 0 ? (
           <ul className="flex flex-col divide-y divide-[color-mix(in_srgb,var(--color-border)_60%,transparent)]">
             {documents.map((d) => (
-              <DriveDocumentRow key={d.id} doc={d} />
+              <DriveDocumentRow
+                key={d.id}
+                doc={d}
+                extractionReady={extractionReady}
+                extractionDisabledReason={extractionDisabledReason}
+              />
             ))}
           </ul>
         ) : null}
@@ -467,7 +478,15 @@ function DriveDocumentsPanel({
   );
 }
 
-function DriveDocumentRow({ doc }: { doc: DriveDocumentSummary }) {
+function DriveDocumentRow({
+  doc,
+  extractionReady,
+  extractionDisabledReason,
+}: {
+  doc: DriveDocumentSummary;
+  extractionReady: boolean;
+  extractionDisabledReason: string;
+}) {
   const property = doc.linkedPropertySlug
     ? trackedProperties.find((p) => p.slug === doc.linkedPropertySlug) ?? null
     : null;
@@ -478,57 +497,144 @@ function DriveDocumentRow({ doc }: { doc: DriveDocumentSummary }) {
   const extractionLabel =
     EXTRACTION_LABEL_BY_KEY[doc.extractionStatus] ?? doc.extractionStatus;
   const isPdf = doc.mimeType === "application/pdf";
+  const hasDraft =
+    doc.extractionStatus === "draft_ready" || Boolean(doc.extractedText);
 
   return (
-    <li className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="text-sm font-semibold text-[var(--workspace-text)] [overflow-wrap:anywhere]">
-          {doc.name}
-        </span>
-        <span className="text-xs text-[var(--workspace-text-secondary)]">
-          {formatUploadedAt(doc.uploadedAt)} · {formatSize(doc.sizeBytes)}
-        </span>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <ToneTag label={categoryLabel} tone="neutral" />
-          {property ? (
-            <Link
-              href={`/properties/${property.slug}`}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+    <li className="flex flex-col gap-3 py-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-sm font-semibold text-[var(--workspace-text)] [overflow-wrap:anywhere]">
+            {doc.name}
+          </span>
+          <span className="text-xs text-[var(--workspace-text-secondary)]">
+            {formatUploadedAt(doc.uploadedAt)} · {formatSize(doc.sizeBytes)}
+          </span>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <ToneTag label={categoryLabel} tone="neutral" />
+            {property ? (
+              <Link
+                href={`/properties/${property.slug}`}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+              >
+                {property.address}
+              </Link>
+            ) : null}
+            {doc.extractedAt ? (
+              <span className="text-[11px] text-[var(--workspace-text-muted)]">
+                Extracted {formatUploadedAt(doc.extractedAt)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex flex-col items-start gap-1.5 sm:items-end">
+          <ToneTag label={extractionLabel} tone={extractionTone} />
+          <div className="flex flex-wrap items-center gap-2">
+            {isPdf ? (
+              <PdfExtractButton
+                documentId={doc.id}
+                ready={extractionReady}
+                disabledReason={extractionDisabledReason}
+                alreadyExtracted={Boolean(doc.extractedAt)}
+              />
+            ) : (
+              <span
+                aria-disabled
+                title="Adobe PDF Extract only runs on application/pdf files."
+                className="inline-flex min-h-[28px] cursor-not-allowed items-center gap-1.5 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text-muted)]"
+              >
+                PDF extraction unavailable
+              </span>
+            )}
+            <a
+              href={doc.driveWebUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-[28px] items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
             >
-              {property.address}
-            </Link>
-          ) : null}
-          {isPdf ? (
-            <span
-              aria-disabled
-              title="Adobe extraction is configured but not yet wired. Files are never processed automatically."
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-muted)]"
-            >
-              Adobe extraction · planned
-            </span>
-          ) : null}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/workspace/icons8-google-drive.svg"
+                alt=""
+                aria-hidden
+                width={12}
+                height={12}
+              />
+              Open in Drive
+            </a>
+          </div>
         </div>
       </div>
-      <div className="flex flex-col items-start gap-1.5 sm:items-end">
-        <ToneTag label={extractionLabel} tone={extractionTone} />
-        <a
-          href={doc.driveWebUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-h-[28px] items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/icons/workspace/icons8-google-drive.svg"
-            alt=""
-            aria-hidden
-            width={12}
-            height={12}
-          />
-          Open in Drive
-        </a>
-      </div>
+
+      {doc.extractionError ? (
+        <div className="rounded-[var(--radius-md)] border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2 text-[12px] text-[var(--status-warning-text)]">
+          Extraction failed: {doc.extractionError}
+        </div>
+      ) : null}
+
+      {hasDraft ? <ExtractedFactsPanel doc={doc} /> : null}
     </li>
+  );
+}
+
+/**
+ * Draft review of facts pulled from a PDF. Adobe's `structuredData.json`
+ * is dense but not pre-classified by document role, so this first pass
+ * shows a readable text preview and parks the structured sections
+ * (document type, parties, dates, dollar amounts, etc.) as "needs AI
+ * review later". The full JSON is retained server-side in
+ * `extractedJson` for future use.
+ */
+function ExtractedFactsPanel({ doc }: { doc: DriveDocumentSummary }) {
+  const preview = (doc.extractedText ?? "").trim();
+  const sections = [
+    { label: "Document type", hint: "What kind of document is this?" },
+    { label: "Parties / vendors", hint: "Who is named?" },
+    { label: "Dates", hint: "Effective, signed, due, expiration." },
+    { label: "Dollar amounts", hint: "Costs, allowances, totals." },
+    { label: "Property references", hint: "Addresses, parcel ids." },
+    { label: "Risks / missing info", hint: "Exclusions, blanks, expirations." },
+    { label: "Suggested tasks", hint: "Follow-ups for review." },
+  ];
+
+  return (
+    <section className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-3 shadow-[var(--shadow-card-ring)]">
+      <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-[12.5px] font-semibold text-[var(--workspace-text)]">
+          Draft review of extracted facts
+        </span>
+        <span className="text-[11px] text-[var(--workspace-text-muted)]">
+          Draft only — verify before relying.
+        </span>
+      </header>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {sections.map((s) => (
+          <div
+            key={s.label}
+            className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2"
+          >
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              {s.label}
+            </div>
+            <div className="text-[12px] text-[var(--workspace-text-secondary)]">
+              {s.hint} <span className="italic">Needs AI review later.</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {preview.length > 0 ? (
+        <details className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5">
+          <summary className="cursor-pointer text-[12px] font-semibold text-[var(--workspace-text)]">
+            Extracted text preview
+          </summary>
+          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+            {preview}
+          </pre>
+        </details>
+      ) : null}
+    </section>
   );
 }
 

@@ -11,8 +11,10 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { extractTextFromPdf, hasAdobePdfServices } from "@/lib/adobe-pdf";
 import {
   createDriveWorkspaceFolders,
+  downloadDriveFileBytes,
   uploadWorkspaceDocument,
   UPLOAD_ALLOWED_MIME_TYPES,
   UPLOAD_MAX_SIZE_BYTES,
@@ -21,6 +23,7 @@ import {
   type UploadDocumentResult,
 } from "@/lib/google-drive";
 import { trackedProperties } from "@/lib/market-data";
+import { prisma } from "@/lib/prisma";
 
 export type CreateDriveWorkspaceState = CreateFoldersResult | null;
 
@@ -140,4 +143,138 @@ export async function uploadDriveDocumentAction(
     revalidatePath("/documents");
   }
   return result;
+}
+
+// =============================================================
+// Adobe PDF extraction action
+// =============================================================
+
+export type ExtractDrivePdfFactsResult =
+  | {
+      ok: true;
+      documentId: string;
+      extractedAt: string;
+      previewText: string;
+      previewTruncated: boolean;
+    }
+  | {
+      ok: false;
+      message: string;
+      /** Set when the failure is a Google auth issue (we surface the
+       *  reconnect CTA in the UI). */
+      needsConnect?: boolean;
+      needsScope?: boolean;
+    };
+
+export type ExtractDrivePdfFactsState = ExtractDrivePdfFactsResult | null;
+
+/**
+ * User-triggered server action that runs Adobe PDF Extract on a single
+ * uploaded PDF and stores the result. Flow:
+ *   1. Look up the DriveDocument row.
+ *   2. Validate MIME type is application/pdf.
+ *   3. Validate Adobe credentials are configured.
+ *   4. Mark extractionStatus = "extracting" (in case of mid-flight crash).
+ *   5. Download the PDF bytes from Google Drive (drive.file scope).
+ *   6. Hand off to `extractTextFromPdf` (Adobe end-to-end).
+ *   7. Persist either { extractedJson, extractedText, extractedAt,
+ *      extractionStatus: "draft_ready", extractionError: null } OR
+ *      { extractionStatus: "failed", extractionError: <msg> }.
+ *   8. revalidatePath("/documents").
+ *
+ * Adobe extraction is the only work that runs here, and only when this
+ * action is invoked from a user click. No background polling, no
+ * automatic post-upload trigger.
+ */
+export async function extractDrivePdfFactsAction(
+  _prev: ExtractDrivePdfFactsState,
+  formData: FormData
+): Promise<ExtractDrivePdfFactsResult> {
+  const documentIdRaw = formData.get("documentId");
+  if (typeof documentIdRaw !== "string" || documentIdRaw.trim().length === 0) {
+    return { ok: false, message: "Missing document id." };
+  }
+  const documentId = documentIdRaw.trim();
+
+  if (!hasAdobePdfServices()) {
+    return {
+      ok: false,
+      message:
+        "Adobe PDF Services is not configured. Set ADOBE_PDF_SERVICES_CLIENT_ID and ADOBE_PDF_SERVICES_CLIENT_SECRET on the server.",
+    };
+  }
+
+  const doc = await prisma.driveDocument.findUnique({
+    where: { id: documentId },
+  });
+  if (!doc) return { ok: false, message: "Document not found." };
+  if (doc.mimeType !== "application/pdf") {
+    return {
+      ok: false,
+      message: "PDF extraction only runs on application/pdf files.",
+    };
+  }
+  if (!doc.driveFileId) {
+    return { ok: false, message: "Document has no Drive file id on file." };
+  }
+
+  // Mark in-flight so a refresh during the long-running call shows the
+  // intermediate state honestly. Clearing extractionError now so a
+  // prior failure doesn't linger if this run succeeds.
+  await prisma.driveDocument.update({
+    where: { id: documentId },
+    data: { extractionStatus: "extracting", extractionError: null },
+  });
+
+  const download = await downloadDriveFileBytes(doc.driveFileId);
+  if (!download.ok) {
+    await prisma.driveDocument.update({
+      where: { id: documentId },
+      data: {
+        extractionStatus: "failed",
+        extractionError: download.message,
+      },
+    });
+    revalidatePath("/documents");
+    return {
+      ok: false,
+      message: download.message,
+      needsConnect: download.needsConnect,
+      needsScope: download.needsScope,
+    };
+  }
+
+  const extract = await extractTextFromPdf(download.buffer);
+  if (!extract.ok) {
+    await prisma.driveDocument.update({
+      where: { id: documentId },
+      data: {
+        extractionStatus: "failed",
+        extractionError: extract.message,
+      },
+    });
+    revalidatePath("/documents");
+    return { ok: false, message: extract.message };
+  }
+
+  const extractedAt = new Date();
+  await prisma.driveDocument.update({
+    where: { id: documentId },
+    data: {
+      extractionStatus: "draft_ready",
+      extractedJson: extract.structuredData as object,
+      extractedText: extract.previewText,
+      extractedAt,
+      extractionError: null,
+    },
+  });
+  revalidatePath("/documents");
+
+  return {
+    ok: true,
+    documentId,
+    extractedAt: extractedAt.toISOString(),
+    previewText: extract.previewText,
+    previewTruncated: extract.previewText.includes("(truncated"),
+  };
 }
