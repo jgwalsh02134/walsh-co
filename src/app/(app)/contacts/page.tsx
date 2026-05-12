@@ -14,6 +14,10 @@ import {
   contactCategoryLabels,
   contactStatusLabels,
 } from "@/lib/contacts";
+import {
+  isGmailDraftsEnabled,
+  isGoogleConnected,
+} from "@/lib/google-gmail";
 import { prisma } from "@/lib/prisma";
 import { statusTokens } from "@/lib/status";
 import { ContactAvatar } from "./contact-avatar";
@@ -142,6 +146,15 @@ export default async function ContactsPage({
   }
 
   const hasSelection = !!selectedId && !!selected;
+  const filtersActive =
+    Boolean(q) || categoryParam !== null || favoritesOnly || recentOnly;
+  // "Absolute empty" = the active set is genuinely empty (no contacts in
+  // the workspace), as opposed to a filter that simply matched nothing.
+  // Drives a richer empty state that calls out Gmail drafts.
+  const isAbsoluteEmpty = dbAvailable && allCount === 0 && !filtersActive;
+  const gmailEnabled = isAbsoluteEmpty ? isGmailDraftsEnabled() : false;
+  const gmailConnected =
+    isAbsoluteEmpty && gmailEnabled ? await isGoogleConnected() : false;
 
   const backHrefParams = new URLSearchParams();
   if (q) backHrefParams.set("q", q);
@@ -251,9 +264,16 @@ export default async function ContactsPage({
             padded={false}
           >
             {contacts.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-[var(--color-text-muted)]">
-                No contacts match this filter.
-              </p>
+              isAbsoluteEmpty ? (
+                <ContactsEmptyState
+                  gmailEnabled={gmailEnabled}
+                  gmailConnected={gmailConnected}
+                />
+              ) : (
+                <p className="px-5 py-10 text-center text-sm text-[var(--color-text-muted)]">
+                  No contacts match this filter.
+                </p>
+              )
             ) : (
               <ContactsList
                 contacts={contacts}
@@ -287,11 +307,18 @@ export default async function ContactsPage({
               title="Detail"
               description="Pick a contact to see the full card."
             >
-              <p className="text-sm text-[var(--color-text-muted)]">
-                {contacts.length === 0
-                  ? "Add a contact to get started."
-                  : "Select a contact from the list."}
-              </p>
+              {isAbsoluteEmpty ? (
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  Add or import a contact to unlock contact-level actions —
+                  including Gmail drafts addressed to that contact.
+                </p>
+              ) : (
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  {contacts.length === 0
+                    ? "Add a contact to get started."
+                    : "Select a contact from the list."}
+                </p>
+              )}
             </SectionPanel>
           )}
         </div>
@@ -413,5 +440,93 @@ function ContactsList({
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Shown when the workspace has zero contacts AND no filters are active.
+ * Combines onboarding CTAs with a Gmail-drafts explainer plus a visibly
+ * disabled "Draft email" pill so the integration is discoverable before
+ * a real contact exists. No fake contact data is rendered.
+ */
+function ContactsEmptyState({
+  gmailEnabled,
+  gmailConnected,
+}: {
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
+}) {
+  const gmailHint = !gmailEnabled
+    ? "Gmail drafts are not configured in this environment."
+    : !gmailConnected
+    ? "Gmail is configured. Connect Google in Settings to enable per-contact drafts."
+    : "Gmail is connected. Per-contact draft buttons appear on each contact card once a contact exists.";
+
+  return (
+    <div className="flex flex-col items-stretch gap-4 px-5 py-10 text-center">
+      <div className="flex flex-col gap-1">
+        <h3 className="font-display text-base font-semibold text-[var(--color-text)]">
+          No contacts yet
+        </h3>
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Add a contact or import a list to start tracking relationships.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Link
+          href="/contacts/new"
+          className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+        >
+          Add contact
+        </Link>
+        <Link
+          href="/contacts/import"
+          className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-medium text-[var(--color-text)] hover:border-[var(--color-border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+        >
+          Import contacts
+        </Link>
+      </div>
+
+      <div className="mx-auto mt-2 flex w-full max-w-md flex-col items-center gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-soft)] px-4 py-4 text-left">
+        <div className="flex w-full items-start gap-3">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[var(--color-surface)] shadow-[var(--shadow-card-ring)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/workspace/gmail-icon.svg"
+              alt=""
+              aria-hidden
+              width={18}
+              height={18}
+            />
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-sm font-semibold text-[var(--color-text)]">
+              Gmail drafts
+            </span>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              {gmailHint} Drafts are saved to your Gmail Drafts folder —
+              nothing is sent automatically.
+            </p>
+          </div>
+        </div>
+        <span
+          aria-disabled
+          title="Add a contact to enable per-contact Gmail drafts."
+          className="mt-1 inline-flex min-h-[32px] cursor-not-allowed items-center gap-1.5 self-start rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text-muted)]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/workspace/gmail-icon.svg"
+            alt=""
+            aria-hidden
+            width={14}
+            height={14}
+            className="inline-block shrink-0"
+          />
+          Draft email · needs a contact
+        </span>
+      </div>
+    </div>
   );
 }
