@@ -662,7 +662,7 @@ function DriveDocumentRow({
             ) : null}
           </div>
         </div>
-        <div className="flex flex-col items-start gap-1.5 sm:items-end">
+        <div className="flex min-w-0 flex-col items-start gap-1.5 sm:items-end">
           <div className="flex flex-wrap items-center gap-1.5">
             <ToneTag label={extractionLabel} tone={extractionTone} />
             <ToneTag
@@ -672,7 +672,7 @@ function DriveDocumentRow({
               tone={AI_REVIEW_TONE[aiReviewStatus] ?? "neutral"}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {isPdf ? (
               <PdfExtractButton
                 documentId={doc.id}
@@ -717,13 +717,15 @@ function DriveDocumentRow({
       </div>
 
       {doc.extractionError ? (
-        <div className="rounded-[var(--radius-md)] border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2 text-[12px] text-[var(--status-warning-text)]">
-          Extraction failed: {doc.extractionError}
+        <div className="min-w-0 rounded-[var(--radius-md)] border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2 text-[12px] text-[var(--status-warning-text)] [overflow-wrap:anywhere] break-words">
+          <span className="font-semibold">Extraction failed:</span>{" "}
+          {doc.extractionError}
         </div>
       ) : null}
       {doc.aiReviewError ? (
-        <div className="rounded-[var(--radius-md)] border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2 text-[12px] text-[var(--status-warning-text)]">
-          AI review failed: {doc.aiReviewError}
+        <div className="min-w-0 rounded-[var(--radius-md)] border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2 text-[12px] text-[var(--status-warning-text)] [overflow-wrap:anywhere] break-words">
+          <span className="font-semibold">AI review failed:</span>{" "}
+          {doc.aiReviewError}
         </div>
       ) : null}
 

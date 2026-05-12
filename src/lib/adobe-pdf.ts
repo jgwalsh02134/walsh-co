@@ -192,18 +192,19 @@ async function pollExtractJob(
   );
 }
 
-type DownloadExtractResultOk = {
-  ok: true;
-  buffer: Buffer;
-  contentType: string | null;
-  contentLength: number | null;
-  status: number;
-};
-type DownloadExtractResultError = {
-  ok: false;
-  message: string;
-};
-type DownloadExtractResult = DownloadExtractResultOk | DownloadExtractResultError;
+type DownloadExtractResult =
+  | {
+      ok: true;
+      kind: "zip" | "json";
+      buffer: Buffer;
+      contentType: string | null;
+      contentLength: number | null;
+      status: number;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
 
 /**
  * Download the Adobe Extract result and validate it before returning.
@@ -250,23 +251,41 @@ async function downloadExtractResult(
     };
   }
 
-  if (!looksLikeZip(buffer)) {
+  // Adobe's extract API can return either a ZIP (older behavior) or the
+  // structured-data JSON directly (current behavior on this account).
+  // We accept both: prefer the ZIP magic + central-directory parse when
+  // present, otherwise fall through to JSON detection. JSON detection
+  // also covers the case where Adobe omits or sends a generic
+  // Content-Type by sniffing the first non-whitespace byte.
+  if (looksLikeZip(buffer)) {
     return {
-      ok: false,
-      message: `Adobe result was not a ZIP. Status: ${status}. Content-Type: ${
-        contentType ?? "unknown"
-      }. Preview: ${previewBytes(buffer)}`,
+      ok: true,
+      kind: "zip",
+      buffer,
+      contentType,
+      contentLength: Number.isFinite(contentLength)
+        ? (contentLength as number)
+        : null,
+      status,
     };
   }
-
+  if (looksLikeJson(buffer, contentType)) {
+    return {
+      ok: true,
+      kind: "json",
+      buffer,
+      contentType,
+      contentLength: Number.isFinite(contentLength)
+        ? (contentLength as number)
+        : null,
+      status,
+    };
+  }
   return {
-    ok: true,
-    buffer,
-    contentType,
-    contentLength: Number.isFinite(contentLength)
-      ? (contentLength as number)
-      : null,
-    status,
+    ok: false,
+    message: `Adobe result was not ZIP or JSON. Status: ${status}. Content-Type: ${
+      contentType ?? "unknown"
+    }. Preview: ${previewBytes(buffer)}`,
   };
 }
 
@@ -286,6 +305,27 @@ function looksLikeZip(buf: Buffer): boolean {
     (b2 === 0x05 && b3 === 0x06) ||
     (b2 === 0x07 && b3 === 0x08)
   );
+}
+
+/**
+ * Best-effort JSON detection. Either the server told us via Content-Type
+ * (preferred), or the first non-whitespace byte is `{` or `[`. Falling
+ * back to a byte sniff keeps us correct when the upstream sends a
+ * generic application/octet-stream.
+ */
+function looksLikeJson(buf: Buffer, contentType: string | null): boolean {
+  if (contentType && contentType.toLowerCase().includes("application/json")) {
+    return true;
+  }
+  // Skip ASCII whitespace at the start (space, tab, CR, LF).
+  let i = 0;
+  while (i < buf.length) {
+    const b = buf[i];
+    if (b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d) break;
+    i++;
+  }
+  if (i >= buf.length) return false;
+  return buf[i] === 0x7b || buf[i] === 0x5b; // "{" or "["
 }
 
 /**
@@ -494,40 +534,56 @@ export async function extractTextFromPdf(
     if (!download.ok) {
       return { ok: false, message: download.message };
     }
-    const entries = listZipEntries(download.buffer);
-    if (!entries) {
-      return {
-        ok: false,
-        message: `Adobe extract ZIP could not be parsed (no central directory). Content-Type: ${
-          download.contentType ?? "unknown"
-        }. Preview: ${previewBytes(download.buffer)}`,
-      };
-    }
-    const target = findStructuredDataEntry(entries);
-    if (!target) {
-      return {
-        ok: false,
-        message: `structuredData.json not found. ZIP entries found: ${summarizeEntryNames(
-          entries
-        )}`,
-      };
-    }
-    const structuredBuffer = readZipEntry(download.buffer, target);
-    if (!structuredBuffer) {
-      return {
-        ok: false,
-        message: `Could not read ${target.name} from Adobe extract ZIP (compression method ${target.method}).`,
-      };
-    }
 
     let structured: unknown;
-    try {
-      structured = JSON.parse(structuredBuffer.toString("utf-8"));
-    } catch {
-      return {
-        ok: false,
-        message: `${target.name} was not valid JSON.`,
-      };
+    if (download.kind === "json") {
+      // Adobe handed us the structuredData JSON directly. Treat the
+      // entire response body as `structuredData`.
+      try {
+        structured = JSON.parse(download.buffer.toString("utf-8"));
+      } catch {
+        return {
+          ok: false,
+          message: "Adobe returned JSON but it could not be parsed.",
+        };
+      }
+    } else {
+      // ZIP path: find and decompress structuredData.json inside the
+      // archive. Identical to the original behavior so older API
+      // responses keep working.
+      const entries = listZipEntries(download.buffer);
+      if (!entries) {
+        return {
+          ok: false,
+          message: `Adobe extract ZIP could not be parsed (no central directory). Content-Type: ${
+            download.contentType ?? "unknown"
+          }. Preview: ${previewBytes(download.buffer)}`,
+        };
+      }
+      const target = findStructuredDataEntry(entries);
+      if (!target) {
+        return {
+          ok: false,
+          message: `structuredData.json not found. ZIP entries found: ${summarizeEntryNames(
+            entries
+          )}`,
+        };
+      }
+      const structuredBuffer = readZipEntry(download.buffer, target);
+      if (!structuredBuffer) {
+        return {
+          ok: false,
+          message: `Could not read ${target.name} from Adobe extract ZIP (compression method ${target.method}).`,
+        };
+      }
+      try {
+        structured = JSON.parse(structuredBuffer.toString("utf-8"));
+      } catch {
+        return {
+          ok: false,
+          message: `${target.name} was not valid JSON.`,
+        };
+      }
     }
 
     const previewText = buildPreviewText(structured);
