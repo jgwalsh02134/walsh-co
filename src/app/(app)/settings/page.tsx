@@ -23,11 +23,26 @@ const ICON = {
   openai: "/icons/workspace/openai-icon-black.svg",
   xai: "/icons/workspace/xai-icon-black.svg",
   gmail: "/icons/workspace/gmail-icon.svg",
+  adobe: "/icons/workspace/adobe-acrobat-reader.svg",
   // Data source icons aren't bundled yet — fall back to a neutral
   // workspace glyph and let the title + status chip carry meaning.
   dataSource: "/icons/workspace/market-1.svg",
   googleMaps: "/icons/workspace/icons8-google-maps.svg",
 } as const;
+
+/**
+ * Adobe PDF Services env check. Inlined here (rather than added to
+ * `src/lib`) because the Settings page is the only consumer in this
+ * pass — we read Boolean presence of the two required env vars without
+ * touching their values. No Adobe SDK is imported; no Adobe API call
+ * is made on render.
+ */
+function hasAdobePdfServices(): boolean {
+  return (
+    Boolean(process.env.ADOBE_PDF_SERVICES_CLIENT_ID?.trim()) &&
+    Boolean(process.env.ADOBE_PDF_SERVICES_CLIENT_SECRET?.trim())
+  );
+}
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.1";
 
@@ -46,6 +61,8 @@ export default async function SettingsPage() {
   const gmailConnected = gmailDraftsEnabled
     ? await isGoogleConnected()
     : false;
+
+  const adobePdfConfigured = hasAdobePdfServices();
 
   const dataSources = [
     {
@@ -197,6 +214,41 @@ export default async function SettingsPage() {
           clientConfigured={googleClientConfigured}
           draftsEnabled={gmailDraftsEnabled}
           connected={gmailConnected}
+        />
+      </SectionPanel>
+
+      <SectionPanel
+        title="Document Processing"
+        description="Server-side document tooling. No file is uploaded or processed unless you explicitly trigger an action — page load does not call any provider."
+      >
+        <IntegrationRow
+          iconSrc={ICON.adobe}
+          title="Adobe PDF Services"
+          description="PDF extraction, OCR, compression, splitting, and document preparation."
+          detail={
+            adobePdfConfigured ? (
+              <>
+                Env:{" "}
+                <span className="font-mono">ADOBE_PDF_SERVICES_CLIENT_ID</span>
+                {" + "}
+                <span className="font-mono">
+                  ADOBE_PDF_SERVICES_CLIENT_SECRET
+                </span>
+                {" — Document processing only. Files are not processed automatically."}
+              </>
+            ) : (
+              <>
+                Set <span className="font-mono">ADOBE_PDF_SERVICES_CLIENT_ID</span>{" "}
+                and{" "}
+                <span className="font-mono">
+                  ADOBE_PDF_SERVICES_CLIENT_SECRET
+                </span>{" "}
+                on the server to enable. Document processing only. Files are not
+                processed automatically.
+              </>
+            )
+          }
+          status={adobePdfConfigured ? "configured" : "not_configured"}
         />
       </SectionPanel>
 
