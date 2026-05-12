@@ -12,7 +12,10 @@
  *   - No legal, tax, zoning, or engineering conclusions are produced.
  */
 
-import { generateWorkspaceText, hasOpenAIKey } from "@/lib/openai";
+import {
+  generateWorkspaceJsonObject,
+  hasOpenAIKey,
+} from "@/lib/openai";
 import { generateXaiMarketText, hasXaiKey } from "@/lib/xai";
 
 if (typeof window !== "undefined") {
@@ -78,12 +81,12 @@ export function defaultAiReviewProvider(): AiReviewProvider | null {
 
 const REVIEW_INSTRUCTIONS = [
   "You are an internal AI assistant for J.G. Walsh & Co. reviewing a document that was OCR/text-extracted from a PDF in a real-estate workspace.",
-  "Treat your output as a DRAFT REVIEW only. Never claim legal, tax, zoning, or engineering conclusions.",
+  "Treat your output as a DRAFT REVIEW only. Do not make legal, tax, zoning, survey, or engineering conclusions.",
   "Do not invent facts that are not present in the extracted text.",
-  "If a category has no supporting evidence in the text, leave that array empty and add a short note under missingInformation explaining what was not found.",
-  "Preserve dollar amounts and dates exactly as written in the source whenever possible.",
+  "Preserve dates, addresses, parcel IDs, dollar amounts, and proper names exactly as written in the extracted text.",
+  "If a category has no supporting evidence in the text, return an empty array for that field and add a short note under missingInformation explaining what was not found.",
   "When something is uncertain, prefix it with 'Uncertain — ' inside the relevant array.",
-  "Respond with valid JSON only. No commentary outside the JSON. No markdown code fences. The JSON must match the schema in the prompt.",
+  "OUTPUT FORMAT: respond with one single JSON object only. No markdown. No code fences. No prose before or after the JSON. The object must contain every key listed in the schema.",
 ].join(" ");
 
 function buildReviewPrompt(input: {
@@ -137,27 +140,79 @@ function truncateForPrompt(text: string): string {
 /**
  * Strip common LLM wrappers (markdown code fences, leading prose) and
  * attempt to parse JSON. Returns null on failure rather than throwing.
+ *
+ * Tolerant of:
+ *   - Markdown code fences (```json … ``` or ``` … ```).
+ *   - Prose before/after the JSON object — we extract the substring
+ *     between the first `{` and the last `}`.
+ *   - Smart quotes that some models emit instead of plain ASCII quotes.
+ *   - Trailing commas in objects or arrays.
  */
 function tryParseJsonObject(raw: string): unknown {
   const trimmed = raw.trim();
-  // Strip a leading ```json or ``` and trailing ```
+  // Strip a leading ```json (or just ```) and matching trailing ```
   const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  const body = fenceMatch ? fenceMatch[1] : trimmed;
-  try {
-    return JSON.parse(body);
-  } catch {
-    // Best-effort: find the first {...} block.
-    const first = body.indexOf("{");
-    const last = body.lastIndexOf("}");
-    if (first >= 0 && last > first) {
-      try {
-        return JSON.parse(body.slice(first, last + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
+  const fenced = fenceMatch ? fenceMatch[1].trim() : trimmed;
+
+  const candidates: string[] = [fenced];
+
+  // Best-effort: find the first balanced-looking {...} chunk in the
+  // payload. This salvages responses that wrapped JSON in prose.
+  const first = fenced.indexOf("{");
+  const last = fenced.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    candidates.push(fenced.slice(first, last + 1));
   }
+
+  for (const c of candidates) {
+    const direct = safeJsonParse(c);
+    if (direct !== undefined) return direct;
+    const cleaned = repairCommonJsonGlitches(c);
+    if (cleaned !== c) {
+      const repaired = safeJsonParse(cleaned);
+      if (repaired !== undefined) return repaired;
+    }
+  }
+  return null;
+}
+
+function safeJsonParse(s: string): unknown | undefined {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Best-effort repair for the two cheap-to-fix mistakes LLMs make most
+ * often. Anything more aggressive risks silently changing meaning, so
+ * stop here.
+ *
+ * 1. Replace curly quotes “ / ” / ‘ / ’ with ASCII " or '.
+ * 2. Strip a trailing comma immediately before `}` or `]`.
+ */
+function repairCommonJsonGlitches(s: string): string {
+  let out = s
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
+  out = out.replace(/,(\s*[}\]])/g, "$1");
+  return out;
+}
+
+/**
+ * Cap a raw model output to a length safe to surface inside an error
+ * message. Strips control chars and replaces newlines with spaces so the
+ * preview doesn't break terminal/HTML rendering. Stays well under any
+ * conceivable log indexing limit.
+ */
+function sanitizeOutputPreview(raw: string): string {
+  // eslint-disable-next-line no-control-regex
+  const controlPattern = /[\x00-\x1F\x7F]+/g;
+  const stripped = raw.replace(controlPattern, " ").replace(/\s+/g, " ").trim();
+  const MAX = 500;
+  if (stripped.length === 0) return "(empty)";
+  return stripped.length > MAX ? `${stripped.slice(0, MAX)}…` : stripped;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -242,12 +297,18 @@ export async function reviewExtractedText(
   let raw: string;
   try {
     if (provider === "openai") {
-      const r = await generateWorkspaceText({
-        prompt,
-        instructions: REVIEW_INSTRUCTIONS,
-      });
+      // JSON mode enforces a single JSON object response server-side at
+      // OpenAI, which prevents the markdown/code-fence wrapping that
+      // tripped the old text-mode parser.
+      const r = await generateWorkspaceJsonObject(
+        { prompt, instructions: REVIEW_INSTRUCTIONS },
+        { maxOutputTokens: 4000 }
+      );
       raw = r.outputText;
     } else {
+      // xAI is OpenAI-compatible but we don't depend on its JSON-mode
+      // support; keep it as text generation guarded by the prompt
+      // instructions and the tolerant parser below.
       const r = await generateXaiMarketText({
         prompt,
         instructions: REVIEW_INSTRUCTIONS,
@@ -275,19 +336,27 @@ export async function reviewExtractedText(
 
   const parsed = tryParseJsonObject(raw);
   if (!parsed) {
+    const preview = sanitizeOutputPreview(raw);
+    // Server-side diagnostic only — no secrets, no full extracted text
+    // (this is the model output, not the source document).
+    console.warn(
+      "[ai-document-review] non-JSON response",
+      JSON.stringify({ provider, preview })
+    );
     return {
       ok: false,
       provider,
-      message: "AI provider did not return valid JSON.",
+      message: `AI provider did not return valid JSON. Preview: ${preview}`,
     };
   }
 
   const review = normalizeReview(parsed);
   if (!review) {
+    const preview = sanitizeOutputPreview(raw);
     return {
       ok: false,
       provider,
-      message: "AI response JSON did not match the expected shape.",
+      message: `AI response JSON did not match the expected shape. Preview: ${preview}`,
     };
   }
 

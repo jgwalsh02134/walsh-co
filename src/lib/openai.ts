@@ -54,6 +54,40 @@ export async function generateWorkspaceText(
   return { outputText: outputText(response) };
 }
 
+export type WorkspaceJsonObjectOptions = {
+  /** Override the default 4000-token budget when the JSON object is
+   *  particularly large (e.g. long suggestedTasks arrays). */
+  maxOutputTokens?: number;
+};
+
+/**
+ * Run a generation that constrains the model output to a single valid
+ * JSON object. Uses the OpenAI Responses-API JSON-object mode so the
+ * SDK rejects responses that are markdown, prose, or truncated JSON,
+ * which used to cause `JSON.parse` failures downstream.
+ *
+ * Default `max_output_tokens` is 4000 (vs. 700 for the regular text
+ * helper) because the 11-field document-review JSON commonly runs
+ * past 700 and would otherwise truncate mid-array.
+ */
+export async function generateWorkspaceJsonObject(
+  input: WorkspaceTextInput | string,
+  options: WorkspaceJsonObjectOptions = {}
+): Promise<WorkspaceTextResult> {
+  const normalized = normalizeInput(input);
+  const response = await getOpenAIClient().responses.create({
+    model: modelName(),
+    instructions: normalized.instructions ?? defaultInstructions(),
+    input: normalized.prompt,
+    reasoning: { effort: "none" },
+    max_output_tokens: options.maxOutputTokens ?? 4000,
+    store: false,
+    text: { format: { type: "json_object" } },
+  });
+
+  return { outputText: outputText(response) };
+}
+
 export async function generateWorkspaceTextWithWebSearch(
   input: WorkspaceTextInput | string
 ): Promise<WorkspaceWebSearchResult> {
