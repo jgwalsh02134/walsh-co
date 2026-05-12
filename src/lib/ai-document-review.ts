@@ -98,13 +98,19 @@ function buildReviewPrompt(input: {
   const propertyLine = input.linkedPropertyAddress
     ? `Linked property (workspace metadata, not necessarily mentioned in the document): ${input.linkedPropertyAddress}`
     : "Linked property: none.";
+  // NOTE: The literal word "json" must appear in the user input for
+  // OpenAI's text.format=json_object mode to accept the request. The
+  // first line is intentionally explicit so this constraint is obvious
+  // to future readers and resistant to accidental wording changes.
   return [
+    "Return one valid json object only. No markdown. No code fences. No prose before or after the json.",
+    "",
     "Document context:",
     `- File name: ${input.documentName}`,
     `- Workspace category: ${input.category}`,
     `- ${propertyLine}`,
     "",
-    "Schema (all keys required; arrays may be empty; nullable strings allowed for documentType and summary):",
+    "Required json schema (all keys required; arrays may be empty; documentType and summary may be null):",
     "{",
     '  "documentType": string | null,',
     '  "summary": string | null,',
@@ -119,7 +125,14 @@ function buildReviewPrompt(input: {
     '  "contractorQuestions": string[]',
     "}",
     "",
-    "Extracted text follows. Use only this text as evidence.",
+    "Rules:",
+    "- Use only the extracted text below as evidence.",
+    "- Do not invent facts.",
+    "- Preserve dates, addresses, parcel IDs, dollar amounts, and proper names exactly as written.",
+    "- For missing or uncertain items, leave the relevant array empty and add a short note under missingInformation.",
+    "- Do not make legal, tax, zoning, survey, or engineering conclusions.",
+    "",
+    "Extracted text follows.",
     "----- BEGIN EXTRACTED TEXT -----",
     truncateForPrompt(input.extractedText),
     "----- END EXTRACTED TEXT -----",
@@ -316,13 +329,20 @@ export async function reviewExtractedText(
       raw = r.outputText;
     }
   } catch (error) {
+    // Keep the user-facing message short and uniform so OpenAI/xAI
+    // technical detail (HTTP status, internal API explanations) does
+    // not bleed into the UI. The provider/message is still logged
+    // server-side for diagnosis.
+    const detail =
+      error instanceof Error ? error.message.slice(0, 400) : String(error);
+    console.warn(
+      "[ai-document-review] provider request failed",
+      JSON.stringify({ provider, detail })
+    );
     return {
       ok: false,
       provider,
-      message:
-        error instanceof Error
-          ? `AI review request failed: ${error.message.slice(0, 200)}`
-          : "AI review request failed.",
+      message: "AI review failed. Please retry.",
     };
   }
 
