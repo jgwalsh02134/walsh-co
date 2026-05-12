@@ -43,9 +43,15 @@ const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
 const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
-/** Single delegated scope. Drafts only. */
+/** Gmail delegated scope. Drafts only — never send. */
 export const GMAIL_COMPOSE_SCOPE =
   "https://www.googleapis.com/auth/gmail.compose";
+
+/** Drive delegated scope. `drive.file` only — the workspace can manage
+ *  files/folders it itself creates via this OAuth client. Crucially, it
+ *  cannot read or modify any pre-existing Drive content. We deliberately
+ *  do NOT request the broader `drive` scope. */
+export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
 const SESSION_COOKIE = "gw_google_session";
 const STATE_COOKIE = "gw_google_oauth_state";
@@ -68,6 +74,12 @@ export type GoogleTokenSession = {
   expiresAt: number;
   /** Email of the connected Google account, when available. */
   email: string | null;
+  /** Space-separated list of scopes Google actually granted on this
+   *  session, copied from the token-exchange response. Optional for
+   *  backward compatibility — sessions created before Drive support was
+   *  added decode without it, and we treat that as "gmail.compose only"
+   *  to be conservative. */
+  grantedScopes?: string;
 };
 
 export type GmailDraftInput = {
@@ -110,6 +122,48 @@ export function hasGoogleClient(): boolean {
 export function isGmailDraftsEnabled(): boolean {
   if (!hasGoogleClient()) return false;
   return process.env.GOOGLE_GMAIL_DRAFTS_ENABLED?.trim() === "true";
+}
+
+/**
+ * Drive storage is gated by `GOOGLE_DRIVE_STORAGE_ENABLED=true` on the
+ * server. When enabled, the OAuth consent flow additionally requests
+ * the `drive.file` scope so the workspace can create and manage its own
+ * folders.
+ */
+export function isDriveStorageEnabled(): boolean {
+  if (!hasGoogleClient()) return false;
+  return process.env.GOOGLE_DRIVE_STORAGE_ENABLED?.trim() === "true";
+}
+
+/**
+ * Compose the scope list to send on the OAuth consent URL. Always
+ * includes Gmail compose; conditionally includes Drive file when Drive
+ * storage is enabled. We never request the broader `drive` scope.
+ */
+export function getRequestedOAuthScopes(): string[] {
+  const scopes = [GMAIL_COMPOSE_SCOPE];
+  if (isDriveStorageEnabled()) scopes.push(DRIVE_FILE_SCOPE);
+  return scopes;
+}
+
+/**
+ * True when the session was granted the given scope. Sessions created
+ * before this field existed (no `grantedScopes`) are treated as having
+ * only `gmail.compose` — a conservative default that drives the
+ * "Reconnect Google to enable Drive" path.
+ */
+export function sessionHasScope(
+  session: GoogleTokenSession | null,
+  scope: string
+): boolean {
+  if (!session) return false;
+  if (typeof session.grantedScopes !== "string") {
+    return scope === GMAIL_COMPOSE_SCOPE;
+  }
+  return session.grantedScopes
+    .split(/\s+/)
+    .filter(Boolean)
+    .includes(scope);
 }
 
 function getClientId(): string {
@@ -281,7 +335,7 @@ export function buildGoogleAuthUrl(input: {
   url.searchParams.set("client_id", getClientId());
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", GMAIL_COMPOSE_SCOPE);
+  url.searchParams.set("scope", getRequestedOAuthScopes().join(" "));
   url.searchParams.set("access_type", "offline");
   url.searchParams.set("include_granted_scopes", "true");
   url.searchParams.set("prompt", "consent");
@@ -357,6 +411,10 @@ export async function exchangeAuthorizationCode(input: {
       refreshToken: body.refresh_token ?? null,
       expiresAt,
       email,
+      grantedScopes:
+        typeof body.scope === "string" && body.scope.trim().length > 0
+          ? body.scope.trim()
+          : GMAIL_COMPOSE_SCOPE,
     },
   };
 }
@@ -400,6 +458,12 @@ async function refreshIfNeeded(
     refreshToken: body.refresh_token ?? session.refreshToken,
     expiresAt: Math.floor(Date.now() / 1000) + (body.expires_in ?? 3600),
     email: session.email,
+    // Google may echo the granted scope on refresh; if it does, keep it
+    // up to date. Otherwise carry forward what we already have.
+    grantedScopes:
+      typeof body.scope === "string" && body.scope.trim().length > 0
+        ? body.scope.trim()
+        : session.grantedScopes,
   };
   await setGoogleSession(next);
   return next;

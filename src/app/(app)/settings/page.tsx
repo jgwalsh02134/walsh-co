@@ -3,6 +3,7 @@ import { SectionPanel } from "@/components/section-panel";
 import { hasAttomKey } from "@/lib/attom";
 import { hasCensusKey } from "@/lib/census";
 import { hasFredKey } from "@/lib/fred";
+import { getDriveStatus } from "@/lib/google-drive";
 import { hasGoogleMapsServerKey } from "@/lib/google-maps";
 import {
   hasGoogleClient,
@@ -24,6 +25,7 @@ const ICON = {
   xai: "/icons/workspace/xai-icon-black.svg",
   gmail: "/icons/workspace/gmail-icon.svg",
   adobe: "/icons/workspace/adobe-acrobat-reader.svg",
+  googleDrive: "/icons/workspace/icons8-google-drive.svg",
   // Data source icons aren't bundled yet — fall back to a neutral
   // workspace glyph and let the title + status chip carry meaning.
   dataSource: "/icons/workspace/market-1.svg",
@@ -63,6 +65,15 @@ export default async function SettingsPage() {
     : false;
 
   const adobePdfConfigured = hasAdobePdfServices();
+  const driveStatus = await getDriveStatus();
+  const driveIntegrationStatus =
+    driveStatus.status === "configured"
+      ? "configured"
+      : driveStatus.status === "needs_scope"
+      ? "not_connected"
+      : driveStatus.status === "needs_connect"
+      ? "not_connected"
+      : "not_configured";
 
   const dataSources = [
     {
@@ -210,11 +221,68 @@ export default async function SettingsPage() {
         title="Google Workspace"
         description="Google services connected to this workspace. Tokens are stored server-side in an encrypted httpOnly cookie."
       >
-        <GmailIntegrationCard
-          clientConfigured={googleClientConfigured}
-          draftsEnabled={gmailDraftsEnabled}
-          connected={gmailConnected}
-        />
+        <div className="flex flex-col gap-3">
+          <GmailIntegrationCard
+            clientConfigured={googleClientConfigured}
+            draftsEnabled={gmailDraftsEnabled}
+            connected={gmailConnected}
+          />
+
+          <IntegrationRow
+            iconSrc={ICON.googleDrive}
+            title="Google Drive"
+            description="Workspace document storage. Uses drive.file scope — only files and folders the workspace creates are accessible."
+            detail={
+              driveStatus.status === "configured" ? (
+                <>
+                  Scope: <span className="font-mono">drive.file</span>
+                  {driveStatus.connectedEmail
+                    ? ` · Connected as ${driveStatus.connectedEmail}`
+                    : null}
+                </>
+              ) : driveStatus.status === "needs_scope" ? (
+                <>
+                  Connected, but Drive scope is missing. Reconnect Google to
+                  add <span className="font-mono">drive.file</span>.
+                </>
+              ) : driveStatus.status === "needs_connect" ? (
+                <>
+                  Drive storage enabled. Connect Google to grant{" "}
+                  <span className="font-mono">drive.file</span> alongside{" "}
+                  <span className="font-mono">gmail.compose</span>.
+                </>
+              ) : (
+                <>
+                  Set{" "}
+                  <span className="font-mono">GOOGLE_DRIVE_STORAGE_ENABLED</span>
+                  =true on the server to enable Drive storage.
+                </>
+              )
+            }
+            status={driveIntegrationStatus}
+            actions={
+              driveStatus.status === "needs_scope" ||
+              driveStatus.status === "needs_connect" ? (
+                <a
+                  href="/api/auth/google/start?returnTo=/settings"
+                  className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--workspace-text)] transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={ICON.googleDrive}
+                    alt=""
+                    aria-hidden
+                    width={14}
+                    height={14}
+                  />
+                  {driveStatus.status === "needs_connect"
+                    ? "Connect Google for Drive"
+                    : "Reconnect Google for Drive"}
+                </a>
+              ) : null
+            }
+          />
+        </div>
       </SectionPanel>
 
       <SectionPanel

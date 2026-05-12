@@ -3,6 +3,12 @@ import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 import { ToneTag } from "@/components/tone-tag";
 import {
+  getDriveStatus,
+  suggestedWorkspaceFolders,
+  WORKSPACE_DRIVE_ROOT_NAME,
+  type DriveStatusSummary,
+} from "@/lib/google-drive";
+import {
   documents,
   type DocumentCategory,
   type DocumentExtractionStatus,
@@ -92,6 +98,10 @@ export default async function DocumentsPage({
       ? documents
       : documents.filter((d) => d.category === activeCategory);
 
+  // Drive status is computed server-side. This only reads env vars and
+  // the encrypted session cookie — no Drive API call is made on render.
+  const driveStatus = await getDriveStatus();
+
   const counts = {
     total: documents.length,
     needsReview: documents.filter((d) => d.verified === "needs_verification")
@@ -131,6 +141,8 @@ export default async function DocumentsPage({
         <CategoryFilters active={activeCategory} />
         <DocumentList docs={filtered} activeCategory={activeCategory} />
       </SectionPanel>
+
+      <GoogleDriveStoragePanel status={driveStatus} />
 
       <AdobePdfServicesPanel configured={hasAdobePdfServices()} />
 
@@ -320,6 +332,212 @@ function DocumentGmailDraftPlaceholder() {
       />
       Draft email about this document
     </span>
+  );
+}
+
+// =============================================================
+// Google Drive storage panel
+// =============================================================
+
+const DRIVE_ACTIONS: { label: string; description: string }[] = [
+  {
+    label: "Create workspace folder",
+    description: `Creates the "${WORKSPACE_DRIVE_ROOT_NAME}" root folder in your Google Drive, plus top-level subfolders (Properties, Bids, Permits, Reports, Invoices, Photos). Drafted on click — nothing is created until you confirm.`,
+  },
+  {
+    label: "Create property folders",
+    description:
+      "Creates a per-property subfolder under Properties for each tracked property. Idempotent: existing folders are reused, not duplicated.",
+  },
+  {
+    label: "Open Drive folder",
+    description:
+      "Opens the workspace folder in Drive once it has been created. Available after the workspace folder exists.",
+  },
+];
+
+function GoogleDriveStoragePanel({
+  status,
+}: {
+  status: DriveStatusSummary;
+}) {
+  const folders = suggestedWorkspaceFolders(
+    trackedProperties.map((p) => p.address)
+  );
+
+  const statusMeta = (() => {
+    switch (status.status) {
+      case "configured":
+        return {
+          label: "Configured",
+          bg: "var(--status-success-bg)",
+          text: "var(--status-success-text)",
+          border: "var(--status-success-border)",
+        };
+      case "needs_scope":
+        return {
+          label: "Reconnect needed",
+          bg: "var(--status-warning-bg)",
+          text: "var(--status-warning-text)",
+          border: "var(--status-warning-border)",
+        };
+      case "needs_connect":
+        return {
+          label: "Not connected",
+          bg: "var(--status-warning-bg)",
+          text: "var(--status-warning-text)",
+          border: "var(--status-warning-border)",
+        };
+      case "not_configured":
+      default:
+        return {
+          label: "Not configured",
+          bg: "var(--status-neutral-bg)",
+          text: "var(--status-neutral-text)",
+          border: "var(--status-neutral-border)",
+        };
+    }
+  })();
+
+  const copy = (() => {
+    switch (status.status) {
+      case "configured":
+        return `Connected${
+          status.connectedEmail ? ` as ${status.connectedEmail}` : ""
+        }. Drive storage uses the drive.file scope — only files and folders this workspace creates are accessible. No file is uploaded automatically.`;
+      case "needs_scope":
+        return "Reconnect Google to enable Drive document storage. The current Google session was only granted Gmail compose.";
+      case "needs_connect":
+        return "Drive storage is enabled. Connect Google to grant Gmail compose and Drive file scopes.";
+      case "not_configured":
+      default:
+        return "Google Drive storage is not configured. Set GOOGLE_DRIVE_STORAGE_ENABLED=true and ensure GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are set on the server.";
+    }
+  })();
+
+  const showReconnect =
+    status.status === "needs_scope" || status.status === "needs_connect";
+
+  return (
+    <SectionPanel
+      title="Google Drive storage"
+      description="Document storage for the workspace. Folders and files are created only when you trigger an action — page load does not call Drive."
+    >
+      <div className="mb-4 flex flex-col gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)] sm:flex-row sm:items-start sm:gap-4">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-surface)] shadow-[var(--shadow-card-ring)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/workspace/icons8-google-drive.svg"
+            alt=""
+            aria-hidden
+            width={22}
+            height={22}
+          />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-sm font-semibold text-[var(--workspace-text)]">
+              Google Drive
+            </span>
+            <span
+              className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+              style={{
+                background: statusMeta.bg,
+                color: statusMeta.text,
+                borderColor: statusMeta.border,
+              }}
+            >
+              {statusMeta.label}
+            </span>
+          </div>
+          <p className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+            {copy}
+          </p>
+          <p className="text-[11px] text-[var(--workspace-text-muted)]">
+            Scope: <span className="font-mono">drive.file</span> · Workspace can
+            only see folders/files it itself creates via this OAuth client.
+          </p>
+          {showReconnect ? (
+            <div className="mt-2">
+              <a
+                href="/api/auth/google/start?returnTo=/documents"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--workspace-text)] transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/icons/workspace/icons8-google-drive.svg"
+                  alt=""
+                  aria-hidden
+                  width={14}
+                  height={14}
+                />
+                {status.status === "needs_connect"
+                  ? "Connect Google for Drive"
+                  : "Reconnect Google for Drive"}
+              </a>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {DRIVE_ACTIONS.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            disabled
+            aria-disabled
+            title={
+              status.status === "configured"
+                ? "Drive action is not wired in this first-pass build."
+                : "Connect Google with Drive scope to enable this action."
+            }
+            className="flex cursor-not-allowed flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 text-left shadow-[var(--shadow-card-ring)]"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-[var(--workspace-text)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/workspace/icons8-google-drive.svg"
+                alt=""
+                aria-hidden
+                width={16}
+                height={16}
+                className="inline-block shrink-0"
+              />
+              {a.label}
+            </span>
+            <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+              {a.description}
+            </span>
+            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              First pass · not yet wired
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <details className="mt-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] p-3">
+        <summary className="cursor-pointer text-[12.5px] font-semibold text-[var(--workspace-text)]">
+          Proposed folder structure ({folders.length} folders)
+        </summary>
+        <ul className="mt-2 flex flex-col gap-1 text-[12px] text-[var(--workspace-text-secondary)]">
+          <li>
+            <span className="font-mono">/{WORKSPACE_DRIVE_ROOT_NAME}</span>
+          </li>
+          {folders.map((f) => (
+            <li key={f.pathFromRoot.join("/")}>
+              <span className="font-mono">
+                /{WORKSPACE_DRIVE_ROOT_NAME}/{f.pathFromRoot.join("/")}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[11px] text-[var(--workspace-text-muted)]">
+          This is the plan. Nothing is created until a user clicks an action
+          above.
+        </p>
+      </details>
+    </SectionPanel>
   );
 }
 
