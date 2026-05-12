@@ -192,13 +192,135 @@ async function pollExtractJob(
   );
 }
 
-async function downloadExtractZip(downloadUri: string): Promise<Buffer> {
-  const response = await fetch(downloadUri, { method: "GET", cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Adobe extract download failed (HTTP ${response.status}).`);
+type DownloadExtractResultOk = {
+  ok: true;
+  buffer: Buffer;
+  contentType: string | null;
+  contentLength: number | null;
+  status: number;
+};
+type DownloadExtractResultError = {
+  ok: false;
+  message: string;
+};
+type DownloadExtractResult = DownloadExtractResultOk | DownloadExtractResultError;
+
+/**
+ * Download the Adobe Extract result and validate it before returning.
+ *
+ * The body is read once. We surface enough diagnostics — HTTP status,
+ * content-type, first non-printable-stripped 1000 chars — to debug a
+ * response that isn't actually a ZIP (Adobe sometimes hands back a
+ * presigned-S3 XML error or a JSON error blob when the result URL is
+ * stale or the job result is missing). No tokens, no secrets, and no
+ * user document text leave this function.
+ */
+async function downloadExtractResult(
+  downloadUri: string
+): Promise<DownloadExtractResult> {
+  let response: Response;
+  try {
+    response = await fetch(downloadUri, { method: "GET", cache: "no-store" });
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? `Adobe result download network error: ${error.message.slice(0, 180)}`
+          : "Adobe result download network error.",
+    };
   }
+
+  const status = response.status;
+  const contentType = response.headers.get("content-type");
+  const contentLengthHeader = response.headers.get("content-length");
+  const contentLength = contentLengthHeader
+    ? Number.parseInt(contentLengthHeader, 10)
+    : null;
+
   const ab = await response.arrayBuffer();
-  return Buffer.from(ab);
+  const buffer = Buffer.from(ab);
+
+  if (status < 200 || status >= 300) {
+    return {
+      ok: false,
+      message: `Adobe result download failed. Status: ${status}. Content-Type: ${
+        contentType ?? "unknown"
+      }. Preview: ${previewBytes(buffer)}`,
+    };
+  }
+
+  if (!looksLikeZip(buffer)) {
+    return {
+      ok: false,
+      message: `Adobe result was not a ZIP. Status: ${status}. Content-Type: ${
+        contentType ?? "unknown"
+      }. Preview: ${previewBytes(buffer)}`,
+    };
+  }
+
+  return {
+    ok: true,
+    buffer,
+    contentType,
+    contentLength: Number.isFinite(contentLength)
+      ? (contentLength as number)
+      : null,
+    status,
+  };
+}
+
+/**
+ * ZIP magic bytes:
+ *   - 0x50 0x4B 0x03 0x04 — local file header (regular ZIP)
+ *   - 0x50 0x4B 0x05 0x06 — empty-archive EOCD
+ *   - 0x50 0x4B 0x07 0x08 — data descriptor / spanned-archive marker
+ */
+function looksLikeZip(buf: Buffer): boolean {
+  if (buf.length < 4) return false;
+  if (buf[0] !== 0x50 || buf[1] !== 0x4b) return false;
+  const b2 = buf[2];
+  const b3 = buf[3];
+  return (
+    (b2 === 0x03 && b3 === 0x04) ||
+    (b2 === 0x05 && b3 === 0x06) ||
+    (b2 === 0x07 && b3 === 0x08)
+  );
+}
+
+/**
+ * Decode at most the first 1000 bytes as UTF-8, strip control
+ * characters (keep tab/newline as space), collapse whitespace, and cap
+ * the result. Designed for inclusion in user-facing error messages —
+ * the response body might be an XML/JSON/HTML error from S3 or Adobe,
+ * which is safe to surface; user document text never lands here
+ * because this is the download response, not the PDF upload payload.
+ */
+function previewBytes(buf: Buffer): string {
+  if (buf.length === 0) return "(empty body)";
+  const slice = buf.subarray(0, Math.min(buf.length, 1000));
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: false }).decode(slice);
+  } catch {
+    return "(unreadable bytes)";
+  }
+  // Strip control chars except tab/newline/CR; replace those with space.
+  // eslint-disable-next-line no-control-regex
+  const stripped = text.replace(/[ -]/g, " ").replace(/\s+/g, " ").trim();
+  const MAX = 400;
+  if (stripped.length === 0) return "(non-text bytes)";
+  return stripped.length > MAX ? `${stripped.slice(0, MAX)}…` : stripped;
+}
+
+function sanitizeAdobeErrorMessage(message: string): string {
+  // Adobe error messages are usually short; clip defensively to keep
+  // them out of any future log indexing limits and to drop control
+  // characters that could break terminal output.
+  // eslint-disable-next-line no-control-regex
+  const stripped = message.replace(/[ -]/g, " ").trim();
+  const MAX = 280;
+  return stripped.length > MAX ? `${stripped.slice(0, MAX)}…` : stripped;
 }
 
 // =============================================================
@@ -354,9 +476,11 @@ export async function extractTextFromPdf(
     const job = await pollExtractJob(token, statusUrl);
 
     if (job.status === "failed") {
+      const raw =
+        job.error?.message ?? job.error?.code ?? "unknown error";
       return {
         ok: false,
-        message: `Adobe extract failed: ${job.error?.message ?? job.error?.code ?? "unknown error"}`,
+        message: `Adobe extract failed: ${sanitizeAdobeErrorMessage(raw)}`,
       };
     }
     if (!job.content?.downloadUri) {
@@ -366,12 +490,17 @@ export async function extractTextFromPdf(
       };
     }
 
-    const zip = await downloadExtractZip(job.content.downloadUri);
-    const entries = listZipEntries(zip);
+    const download = await downloadExtractResult(job.content.downloadUri);
+    if (!download.ok) {
+      return { ok: false, message: download.message };
+    }
+    const entries = listZipEntries(download.buffer);
     if (!entries) {
       return {
         ok: false,
-        message: "Adobe extract ZIP could not be parsed (no central directory).",
+        message: `Adobe extract ZIP could not be parsed (no central directory). Content-Type: ${
+          download.contentType ?? "unknown"
+        }. Preview: ${previewBytes(download.buffer)}`,
       };
     }
     const target = findStructuredDataEntry(entries);
@@ -383,7 +512,7 @@ export async function extractTextFromPdf(
         )}`,
       };
     }
-    const structuredBuffer = readZipEntry(zip, target);
+    const structuredBuffer = readZipEntry(download.buffer, target);
     if (!structuredBuffer) {
       return {
         ok: false,
