@@ -901,6 +901,11 @@ export type DriveDocumentSummary = {
   extractedText: string | null;
   extractedAt: Date | null;
   extractionError: string | null;
+  aiReviewStatus: string | null;
+  aiReviewJson: unknown | null;
+  aiReviewProvider: string | null;
+  aiReviewedAt: Date | null;
+  aiReviewError: string | null;
 };
 
 /**
@@ -929,6 +934,11 @@ export async function listDriveDocuments(): Promise<DriveDocumentSummary[]> {
       extractedText: r.extractedText,
       extractedAt: r.extractedAt,
       extractionError: r.extractionError,
+      aiReviewStatus: r.aiReviewStatus,
+      aiReviewJson: r.aiReviewJson ?? null,
+      aiReviewProvider: r.aiReviewProvider,
+      aiReviewedAt: r.aiReviewedAt,
+      aiReviewError: r.aiReviewError,
     }));
   } catch {
     return [];

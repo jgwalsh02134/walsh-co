@@ -13,6 +13,12 @@
 import { revalidatePath } from "next/cache";
 import { extractTextFromPdf, hasAdobePdfServices } from "@/lib/adobe-pdf";
 import {
+  defaultAiReviewProvider,
+  isAiReviewProviderConfigured,
+  reviewExtractedText,
+  type AiReviewProvider,
+} from "@/lib/ai-document-review";
+import {
   createDriveWorkspaceFolders,
   downloadDriveFileBytes,
   uploadWorkspaceDocument,
@@ -276,5 +282,145 @@ export async function extractDrivePdfFactsAction(
     extractedAt: extractedAt.toISOString(),
     previewText: extract.previewText,
     previewTruncated: extract.previewText.includes("(truncated"),
+  };
+}
+
+// =============================================================
+// AI document review action
+// =============================================================
+
+const ALLOWED_REVIEW_PROVIDERS: AiReviewProvider[] = ["openai", "xai"];
+
+export type ReviewExtractedDocumentResult =
+  | {
+      ok: true;
+      documentId: string;
+      provider: AiReviewProvider;
+      reviewedAt: string;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+export type ReviewExtractedDocumentState =
+  | ReviewExtractedDocumentResult
+  | null;
+
+/**
+ * User-triggered AI review of a document's Adobe-extracted text. Only
+ * runs when extraction has produced text (`extractionStatus ===
+ * "draft_ready"` AND `extractedText` non-empty).
+ *
+ * The review is structured JSON (see AiDocumentReview); it is persisted
+ * to DriveDocument.aiReviewJson. Nothing else is written — no Task or
+ * BudgetCategory row is created from suggestedTasks or
+ * budgetImplications. Those are recommendations only.
+ *
+ * Tokens for the AI provider are read from env vars on the server. The
+ * action returns only metadata (provider name, timestamp) — never an
+ * API key or raw token.
+ */
+export async function reviewExtractedDocumentWithAiAction(
+  _prev: ReviewExtractedDocumentState,
+  formData: FormData
+): Promise<ReviewExtractedDocumentResult> {
+  const documentIdRaw = formData.get("documentId");
+  const providerRaw = formData.get("provider");
+
+  if (typeof documentIdRaw !== "string" || documentIdRaw.trim().length === 0) {
+    return { ok: false, message: "Missing document id." };
+  }
+  const documentId = documentIdRaw.trim();
+
+  const requestedProvider =
+    typeof providerRaw === "string" &&
+    (ALLOWED_REVIEW_PROVIDERS as readonly string[]).includes(providerRaw)
+      ? (providerRaw as AiReviewProvider)
+      : null;
+  const provider = requestedProvider ?? defaultAiReviewProvider();
+  if (!provider) {
+    return {
+      ok: false,
+      message:
+        "No AI provider is configured. Set OPENAI_API_KEY (preferred) or XAI_API_KEY on the server.",
+    };
+  }
+  if (!isAiReviewProviderConfigured(provider)) {
+    return {
+      ok: false,
+      message: `Selected AI provider "${provider}" is not configured.`,
+    };
+  }
+
+  const doc = await prisma.driveDocument.findUnique({
+    where: { id: documentId },
+  });
+  if (!doc) return { ok: false, message: "Document not found." };
+  if (doc.extractionStatus !== "draft_ready") {
+    return {
+      ok: false,
+      message: "Run Adobe PDF extraction first — no extracted text available.",
+    };
+  }
+  const extractedText = doc.extractedText?.trim() ?? "";
+  if (extractedText.length === 0) {
+    return {
+      ok: false,
+      message: "Document has no extracted text to review.",
+    };
+  }
+
+  const linkedAddress = doc.linkedPropertySlug
+    ? trackedProperties.find((p) => p.slug === doc.linkedPropertySlug)
+        ?.address ?? null
+    : null;
+
+  // Mark in-flight so a refresh during the request shows the spinner
+  // state honestly. Clearing prior error now so a successful run cleans
+  // the slate.
+  await prisma.driveDocument.update({
+    where: { id: documentId },
+    data: { aiReviewStatus: "reviewing", aiReviewError: null },
+  });
+
+  const result = await reviewExtractedText({
+    documentName: doc.name,
+    category: doc.category,
+    linkedPropertyAddress: linkedAddress,
+    extractedText,
+    provider,
+  });
+
+  if (!result.ok) {
+    await prisma.driveDocument.update({
+      where: { id: documentId },
+      data: {
+        aiReviewStatus: "failed",
+        aiReviewError: result.message,
+      },
+    });
+    revalidatePath("/documents");
+    return { ok: false, message: result.message };
+  }
+
+  const reviewedAt = new Date();
+  await prisma.driveDocument.update({
+    where: { id: documentId },
+    data: {
+      aiReviewStatus: "draft_ready",
+      aiReviewJson: result.review as unknown as object,
+      aiReviewProvider: result.provider,
+      aiReviewedAt: reviewedAt,
+      aiReviewError: null,
+    },
+  });
+  revalidatePath("/documents");
+
+  return {
+    ok: true,
+    documentId,
+    provider: result.provider,
+    reviewedAt: reviewedAt.toISOString(),
   };
 }

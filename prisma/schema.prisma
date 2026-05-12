@@ -214,6 +214,21 @@ model DriveDocument {
   /// Cleared on the next successful run.
   extractionError     String?
 
+  /// "not_reviewed" | "reviewing" | "draft_ready" | "failed" — drives
+  /// the per-row AI review button UI. Null means "not_reviewed".
+  aiReviewStatus      String?
+  /// Structured review object (documentType, summary, parties, dates,
+  /// risks, suggestedTasks, …). Shape is validated in app code so we
+  /// don't lock the schema to a particular field set.
+  aiReviewJson        Json?
+  /// Provider used for the most recent successful review.
+  /// "openai" | "xai" — string for forward compatibility.
+  aiReviewProvider    String?
+  /// Timestamp of the most recent successful review.
+  aiReviewedAt        DateTime?
+  /// Sanitized error string from the most recent failed review.
+  aiReviewError       String?
+
   @@index([linkedPropertySlug])
   @@index([category])
   @@index([uploadedAt])

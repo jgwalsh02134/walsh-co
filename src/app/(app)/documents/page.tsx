@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AiDocumentReviewButton } from "@/components/ai-document-review-button";
 import { GoogleDriveSetupButton } from "@/components/google-drive-setup-button";
 import { PageHeader } from "@/components/page-header";
 import { PdfExtractButton } from "@/components/pdf-extract-button";
@@ -6,6 +7,7 @@ import { SectionPanel } from "@/components/section-panel";
 import { ToneTag } from "@/components/tone-tag";
 import { UploadDriveDocumentForm } from "@/components/upload-drive-document-form";
 import { hasAdobePdfServices } from "@/lib/adobe-pdf";
+import { defaultAiReviewProvider } from "@/lib/ai-document-review";
 import {
   getDriveStatus,
   getStoredWorkspaceFoldersForUi,
@@ -127,6 +129,12 @@ export default async function DocumentsPage({
     ? "Reconnect Google with Drive scope to enable extraction."
     : "Adobe PDF Services not configured.";
 
+  const aiProvider = defaultAiReviewProvider();
+  const reviewReady = aiProvider !== null;
+  const reviewDisabledReason = reviewReady
+    ? ""
+    : "Set OPENAI_API_KEY (preferred) or XAI_API_KEY on the server to enable AI review.";
+
   const counts = {
     total: documents.length,
     needsReview: documents.filter((d) => d.verified === "needs_verification")
@@ -172,6 +180,8 @@ export default async function DocumentsPage({
         uploadDisabledReason={uploadDisabledReason}
         extractionReady={extractionReady}
         extractionDisabledReason={extractionDisabledReason}
+        reviewReady={reviewReady}
+        reviewDisabledReason={reviewDisabledReason}
       />
 
       <SectionPanel
@@ -399,6 +409,59 @@ const EXTRACTION_LABEL_BY_KEY: Record<string, string> = {
   failed: "Extraction failed",
 };
 
+const AI_REVIEW_TONE: Record<string, StatusTone> = {
+  not_reviewed: "neutral",
+  reviewing: "review",
+  draft_ready: "info",
+  failed: "warning",
+};
+
+const AI_REVIEW_LABEL_BY_KEY: Record<string, string> = {
+  not_reviewed: "AI: not reviewed",
+  reviewing: "AI: reviewing…",
+  draft_ready: "AI: draft review",
+  failed: "AI review failed",
+};
+
+type RenderableAiReview = {
+  documentType: string | null;
+  summary: string | null;
+  propertyReferences: string[];
+  vendorsOrParties: string[];
+  dates: string[];
+  dollarAmounts: string[];
+  risks: string[];
+  missingInformation: string[];
+  suggestedTasks: string[];
+  budgetImplications: string[];
+  contractorQuestions: string[];
+};
+
+function normalizeAiReview(value: unknown): RenderableAiReview | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const arr = (x: unknown): string[] =>
+    Array.isArray(x)
+      ? x.filter((it): it is string => typeof it === "string" && it.length > 0)
+      : [];
+  const nstr = (x: unknown): string | null =>
+    typeof x === "string" && x.trim().length > 0 ? x : null;
+  const review: RenderableAiReview = {
+    documentType: nstr(v.documentType),
+    summary: nstr(v.summary),
+    propertyReferences: arr(v.propertyReferences),
+    vendorsOrParties: arr(v.vendorsOrParties),
+    dates: arr(v.dates),
+    dollarAmounts: arr(v.dollarAmounts),
+    risks: arr(v.risks),
+    missingInformation: arr(v.missingInformation),
+    suggestedTasks: arr(v.suggestedTasks),
+    budgetImplications: arr(v.budgetImplications),
+    contractorQuestions: arr(v.contractorQuestions),
+  };
+  return review;
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -428,12 +491,16 @@ function DriveDocumentsPanel({
   uploadDisabledReason,
   extractionReady,
   extractionDisabledReason,
+  reviewReady,
+  reviewDisabledReason,
 }: {
   documents: DriveDocumentSummary[];
   uploadReady: boolean;
   uploadDisabledReason: string;
   extractionReady: boolean;
   extractionDisabledReason: string;
+  reviewReady: boolean;
+  reviewDisabledReason: string;
 }) {
   const propertyOptions = trackedProperties.map((p) => ({
     slug: p.slug,
@@ -469,6 +536,8 @@ function DriveDocumentsPanel({
                 doc={d}
                 extractionReady={extractionReady}
                 extractionDisabledReason={extractionDisabledReason}
+                reviewReady={reviewReady}
+                reviewDisabledReason={reviewDisabledReason}
               />
             ))}
           </ul>
@@ -482,10 +551,14 @@ function DriveDocumentRow({
   doc,
   extractionReady,
   extractionDisabledReason,
+  reviewReady,
+  reviewDisabledReason,
 }: {
   doc: DriveDocumentSummary;
   extractionReady: boolean;
   extractionDisabledReason: string;
+  reviewReady: boolean;
+  reviewDisabledReason: string;
 }) {
   const property = doc.linkedPropertySlug
     ? trackedProperties.find((p) => p.slug === doc.linkedPropertySlug) ?? null
@@ -497,8 +570,19 @@ function DriveDocumentRow({
   const extractionLabel =
     EXTRACTION_LABEL_BY_KEY[doc.extractionStatus] ?? doc.extractionStatus;
   const isPdf = doc.mimeType === "application/pdf";
-  const hasDraft =
+  const hasExtractDraft =
     doc.extractionStatus === "draft_ready" || Boolean(doc.extractedText);
+  const aiReviewStatus = doc.aiReviewStatus ?? "not_reviewed";
+  const aiReview = normalizeAiReview(doc.aiReviewJson);
+  const extractionDraftAvailable =
+    doc.extractionStatus === "draft_ready" &&
+    typeof doc.extractedText === "string" &&
+    doc.extractedText.trim().length > 0;
+  const aiReviewDisabledReason = !reviewReady
+    ? reviewDisabledReason
+    : !extractionDraftAvailable
+    ? "Run Adobe PDF extraction first."
+    : "";
 
   return (
     <li className="flex flex-col gap-3 py-3">
@@ -528,7 +612,15 @@ function DriveDocumentRow({
           </div>
         </div>
         <div className="flex flex-col items-start gap-1.5 sm:items-end">
-          <ToneTag label={extractionLabel} tone={extractionTone} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ToneTag label={extractionLabel} tone={extractionTone} />
+            <ToneTag
+              label={
+                AI_REVIEW_LABEL_BY_KEY[aiReviewStatus] ?? aiReviewStatus
+              }
+              tone={AI_REVIEW_TONE[aiReviewStatus] ?? "neutral"}
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {isPdf ? (
               <PdfExtractButton
@@ -546,6 +638,13 @@ function DriveDocumentRow({
                 PDF extraction unavailable
               </span>
             )}
+            <AiDocumentReviewButton
+              documentId={doc.id}
+              extractionReady={extractionDraftAvailable}
+              reviewReady={reviewReady}
+              disabledReason={aiReviewDisabledReason}
+              alreadyReviewed={Boolean(doc.aiReviewedAt)}
+            />
             <a
               href={doc.driveWebUrl}
               target="_blank"
@@ -571,9 +670,121 @@ function DriveDocumentRow({
           Extraction failed: {doc.extractionError}
         </div>
       ) : null}
+      {doc.aiReviewError ? (
+        <div className="rounded-[var(--radius-md)] border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2 text-[12px] text-[var(--status-warning-text)]">
+          AI review failed: {doc.aiReviewError}
+        </div>
+      ) : null}
 
-      {hasDraft ? <ExtractedFactsPanel doc={doc} /> : null}
+      {aiReview ? (
+        <AiReviewPanel
+          review={aiReview}
+          provider={doc.aiReviewProvider}
+          reviewedAt={doc.aiReviewedAt}
+          extractedText={doc.extractedText}
+        />
+      ) : hasExtractDraft ? (
+        <ExtractedFactsPanel doc={doc} />
+      ) : null}
     </li>
+  );
+}
+
+/**
+ * Render the persisted AI review JSON as readable cards. Suggested
+ * tasks and budget implications are explicitly labeled as draft
+ * recommendations — nothing is auto-written to the Task or
+ * BudgetCategory tables.
+ */
+function AiReviewPanel({
+  review,
+  provider,
+  reviewedAt,
+  extractedText,
+}: {
+  review: RenderableAiReview;
+  provider: string | null;
+  reviewedAt: Date | null;
+  extractedText: string | null;
+}) {
+  const cards: { label: string; values: string[]; emptyHint?: string }[] = [
+    { label: "Document type", values: review.documentType ? [review.documentType] : [], emptyHint: "Not stated." },
+    { label: "Property references", values: review.propertyReferences, emptyHint: "None found." },
+    { label: "Vendors / parties", values: review.vendorsOrParties, emptyHint: "None found." },
+    { label: "Dates", values: review.dates, emptyHint: "None found." },
+    { label: "Dollar amounts", values: review.dollarAmounts, emptyHint: "None found." },
+    { label: "Risks", values: review.risks, emptyHint: "None flagged." },
+    { label: "Missing information", values: review.missingInformation, emptyHint: "Nothing called out." },
+    { label: "Suggested tasks (draft)", values: review.suggestedTasks, emptyHint: "None suggested." },
+    { label: "Budget implications (draft)", values: review.budgetImplications, emptyHint: "None suggested." },
+    { label: "Contractor questions (draft)", values: review.contractorQuestions, emptyHint: "None suggested." },
+  ];
+
+  const previewText = (extractedText ?? "").trim();
+
+  return (
+    <section className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-3 shadow-[var(--shadow-card-ring)]">
+      <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-[12.5px] font-semibold text-[var(--workspace-text)]">
+          AI draft review
+        </span>
+        <span className="text-[11px] text-[var(--workspace-text-muted)]">
+          {provider ? `Provider: ${provider}` : null}
+          {provider && reviewedAt ? " · " : null}
+          {reviewedAt ? `Reviewed ${formatUploadedAt(reviewedAt)}` : null}
+        </span>
+      </header>
+
+      {review.summary ? (
+        <p className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+          <span className="font-semibold text-[var(--workspace-text)]">
+            Summary:
+          </span>{" "}
+          {review.summary}
+        </p>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {cards.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2"
+          >
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              {c.label}
+            </div>
+            {c.values.length === 0 ? (
+              <div className="mt-1 text-[12px] italic text-[var(--workspace-text-muted)]">
+                {c.emptyHint ?? "Nothing reported."}
+              </div>
+            ) : (
+              <ul className="mt-1 flex flex-col gap-0.5 text-[12px] text-[var(--workspace-text-secondary)]">
+                {c.values.map((v, i) => (
+                  <li key={`${c.label}-${i}`}>• {v}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 text-[11px] text-[var(--workspace-text-muted)]">
+        AI review is a draft aid. Verify against the original document before
+        relying. Suggested tasks and budget implications are recommendations
+        only — nothing is written to the workspace until you create it.
+      </p>
+
+      {previewText.length > 0 ? (
+        <details className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5">
+          <summary className="cursor-pointer text-[12px] font-semibold text-[var(--workspace-text)]">
+            Adobe extracted text preview
+          </summary>
+          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+            {previewText}
+          </pre>
+        </details>
+      ) : null}
+    </section>
   );
 }
 
