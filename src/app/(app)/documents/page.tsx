@@ -4,10 +4,18 @@ import { GoogleDriveSetupButton } from "@/components/google-drive-setup-button";
 import { PageHeader } from "@/components/page-header";
 import { PdfExtractButton } from "@/components/pdf-extract-button";
 import { SectionPanel } from "@/components/section-panel";
+import {
+  TaskProposalsPanel,
+  type TaskProposal,
+} from "@/components/task-proposals-panel";
 import { ToneTag } from "@/components/tone-tag";
 import { UploadDriveDocumentForm } from "@/components/upload-drive-document-form";
 import { hasAdobePdfServices } from "@/lib/adobe-pdf";
 import { defaultAiReviewProvider } from "@/lib/ai-document-review";
+import {
+  isGmailDraftsEnabled,
+  isGoogleConnected,
+} from "@/lib/google-gmail";
 import {
   getDriveStatus,
   getStoredWorkspaceFoldersForUi,
@@ -135,6 +143,9 @@ export default async function DocumentsPage({
     ? ""
     : "Set OPENAI_API_KEY (preferred) or XAI_API_KEY on the server to enable AI review.";
 
+  const gmailEnabled = isGmailDraftsEnabled();
+  const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
+
   const counts = {
     total: documents.length,
     needsReview: documents.filter((d) => d.verified === "needs_verification")
@@ -182,6 +193,7 @@ export default async function DocumentsPage({
         extractionDisabledReason={extractionDisabledReason}
         reviewReady={reviewReady}
         reviewDisabledReason={reviewDisabledReason}
+        gmail={{ enabled: gmailEnabled, connected: gmailConnected }}
       />
 
       <SectionPanel
@@ -493,6 +505,7 @@ function DriveDocumentsPanel({
   extractionDisabledReason,
   reviewReady,
   reviewDisabledReason,
+  gmail,
 }: {
   documents: DriveDocumentSummary[];
   uploadReady: boolean;
@@ -501,6 +514,7 @@ function DriveDocumentsPanel({
   extractionDisabledReason: string;
   reviewReady: boolean;
   reviewDisabledReason: string;
+  gmail: { enabled: boolean; connected: boolean };
 }) {
   const propertyOptions = trackedProperties.map((p) => ({
     slug: p.slug,
@@ -538,6 +552,7 @@ function DriveDocumentsPanel({
                 extractionDisabledReason={extractionDisabledReason}
                 reviewReady={reviewReady}
                 reviewDisabledReason={reviewDisabledReason}
+                gmail={gmail}
               />
             ))}
           </ul>
@@ -553,12 +568,14 @@ function DriveDocumentRow({
   extractionDisabledReason,
   reviewReady,
   reviewDisabledReason,
+  gmail,
 }: {
   doc: DriveDocumentSummary;
   extractionReady: boolean;
   extractionDisabledReason: string;
   reviewReady: boolean;
   reviewDisabledReason: string;
+  gmail: { enabled: boolean; connected: boolean };
 }) {
   const property = doc.linkedPropertySlug
     ? trackedProperties.find((p) => p.slug === doc.linkedPropertySlug) ?? null
@@ -682,12 +699,57 @@ function DriveDocumentRow({
           provider={doc.aiReviewProvider}
           reviewedAt={doc.aiReviewedAt}
           extractedText={doc.extractedText}
+          proposals={buildTaskProposals(doc, aiReview)}
+          gmail={gmail}
         />
       ) : hasExtractDraft ? (
         <ExtractedFactsPanel doc={doc} />
       ) : null}
     </li>
   );
+}
+
+const HIGH_PRIORITY_KEYWORDS = [
+  "urgent",
+  "asap",
+  "immediately",
+  "deadline",
+  "expir",
+  "overdue",
+  "due now",
+  "critical",
+];
+
+function inferPriority(text: string): "high" | "medium" | "low" {
+  const lower = text.toLowerCase();
+  for (const k of HIGH_PRIORITY_KEYWORDS) {
+    if (lower.includes(k)) return "high";
+  }
+  return "medium";
+}
+
+function buildTaskProposals(
+  doc: DriveDocumentSummary,
+  review: RenderableAiReview
+): TaskProposal[] {
+  if (review.suggestedTasks.length === 0) return [];
+  const property = doc.linkedPropertySlug
+    ? trackedProperties.find((p) => p.slug === doc.linkedPropertySlug) ?? null
+    : null;
+  const categoryLabel =
+    UPLOAD_CATEGORY_OPTIONS.find((c) => c.value === doc.category)?.label ??
+    doc.category;
+
+  return review.suggestedTasks.map((title, index) => ({
+    id: `${doc.id}-${index}`,
+    title,
+    propertyContext: property?.address ?? null,
+    prioritySuggestion: inferPriority(title),
+    categoryHint: categoryLabel,
+    sourceDocumentName: doc.name,
+    sourceDocumentUrl: doc.driveWebUrl,
+    reason: `Drafted from AI review of ${doc.name}.`,
+  }));
 }
 
 /**
@@ -701,11 +763,15 @@ function AiReviewPanel({
   provider,
   reviewedAt,
   extractedText,
+  proposals,
+  gmail,
 }: {
   review: RenderableAiReview;
   provider: string | null;
   reviewedAt: Date | null;
   extractedText: string | null;
+  proposals: TaskProposal[];
+  gmail: { enabled: boolean; connected: boolean };
 }) {
   const cards: { label: string; values: string[]; emptyHint?: string }[] = [
     { label: "Document type", values: review.documentType ? [review.documentType] : [], emptyHint: "Not stated." },
@@ -767,6 +833,12 @@ function AiReviewPanel({
           </div>
         ))}
       </div>
+
+      {proposals.length > 0 ? (
+        <div className="mt-3">
+          <TaskProposalsPanel proposals={proposals} gmail={gmail} />
+        </div>
+      ) : null}
 
       <p className="mt-3 text-[11px] text-[var(--workspace-text-muted)]">
         AI review is a draft aid. Verify against the original document before
