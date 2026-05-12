@@ -188,20 +188,66 @@ export async function ContactDetail({ contact }: { contact: Contact }) {
       </div>
 
       {emailLabel ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--workspace-text-secondary)]">
-          <GmailDraftButton
-            enabled={gmailEnabled}
-            connected={gmailConnected}
-            to={contact.email ?? null}
-            subject={`Note for ${formatContactName(contact) || contact.displayName}`}
-            body={`Hi ${formatContactName(contact) || contact.displayName},\n\n`}
-            context={{
-              kind: "contact",
-              label: formatContactName(contact) || contact.displayName,
-            }}
-            returnTo={`/contacts?id=${contact.id}`}
-          />
-        </div>
+        (() => {
+          const name = formatContactName(contact) || contact.displayName;
+          const orgLine = [contact.company, contact.role]
+            .filter(Boolean)
+            .join(", ");
+          const hasContext = Boolean(
+            contact.company ||
+              contact.role ||
+              contact.relatedProperty ||
+              contact.relatedProject
+          );
+          const subject = hasContext
+            ? `Note for ${name}${contact.company ? ` · ${contact.company}` : ""}`
+            : `Note for ${name}`;
+          const body = [
+            `Hi ${name},`,
+            "",
+            orgLine ? `Quick note from Walsh Co. re: ${orgLine}.` : "Quick note from Walsh Co.",
+            contact.relatedProperty
+              ? `Property context: ${contact.relatedProperty}.`
+              : "",
+            contact.relatedProject
+              ? `Project context: ${contact.relatedProject}.`
+              : "",
+            "",
+            "Wanted to check in on the items below — let me know what makes sense on your end:",
+            "  • ",
+            "",
+            "Thanks,",
+          ]
+            .filter((line, idx, all) => {
+              // Collapse adjacent blank lines so the body stays tight when
+              // optional context lines are absent.
+              if (line !== "") return true;
+              const prev = all[idx - 1];
+              return prev !== "";
+            })
+            .join("\n");
+          return (
+            <div className="flex flex-col gap-1 text-xs text-[var(--workspace-text-secondary)]">
+              <div className="flex flex-wrap items-center gap-2">
+                <GmailDraftButton
+                  enabled={gmailEnabled}
+                  connected={gmailConnected}
+                  to={contact.email ?? null}
+                  subject={subject}
+                  body={body}
+                  context={{ kind: "contact", label: name }}
+                  returnTo={`/contacts?id=${contact.id}`}
+                  label="Draft general email"
+                />
+              </div>
+              {!hasContext ? (
+                <p className="text-[11px] text-[var(--color-text-muted)]">
+                  Add a related property, task, or bid for a better draft.
+                </p>
+              ) : null}
+            </div>
+          );
+        })()
       ) : null}
 
       <section className="flex flex-col">

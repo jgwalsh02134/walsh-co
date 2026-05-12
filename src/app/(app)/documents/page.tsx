@@ -273,8 +273,38 @@ function DocumentRow({ doc }: { doc: DocumentRecord }) {
       <div className="flex flex-col items-start gap-1.5 sm:items-end">
         {verified ? <ToneTag label={verified.label} tone={verified.tone} /> : null}
         <ToneTag label={extraction.label} tone={extraction.tone} />
+        <DocumentGmailDraftPlaceholder />
       </div>
     </li>
+  );
+}
+
+/**
+ * Disabled Gmail draft affordance for a document row. Documents have no
+ * linked contact/email field in the data model yet, so the pill always
+ * renders disabled with a hint explaining what would unlock it. Per the
+ * scope of this pass we are not implementing upload/storage or per-doc
+ * contact linking — just exposing the future surface so it is
+ * discoverable in the UI.
+ */
+function DocumentGmailDraftPlaceholder() {
+  return (
+    <span
+      aria-disabled
+      title="Link a contact or email to this document to enable a Gmail draft."
+      className="inline-flex min-h-[28px] cursor-not-allowed items-center gap-1.5 rounded-full border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text-muted)]"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/icons/workspace/gmail-icon.svg"
+        alt=""
+        aria-hidden
+        width={14}
+        height={14}
+        className="inline-block shrink-0"
+      />
+      Draft email about this document
+    </span>
   );
 }
 

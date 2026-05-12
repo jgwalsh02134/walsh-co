@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { DraftEmailButton } from "@/components/draft-email-button";
 import { GmailDraftButton } from "@/components/gmail-draft-button";
 import { MetricTile } from "@/components/metric-tile";
 import { PageHeader } from "@/components/page-header";
@@ -10,9 +9,9 @@ import {
   isGoogleConnected,
 } from "@/lib/google-gmail";
 import { trackedProperties } from "@/lib/market-data";
-import { hasGraphToken } from "@/lib/microsoft-graph";
 import {
   bids,
+  contractors,
   documents,
   type Bid,
   type BidLifecycleStatus,
@@ -372,7 +371,9 @@ function BidRow({
   const showClarificationDraft = lifecycleId === "needs_clarification";
   const showGmailDraft =
     lifecycleId !== "draft" && lifecycleId !== "archived";
-  const graphAvailable = hasGraphToken();
+  const contractorRecord = contractors.find((c) => c.id === bid.contractorId);
+  const contractorEmail = contractorRecord?.email ?? null;
+  const formattedAmount = bid.amount > 0 ? formatCurrency(bid.amount) : null;
 
   return (
     <li className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)]">
@@ -444,63 +445,77 @@ function BidRow({
             </p>
           ) : null}
 
-          {showGmailDraft || showClarificationDraft
+          {showGmailDraft
             ? (() => {
+                const propertyName = property?.address ?? null;
+                const subjectBase = `${bid.contractor} — ${tradeLabel}${
+                  propertyName ? ` (${propertyName})` : ""
+                }`;
                 const subject = showClarificationDraft
-                  ? `Bid clarification: ${bid.contractor} — ${tradeLabel}${
-                      property ? ` (${property.address})` : ""
-                    }`
-                  : `${bid.contractor} — ${tradeLabel}${
-                      property ? ` (${property.address})` : ""
-                    }`;
-                const body = [
-                  `Hi ${bid.contractor},`,
+                  ? `Bid clarification: ${subjectBase}`
+                  : `Bid follow-up: ${subjectBase}`;
+
+                // 4–6 clarification questions, trimmed and renumbered so the
+                // list stays useful even when scope notes are absent.
+                const clarificationQuestions = [
+                  "Can you confirm the full scope covered by your proposal — including any work assumed but not itemized?",
+                  "Which items are explicitly excluded from your bid (permits, dump fees, decking, allowances, etc.)?",
+                  bid.nextAction
+                    ? `Can you address the open item we flagged: "${bid.nextAction}"?`
+                    : "Are there any scope gaps you noticed when comparing against the bid request?",
+                  "What is your expected start window and projected duration on site?",
+                  "Is your insurance (GL + workers comp) current through the project window, and can you share a COI?",
+                  formattedAmount
+                    ? `Is the quoted total of ${formattedAmount} firm, and are there any unit-price line items subject to change?`
+                    : "Is the quoted total firm, and are there any unit-price line items subject to change?",
+                ];
+
+                const lines: string[] = [
+                  `Hi ${contractorRecord?.contact || bid.contractor},`,
                   "",
-                  `Following up on your ${tradeLabel.toLowerCase()} proposal${
-                    bid.dateReceived ? ` received ${bid.dateReceived}` : ""
-                  }${property ? ` for ${property.address}` : ""}.`,
-                  "",
+                ];
+                lines.push(
                   showClarificationDraft
-                    ? bid.nextAction
-                      ? `Open question: ${bid.nextAction}`
-                      : "We have a few clarifying questions before we can finalize a decision."
-                    : bid.nextAction
-                    ? `Note: ${bid.nextAction}`
-                    : "",
-                  "",
-                  showClarificationDraft
-                    ? "Could you confirm scope, exclusions, and any line items not yet itemized? We want to compare bids on a like-for-like basis."
-                    : "",
-                  "",
-                  "Thanks,",
-                ]
-                  .filter((line) => line !== "")
-                  .join("\n");
+                    ? `Thanks again for the ${tradeLabel.toLowerCase()} proposal${
+                        bid.dateReceived ? ` received ${bid.dateReceived}` : ""
+                      }${propertyName ? ` for ${propertyName}` : ""}. Before we can finalize a decision we have a few clarifications.`
+                    : `Following up on your ${tradeLabel.toLowerCase()} proposal${
+                        bid.dateReceived ? ` received ${bid.dateReceived}` : ""
+                      }${propertyName ? ` for ${propertyName}` : ""}.`
+                );
+                lines.push("");
+                lines.push("Quick reference:");
+                if (propertyName) lines.push(`  • Property: ${propertyName}`);
+                lines.push(`  • Contractor: ${bid.contractor}`);
+                lines.push(`  • Trade: ${tradeLabel}`);
+                if (formattedAmount)
+                  lines.push(`  • Bid amount on file: ${formattedAmount}`);
+                if (bid.nextAction)
+                  lines.push(`  • Open item: ${bid.nextAction}`);
+                lines.push("");
+                lines.push("Clarification questions:");
+                clarificationQuestions.forEach((q, i) =>
+                  lines.push(`  ${i + 1}. ${q}`)
+                );
+                lines.push("");
+                lines.push(
+                  "Happy to jump on a quick call if it's easier than email. Thanks for the help getting this finalized."
+                );
+                lines.push("");
+                lines.push("Thanks,");
+                const body = lines.join("\n");
+
                 const label = showClarificationDraft
                   ? "Draft clarification email"
                   : "Draft email";
+
                 return (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {showClarificationDraft ? (
-                      <DraftEmailButton
-                        graphAvailable={graphAvailable}
-                        to={null}
-                        subject={subject}
-                        body={body}
-                        context={{
-                          kind: "bid",
-                          label: `${bid.contractor} — ${tradeLabel}`,
-                          propertyAddress: property?.address ?? null,
-                        }}
-                        compact
-                        label={label}
-                      />
-                    ) : null}
-                    {showGmailDraft ? (
+                  <div className="mt-2 flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <GmailDraftButton
                         enabled={gmailEnabled}
                         connected={gmailConnected}
-                        to={null}
+                        to={contractorEmail}
                         subject={subject}
                         body={body}
                         context={{
@@ -511,6 +526,11 @@ function BidRow({
                         label={label}
                         returnTo="/bids"
                       />
+                    </div>
+                    {!contractorEmail ? (
+                      <p className="text-[11px] text-[var(--workspace-text-muted)]">
+                        Add contractor email to create Gmail draft.
+                      </p>
                     ) : null}
                   </div>
                 );

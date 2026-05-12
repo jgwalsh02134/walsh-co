@@ -1,4 +1,3 @@
-import { DraftEmailButton } from "@/components/draft-email-button";
 import { GmailDraftButton } from "@/components/gmail-draft-button";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
@@ -13,7 +12,6 @@ import {
   type Task,
   type TaskLane,
 } from "@/lib/mock-data";
-import { hasGraphToken } from "@/lib/microsoft-graph";
 import { priorityLabels, statusTokens } from "@/lib/status";
 
 const laneDescriptions: Record<TaskLane, string> = {
@@ -56,7 +54,6 @@ function TaskList({
       </p>
     );
   }
-  const graphAvailable = hasGraphToken();
   return (
     <ul className="divide-y divide-[var(--color-border)]">
       {items.map((t) => (
@@ -85,52 +82,49 @@ function TaskList({
             <p className="text-xs text-[var(--color-text-muted)]">{t.notes}</p>
           ) : null}
           {showFollowUpDraft && !isDone ? (
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <DraftEmailButton
-                graphAvailable={graphAvailable}
-                to={null}
-                subject={`Follow-up: ${t.title}`}
-                body={[
-                  `Hi,`,
-                  "",
-                  `Following up on "${t.title}" — context: ${t.context}.`,
-                  t.notes ? `\nDetails: ${t.notes}` : "",
-                  t.dueDate ? `\nTarget: ${t.dueDate}.` : "",
-                  "",
-                  "Could you share the latest status when you have a moment?",
-                  "",
-                  "Thanks,",
-                ]
-                  .filter((line) => line !== "")
-                  .join("\n")}
-                context={{ kind: "task", label: t.title }}
-                compact
-                label="Draft follow-up email"
-              />
-              <GmailDraftButton
-                enabled={gmailEnabled}
-                connected={gmailConnected}
-                to={null}
-                subject={`Follow-up: ${t.title}`}
-                body={[
-                  `Hi,`,
-                  "",
-                  `Following up on "${t.title}" — context: ${t.context}.`,
-                  t.notes ? `\nDetails: ${t.notes}` : "",
-                  t.dueDate ? `\nTarget: ${t.dueDate}.` : "",
-                  "",
-                  "Could you share the latest status when you have a moment?",
-                  "",
-                  "Thanks,",
-                ]
-                  .filter((line) => line !== "")
-                  .join("\n")}
-                context={{ kind: "task", label: t.title }}
-                compact
-                label="Draft follow-up email"
-                returnTo="/tasks"
-              />
-            </div>
+            (() => {
+              const statusLabel = `${taskLaneLabels[t.lane]} · ${priorityLabels[t.priority].label} priority`;
+              const lines: string[] = [
+                "Hi,",
+                "",
+                `Following up on the task "${t.title}".`,
+                "",
+                "Quick reference:",
+                `  • Task: ${t.title}`,
+                `  • Status: ${statusLabel}`,
+                `  • Context: ${t.context}`,
+                `  • Owner: ${t.owner}`,
+              ];
+              if (t.dueDate) lines.push(`  • Due: ${t.dueDate}`);
+              if (t.notes) lines.push(`  • Notes: ${t.notes}`);
+              lines.push("");
+              lines.push(
+                "Could you share the latest status and confirm next steps when you have a moment?"
+              );
+              lines.push("");
+              lines.push("Thanks,");
+              const body = lines.join("\n");
+              return (
+                <div className="mt-1 flex flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <GmailDraftButton
+                      enabled={gmailEnabled}
+                      connected={gmailConnected}
+                      to={null}
+                      subject={`Follow-up: ${t.title}`}
+                      body={body}
+                      context={{ kind: "task", label: t.title }}
+                      compact
+                      label="Draft follow-up email"
+                      returnTo="/tasks"
+                    />
+                  </div>
+                  <p className="text-[11px] text-[var(--color-text-muted)]">
+                    Add contact email to create follow-up draft.
+                  </p>
+                </div>
+              );
+            })()
           ) : null}
         </li>
       ))}

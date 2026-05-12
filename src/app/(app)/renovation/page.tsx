@@ -428,6 +428,80 @@ export default function RenovationPage() {
           <li>Demolition permit closed out.</li>
         </ul>
       </SectionPanel>
+
+      <ProjectEmailDraftPlaceholder />
     </>
+  );
+}
+
+const PROJECT_EMAIL_CATEGORIES: { label: string; description: string }[] = [
+  {
+    label: "Contractor follow-up",
+    description:
+      "Status check, schedule confirmation, or scope clarification with an active trade.",
+  },
+  {
+    label: "Permit / code question",
+    description:
+      "Ask the Town of Loudonville building department for plan review or inspection guidance.",
+  },
+  {
+    label: "Insurance request",
+    description:
+      "Request a current COI or workers comp certificate before awarding work.",
+  },
+  {
+    label: "Attorney / title question",
+    description:
+      "Send a question to counsel or title regarding documents, easements, or closing items.",
+  },
+];
+
+/**
+ * Future Gmail draft surface scoped to this property. Each category is a
+ * disabled placeholder because the recipient context (contractor email,
+ * municipal contact, insurance contact, counsel) is not yet linked to
+ * the project record. The Gmail icon and explicit "Draft" verbiage make
+ * it clear this will save a draft — not send mail — once wired.
+ */
+function ProjectEmailDraftPlaceholder() {
+  return (
+    <SectionPanel
+      title="Draft project email"
+      description="Starter drafts scoped to 322 Osborne, addressed to the right kind of recipient. Disabled until contractor, municipal, insurance, or counsel contacts are linked to this project. Nothing is sent."
+    >
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {PROJECT_EMAIL_CATEGORIES.map((cat) => (
+          <li key={cat.label}>
+            <span
+              aria-disabled
+              title="Link a recipient contact to this category to enable a Gmail draft."
+              className="flex w-full cursor-not-allowed items-start gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-soft)] p-3 text-left"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/workspace/gmail-icon.svg"
+                alt=""
+                aria-hidden
+                width={18}
+                height={18}
+                className="mt-0.5 inline-block shrink-0"
+              />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-semibold text-[var(--color-text)]">
+                  Draft project email · {cat.label}
+                </span>
+                <span className="text-[12px] leading-relaxed text-[var(--color-text-muted)]">
+                  {cat.description}
+                </span>
+                <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                  Needs linked recipient
+                </span>
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </SectionPanel>
   );
 }
