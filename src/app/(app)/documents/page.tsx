@@ -132,8 +132,23 @@ export default async function DocumentsPage({
         <DocumentList docs={filtered} activeCategory={activeCategory} />
       </SectionPanel>
 
+      <AdobePdfServicesPanel configured={hasAdobePdfServices()} />
+
       <ExtractionPanel />
     </>
+  );
+}
+
+/**
+ * Adobe PDF Services env check. Inlined here (rather than added to
+ * `src/lib`) because nothing else consumes it yet — we read Boolean
+ * presence of the two required env vars without touching their values.
+ * No Adobe SDK is imported; no Adobe API call is made on render.
+ */
+function hasAdobePdfServices(): boolean {
+  return (
+    Boolean(process.env.ADOBE_PDF_SERVICES_CLIENT_ID?.trim()) &&
+    Boolean(process.env.ADOBE_PDF_SERVICES_CLIENT_SECRET?.trim())
   );
 }
 
@@ -305,6 +320,121 @@ function DocumentGmailDraftPlaceholder() {
       />
       Draft email about this document
     </span>
+  );
+}
+
+// =============================================================
+// Adobe PDF Services panel
+// =============================================================
+
+const ADOBE_PDF_ACTIONS: { label: string; description: string }[] = [
+  {
+    label: "Extract PDF facts",
+    description:
+      "Pull structured text, headings, and metadata from a PDF for downstream review. Adobe Extract API.",
+  },
+  {
+    label: "OCR scanned PDF",
+    description:
+      "Recognize text in scanned/image-only PDFs so it can be searched and extracted. Adobe OCR API.",
+  },
+  {
+    label: "Extract tables",
+    description:
+      "Identify and pull tabular data (line items, bid summaries) into a structured format.",
+  },
+  {
+    label: "Split / compress / prepare PDF",
+    description:
+      "Split a multi-doc PDF, compress large scans, or prepare a clean copy before extraction runs.",
+  },
+];
+
+function AdobePdfServicesPanel({ configured }: { configured: boolean }) {
+  const statusCopy = configured
+    ? "Adobe PDF Services is configured. Files are not processed automatically."
+    : "Adobe PDF Services not configured.";
+
+  return (
+    <SectionPanel
+      title="Adobe PDF Services"
+      description="PDF extraction, OCR, table extraction, and document preparation. Runs only when you click an action — page load does not call Adobe."
+    >
+      <div className="mb-4 flex flex-col gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)] sm:flex-row sm:items-start sm:gap-4">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-surface)] shadow-[var(--shadow-card-ring)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/workspace/adobe-acrobat-reader.svg"
+            alt=""
+            aria-hidden
+            width={20}
+            height={20}
+          />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-sm font-semibold text-[var(--workspace-text)]">
+              Adobe PDF Services
+            </span>
+            <span
+              className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+              style={{
+                background: configured
+                  ? "var(--status-success-bg)"
+                  : "var(--status-neutral-bg)",
+                color: configured
+                  ? "var(--status-success-text)"
+                  : "var(--status-neutral-text)",
+                borderColor: configured
+                  ? "var(--status-success-border)"
+                  : "var(--status-neutral-border)",
+              }}
+            >
+              {configured ? "Configured" : "Not configured"}
+            </span>
+          </div>
+          <p className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+            {statusCopy}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {ADOBE_PDF_ACTIONS.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            disabled
+            aria-disabled
+            title={
+              configured
+                ? "Adobe PDF action is not wired in this first-pass build."
+                : "Configure Adobe PDF Services to enable this action."
+            }
+            className="flex cursor-not-allowed flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 text-left shadow-[var(--shadow-card-ring)] transition-colors"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-[var(--workspace-text)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/workspace/adobe-acrobat-reader.svg"
+                alt=""
+                aria-hidden
+                width={16}
+                height={16}
+                className="inline-block shrink-0"
+              />
+              {a.label}
+            </span>
+            <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+              {a.description}
+            </span>
+            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              First pass · not yet wired
+            </span>
+          </button>
+        ))}
+      </div>
+    </SectionPanel>
   );
 }
 
