@@ -134,6 +134,45 @@ export type Bid = {
 
 export type TaskLane = "today" | "this_week" | "waiting" | "done";
 
+/**
+ * Renovation execution lane — used by /tasks to bucket work by where it
+ * is in the field/office flow. Independent of the legacy `TaskLane` so
+ * /renovation rendering keeps working without changes. Tasks may set
+ * both; the new /tasks UI reads `executionLane` first and falls back to
+ * a mapping derived from the legacy `lane` + state when absent.
+ */
+export type TaskExecutionLane =
+  | "blocked"
+  | "needs_decision"
+  | "ready"
+  | "in_progress"
+  | "waiting_on_vendor"
+  | "done";
+
+export const taskExecutionLaneLabels: Record<
+  TaskExecutionLane,
+  { label: string; description: string }
+> = {
+  blocked: {
+    label: "Blocked",
+    description: "Cannot move forward until something resolves.",
+  },
+  needs_decision: {
+    label: "Needs decision",
+    description: "Waiting on a call from you before work can proceed.",
+  },
+  ready: { label: "Ready", description: "Queued and ready to start." },
+  in_progress: {
+    label: "In progress",
+    description: "Active right now — being worked on.",
+  },
+  waiting_on_vendor: {
+    label: "Waiting on vendor",
+    description: "Pending response from a contractor or third party.",
+  },
+  done: { label: "Done", description: "Recently closed." },
+};
+
 export const taskLaneLabels: Record<TaskLane, string> = {
   today: "Today",
   this_week: "This week",
@@ -150,6 +189,23 @@ export type Task = {
   owner: string;
   context: "Office" | "Field" | "Punch list";
   notes?: string;
+
+  /** Renovation execution lane — drives /tasks board. Optional so older
+   *  rows that don't set it fall back to a derived value. */
+  executionLane?: TaskExecutionLane;
+  /** Slug of the tracked property this task belongs to. */
+  propertySlug?: string;
+  /** Optional bid id (placeholder linkage to `bids`). */
+  linkedBidId?: string;
+  /** Optional document id (placeholder linkage to `documents`). */
+  linkedDocumentId?: string;
+  /** Optional budget category id (placeholder linkage to
+   *  `budgetCategories`). */
+  linkedBudgetCategoryId?: string;
+  /** Optional contact email for follow-up drafts. */
+  contactEmail?: string;
+  /** Optional contact name shown on the Gmail draft. */
+  contactName?: string;
 };
 
 /**
@@ -200,6 +256,50 @@ export type DocumentRecord = {
   lastReviewed?: string;
 };
 
+/**
+ * Renovation budget taxonomy. Provides a stable, user-facing grouping
+ * across the 13 categories the budget workspace recognizes. Existing
+ * mock rows fall back to "other" when `kind` is unset.
+ */
+export type BudgetCategoryKind =
+  | "acquisition"
+  | "permits_municipal"
+  | "structural"
+  | "electrical"
+  | "plumbing"
+  | "hvac"
+  | "exterior"
+  | "interior"
+  | "sitework_drainage"
+  | "appliances_fixtures"
+  | "insurance_legal"
+  | "contingency"
+  | "other";
+
+export const budgetCategoryKindLabels: Record<BudgetCategoryKind, string> = {
+  acquisition: "Acquisition",
+  permits_municipal: "Permits / municipal",
+  structural: "Structural",
+  electrical: "Electrical",
+  plumbing: "Plumbing",
+  hvac: "HVAC",
+  exterior: "Exterior",
+  interior: "Interior",
+  sitework_drainage: "Sitework / drainage",
+  appliances_fixtures: "Appliances / fixtures",
+  insurance_legal: "Insurance / legal",
+  contingency: "Contingency",
+  other: "Other",
+};
+
+/** Lightweight "open issue" annotation surfaced on /budget. Pure UI;
+ *  not a database concept. */
+export type BudgetIssueKind =
+  | "over_budget"
+  | "missing_quote"
+  | "scope_pending"
+  | "contingency_low";
+
 export type BudgetCategory = {
   id: string;
   name: string;
@@ -207,6 +307,16 @@ export type BudgetCategory = {
   quoted: number;
   committed: number;
   paid: number;
+  /** Taxonomy bucket — optional so existing rows don't error. */
+  kind?: BudgetCategoryKind;
+  /** Slug of the property this category belongs to. */
+  propertySlug?: string;
+  /** Placeholder linkage to one or more bids in `bids`. */
+  linkedBidIds?: string[];
+  /** Plain-language note used by the Open Issues panel. */
+  issue?: { kind: BudgetIssueKind; note: string };
+  /** Free-form planning note. */
+  notes?: string;
 };
 
 export type PropertyProfile = {
@@ -546,6 +656,12 @@ export const tasks: Task[] = [
     dueDate: "Today",
     owner: "JW",
     context: "Office",
+    executionLane: "in_progress",
+    propertySlug: "322-osborne",
+    linkedBidId: "bid-roof-1",
+    linkedBudgetCategoryId: "b3",
+    contactName: "Pat Lawson",
+    contactEmail: "estimating@northline.example",
   },
   {
     id: "t2",
@@ -555,6 +671,13 @@ export const tasks: Task[] = [
     dueDate: "Today",
     owner: "JW",
     context: "Office",
+    executionLane: "blocked",
+    propertySlug: "322-osborne",
+    linkedBidId: "bid-plumb-1",
+    linkedBudgetCategoryId: "b4",
+    linkedDocumentId: "d4",
+    contactName: "Sam Whitley",
+    contactEmail: "office@adirondackplumbing.example",
   },
   {
     id: "t3",
@@ -564,6 +687,9 @@ export const tasks: Task[] = [
     dueDate: "Today",
     owner: "JW",
     context: "Field",
+    executionLane: "ready",
+    propertySlug: "322-osborne",
+    linkedDocumentId: "d7",
   },
   {
     id: "t4",
@@ -573,6 +699,10 @@ export const tasks: Task[] = [
     dueDate: "Fri",
     owner: "JW",
     context: "Office",
+    executionLane: "needs_decision",
+    propertySlug: "322-osborne",
+    linkedBidId: "bid-roof-1",
+    linkedBudgetCategoryId: "b3",
   },
   {
     id: "t5",
@@ -582,6 +712,9 @@ export const tasks: Task[] = [
     dueDate: "Wed",
     owner: "JW",
     context: "Field",
+    executionLane: "ready",
+    propertySlug: "322-osborne",
+    linkedBudgetCategoryId: "b1",
   },
   {
     id: "t6",
@@ -591,6 +724,11 @@ export const tasks: Task[] = [
     dueDate: "Thu",
     owner: "JW",
     context: "Office",
+    executionLane: "ready",
+    propertySlug: "322-osborne",
+    linkedBidId: "bid-elec-1",
+    linkedBudgetCategoryId: "b9",
+    linkedDocumentId: "d6",
   },
   {
     id: "t7",
@@ -600,6 +738,9 @@ export const tasks: Task[] = [
     dueDate: "Fri",
     owner: "JW",
     context: "Office",
+    executionLane: "needs_decision",
+    propertySlug: "322-osborne",
+    linkedBudgetCategoryId: "b7",
   },
   {
     id: "t8",
@@ -610,6 +751,10 @@ export const tasks: Task[] = [
     owner: "Town",
     context: "Office",
     notes: "Plan review in progress.",
+    executionLane: "waiting_on_vendor",
+    propertySlug: "322-osborne",
+    linkedBudgetCategoryId: "b9",
+    linkedDocumentId: "d5",
   },
   {
     id: "t9",
@@ -619,6 +764,10 @@ export const tasks: Task[] = [
     dueDate: "May 09",
     owner: "Pinebush",
     context: "Office",
+    executionLane: "waiting_on_vendor",
+    propertySlug: "322-osborne",
+    linkedBidId: "bid-hvac-1",
+    linkedBudgetCategoryId: "b6",
   },
   {
     id: "t10",
@@ -628,6 +777,10 @@ export const tasks: Task[] = [
     dueDate: "May 24",
     owner: "Hudson",
     context: "Punch list",
+    executionLane: "ready",
+    propertySlug: "322-osborne",
+    linkedBidId: "bid-fram-1",
+    linkedBudgetCategoryId: "b2",
   },
   {
     id: "t11",
@@ -637,6 +790,9 @@ export const tasks: Task[] = [
     dueDate: "Apr 09",
     owner: "JW",
     context: "Office",
+    executionLane: "done",
+    propertySlug: "322-osborne",
+    linkedBudgetCategoryId: "b9",
   },
   {
     id: "t12",
@@ -646,6 +802,10 @@ export const tasks: Task[] = [
     dueDate: "Apr 09",
     owner: "JW",
     context: "Office",
+    executionLane: "done",
+    propertySlug: "322-osborne",
+    linkedBudgetCategoryId: "b8",
+    linkedDocumentId: "d1",
   },
 ];
 
@@ -802,16 +962,166 @@ export const documents: DocumentRecord[] = [
 ];
 
 export const budgetCategories: BudgetCategory[] = [
-  { id: "b1", name: "Site & demolition", estimated: 14000, quoted: 13500, committed: 12500, paid: 9200 },
-  { id: "b2", name: "Framing & structure", estimated: 38000, quoted: 36500, committed: 36000, paid: 0 },
-  { id: "b3", name: "Roofing", estimated: 42000, quoted: 39800, committed: 0, paid: 0 },
-  { id: "b4", name: "Plumbing", estimated: 28000, quoted: 26500, committed: 0, paid: 0 },
-  { id: "b5", name: "Electrical", estimated: 33000, quoted: 32100, committed: 32100, paid: 6500 },
-  { id: "b6", name: "HVAC", estimated: 26000, quoted: 0, committed: 0, paid: 0 },
-  { id: "b7", name: "Finishes", estimated: 48000, quoted: 0, committed: 0, paid: 0 },
-  { id: "b8", name: "Architecture & engineering", estimated: 22000, quoted: 22000, committed: 22000, paid: 18400 },
-  { id: "b9", name: "Permits & inspections", estimated: 8500, quoted: 4200, committed: 4200, paid: 4200 },
-  { id: "b10", name: "Contingency (10%)", estimated: 26000, quoted: 0, committed: 0, paid: 0 },
+  {
+    id: "b0",
+    name: "Acquisition",
+    estimated: 285000,
+    quoted: 285000,
+    committed: 285000,
+    paid: 285000,
+    kind: "acquisition",
+    propertySlug: "322-osborne",
+    notes: "Purchase closed prior to renovation start.",
+  },
+  {
+    id: "b1",
+    name: "Site & demolition",
+    estimated: 14000,
+    quoted: 13500,
+    committed: 12500,
+    paid: 9200,
+    kind: "sitework_drainage",
+    propertySlug: "322-osborne",
+    linkedBidIds: ["bid-site-1"],
+    issue: {
+      kind: "scope_pending",
+      note: "Drainage scope is still draft RFP — site grading + french drain TBD.",
+    },
+  },
+  {
+    id: "b2",
+    name: "Framing & structure",
+    estimated: 38000,
+    quoted: 36500,
+    committed: 36000,
+    paid: 0,
+    kind: "structural",
+    propertySlug: "322-osborne",
+    linkedBidIds: ["bid-fram-1"],
+  },
+  {
+    id: "b3",
+    name: "Roofing",
+    estimated: 42000,
+    quoted: 39800,
+    committed: 0,
+    paid: 0,
+    kind: "exterior",
+    propertySlug: "322-osborne",
+    linkedBidIds: ["bid-roof-1", "bid-roof-2"],
+    issue: {
+      kind: "scope_pending",
+      note: "Two bids under review — decking allowance + gutter line item open.",
+    },
+  },
+  {
+    id: "b4",
+    name: "Plumbing",
+    estimated: 28000,
+    quoted: 26500,
+    committed: 0,
+    paid: 0,
+    kind: "plumbing",
+    propertySlug: "322-osborne",
+    linkedBidIds: ["bid-plumb-1"],
+    issue: {
+      kind: "scope_pending",
+      note: "Adirondack workers comp expired — cannot award until updated COI is on file.",
+    },
+  },
+  {
+    id: "b5",
+    name: "Electrical",
+    estimated: 33000,
+    quoted: 32100,
+    committed: 32100,
+    paid: 6500,
+    kind: "electrical",
+    propertySlug: "322-osborne",
+    linkedBidIds: ["bid-elec-1"],
+  },
+  {
+    id: "b6",
+    name: "HVAC",
+    estimated: 26000,
+    quoted: 0,
+    committed: 0,
+    paid: 0,
+    kind: "hvac",
+    propertySlug: "322-osborne",
+    linkedBidIds: ["bid-hvac-1"],
+    issue: { kind: "missing_quote", note: "Empire HVAC proposal not yet received." },
+  },
+  {
+    id: "b7",
+    name: "Finishes",
+    estimated: 48000,
+    quoted: 0,
+    committed: 0,
+    paid: 0,
+    kind: "interior",
+    propertySlug: "322-osborne",
+    issue: {
+      kind: "missing_quote",
+      note: "Paint declined; finishes not yet quoted overall.",
+    },
+  },
+  {
+    id: "b8",
+    name: "Architecture & engineering",
+    estimated: 22000,
+    quoted: 22000,
+    committed: 22000,
+    paid: 18400,
+    kind: "other",
+    propertySlug: "322-osborne",
+    notes: "Architect agreement executed.",
+  },
+  {
+    id: "b9",
+    name: "Permits & inspections",
+    estimated: 8500,
+    quoted: 4200,
+    committed: 4200,
+    paid: 4200,
+    kind: "permits_municipal",
+    propertySlug: "322-osborne",
+  },
+  {
+    id: "b11",
+    name: "Appliances / fixtures",
+    estimated: 16000,
+    quoted: 0,
+    committed: 0,
+    paid: 0,
+    kind: "appliances_fixtures",
+    propertySlug: "322-osborne",
+    issue: {
+      kind: "missing_quote",
+      note: "Appliance package not yet specified.",
+    },
+  },
+  {
+    id: "b12",
+    name: "Insurance / legal",
+    estimated: 6000,
+    quoted: 0,
+    committed: 0,
+    paid: 0,
+    kind: "insurance_legal",
+    propertySlug: "322-osborne",
+    notes: "Builders risk + closing legal — placeholder allowance.",
+  },
+  {
+    id: "b10",
+    name: "Contingency reserve (10%)",
+    estimated: 26000,
+    quoted: 0,
+    committed: 0,
+    paid: 0,
+    kind: "contingency",
+    propertySlug: "322-osborne",
+  },
 ];
 
 export type DecisionItem = {

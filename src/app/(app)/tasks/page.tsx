@@ -1,248 +1,488 @@
+import Link from "next/link";
 import { GmailDraftButton } from "@/components/gmail-draft-button";
+import { MetricTile } from "@/components/metric-tile";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+import { ToneTag } from "@/components/tone-tag";
 import {
   isGmailDraftsEnabled,
   isGoogleConnected,
 } from "@/lib/google-gmail";
+import { trackedProperties } from "@/lib/market-data";
 import {
+  bids,
+  budgetCategories,
+  documents,
   nextDecisions,
   tasks,
-  taskLaneLabels,
+  taskExecutionLaneLabels,
+  type Bid,
+  type BudgetCategory,
+  type DocumentRecord,
   type Task,
-  type TaskLane,
+  type TaskExecutionLane,
 } from "@/lib/mock-data";
-import { priorityLabels, statusTokens } from "@/lib/status";
+import { priorityLabels, statusTokens, type StatusTone } from "@/lib/status";
 
-const laneDescriptions: Record<TaskLane, string> = {
-  today: "Doing now",
-  this_week: "Plan to finish this week",
-  waiting: "Blocked or pending response",
-  done: "Recently closed",
+// =============================================================
+// Lane derivation
+// =============================================================
+
+/**
+ * Compute the execution lane for a task. New tasks set `executionLane`
+ * directly; older mock rows fall back to a derivation based on the
+ * legacy `lane` + `priority` so the new board still has something
+ * sensible to render.
+ */
+function executionLaneFor(task: Task): TaskExecutionLane {
+  if (task.executionLane) return task.executionLane;
+  if (task.lane === "done") return "done";
+  if (task.lane === "waiting") return "waiting_on_vendor";
+  return task.priority === "high" ? "needs_decision" : "ready";
+}
+
+const LANE_TONE: Record<TaskExecutionLane, StatusTone> = {
+  blocked: "error",
+  needs_decision: "warning",
+  ready: "info",
+  in_progress: "review",
+  waiting_on_vendor: "neutral",
+  done: "success",
 };
 
-function PriorityTag({ priority }: { priority: keyof typeof priorityLabels }) {
-  const meta = priorityLabels[priority];
-  const tone = statusTokens[meta.tone];
-  return (
-    <span
-      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
-      style={{ background: tone.background, color: tone.text, borderColor: tone.border }}
-    >
-      {meta.label} priority
-    </span>
-  );
-}
+const LANE_ORDER: TaskExecutionLane[] = [
+  "blocked",
+  "needs_decision",
+  "ready",
+  "in_progress",
+  "waiting_on_vendor",
+  "done",
+];
 
-function TaskList({
-  items,
-  isDone = false,
-  showFollowUpDraft = false,
-  gmailEnabled = false,
-  gmailConnected = false,
-}: {
-  items: Task[];
-  isDone?: boolean;
-  showFollowUpDraft?: boolean;
-  gmailEnabled?: boolean;
-  gmailConnected?: boolean;
-}) {
-  if (items.length === 0) {
-    return (
-      <p className="px-5 py-6 text-center text-xs text-[var(--color-text-muted)]">
-        Nothing in this lane.
-      </p>
-    );
-  }
-  return (
-    <ul className="divide-y divide-[var(--color-border)]">
-      {items.map((t) => (
-        <li key={t.id} className="flex flex-col gap-1.5 px-5 py-3">
-          <div className="flex items-start justify-between gap-2">
-            <span
-              className={`text-sm ${
-                isDone
-                  ? "text-[var(--color-text-muted)] line-through"
-                  : "text-[var(--color-text)]"
-              }`}
-            >
-              {t.title}
-            </span>
-            <span className="shrink-0 text-xs font-medium text-[var(--color-text-muted)]">
-              {t.dueDate}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-muted)]">
-            <span>{t.context}</span>
-            <span aria-hidden>·</span>
-            <span>Owner: {t.owner}</span>
-            {!isDone ? <PriorityTag priority={t.priority} /> : null}
-          </div>
-          {t.notes ? (
-            <p className="text-xs text-[var(--color-text-muted)]">{t.notes}</p>
-          ) : null}
-          {showFollowUpDraft && !isDone ? (
-            (() => {
-              const statusLabel = `${taskLaneLabels[t.lane]} · ${priorityLabels[t.priority].label} priority`;
-              const lines: string[] = [
-                "Hi,",
-                "",
-                `Following up on the task "${t.title}".`,
-                "",
-                "Quick reference:",
-                `  • Task: ${t.title}`,
-                `  • Status: ${statusLabel}`,
-                `  • Context: ${t.context}`,
-                `  • Owner: ${t.owner}`,
-              ];
-              if (t.dueDate) lines.push(`  • Due: ${t.dueDate}`);
-              if (t.notes) lines.push(`  • Notes: ${t.notes}`);
-              lines.push("");
-              lines.push(
-                "Could you share the latest status and confirm next steps when you have a moment?"
-              );
-              lines.push("");
-              lines.push("Thanks,");
-              const body = lines.join("\n");
-              return (
-                <div className="mt-1 flex flex-col gap-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <GmailDraftButton
-                      enabled={gmailEnabled}
-                      connected={gmailConnected}
-                      to={null}
-                      subject={`Follow-up: ${t.title}`}
-                      body={body}
-                      context={{ kind: "task", label: t.title }}
-                      compact
-                      label="Draft follow-up email"
-                      returnTo="/tasks"
-                    />
-                  </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)]">
-                    Add contact email to create follow-up draft.
-                  </p>
-                </div>
-              );
-            })()
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
+// =============================================================
+// Page
+// =============================================================
 
 export default async function TasksPage() {
-  const today = tasks.filter((t) => t.lane === "today");
-  const thisWeek = tasks.filter((t) => t.lane === "this_week");
-  const waiting = tasks.filter((t) => t.lane === "waiting");
-  const done = tasks.filter((t) => t.lane === "done");
-  const punchList = tasks.filter((t) => t.context === "Punch list");
   const gmailEnabled = isGmailDraftsEnabled();
   const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
+
+  // Bucket tasks once and re-use across the metrics + lane panels.
+  const byLane: Record<TaskExecutionLane, Task[]> = {
+    blocked: [],
+    needs_decision: [],
+    ready: [],
+    in_progress: [],
+    waiting_on_vendor: [],
+    done: [],
+  };
+  for (const t of tasks) byLane[executionLaneFor(t)].push(t);
+
+  const activeCount =
+    byLane.blocked.length +
+    byLane.needs_decision.length +
+    byLane.ready.length +
+    byLane.in_progress.length +
+    byLane.waiting_on_vendor.length;
 
   return (
     <>
       <PageHeader
-        eyebrow="Tasks & Follow-ups"
-        title="Execution board"
-        description="Project work, punch items, deadlines, and open decisions."
+        eyebrow="Tasks"
+        title="Renovation execution"
+        description="Work bucketed by what it's actually waiting on. Each task links to the bid, document, or budget category that drives it. Gmail follow-up drafts are user-click only — nothing is sent."
       />
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <SectionPanel
-          title={taskLaneLabels.today}
-          description={`${today.length} · ${laneDescriptions.today}`}
-          padded={false}
-        >
-          <TaskList
-            items={today}
-            showFollowUpDraft
-            gmailEnabled={gmailEnabled}
-            gmailConnected={gmailConnected}
+      <SectionPanel
+        title="Task summary"
+        description="Active count by lane. Done is shown so closed work stays visible without dominating."
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <MetricTile
+            label="Active"
+            value={String(activeCount)}
+            hint="Everything not Done"
           />
-        </SectionPanel>
-
-        <SectionPanel
-          title="This Week"
-          description={`${thisWeek.length} · ${laneDescriptions.this_week}`}
-          padded={false}
-        >
-          <TaskList
-            items={thisWeek}
-            showFollowUpDraft
-            gmailEnabled={gmailEnabled}
-            gmailConnected={gmailConnected}
+          <MetricTile
+            label="Blocked"
+            value={String(byLane.blocked.length)}
+            hint="Cannot move forward"
           />
-        </SectionPanel>
-
-        <SectionPanel
-          title="Waiting On"
-          description={`${waiting.length} · ${laneDescriptions.waiting}`}
-          padded={false}
-        >
-          <TaskList
-            items={waiting}
-            showFollowUpDraft
-            gmailEnabled={gmailEnabled}
-            gmailConnected={gmailConnected}
+          <MetricTile
+            label="Needs decision"
+            value={String(byLane.needs_decision.length)}
+            hint="Waiting on you"
           />
-        </SectionPanel>
+          <MetricTile
+            label="In progress"
+            value={String(byLane.in_progress.length)}
+            hint="Active right now"
+          />
+          <MetricTile
+            label="Waiting on vendor"
+            value={String(byLane.waiting_on_vendor.length)}
+            hint="Pending vendor reply"
+          />
+          <MetricTile
+            label="Done"
+            value={String(byLane.done.length)}
+            hint="Recently closed"
+          />
+        </div>
+      </SectionPanel>
 
-        <SectionPanel
-          title="Open Decisions"
-          description={`${nextDecisions.length} pending`}
-        >
-          <ul className="flex flex-col gap-3">
-            {nextDecisions.map((d) => (
-              <li
-                key={d.id}
-                className="flex flex-col gap-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-sm font-semibold text-[var(--color-text)]">
-                    {d.label}
-                  </span>
-                  <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                    Due {d.due}
-                  </span>
-                </div>
-                <span className="text-xs text-[var(--color-text-muted)]">
-                  {d.context}
+      <SectionPanel
+        title="Priority lanes"
+        description="Tasks bucketed by execution state. Blocked and Needs decision come first because they're what holds the project."
+      >
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {LANE_ORDER.map((lane) => (
+            <LanePanel
+              key={lane}
+              lane={lane}
+              items={byLane[lane]}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+            />
+          ))}
+        </div>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Open decisions"
+        description={`${nextDecisions.length} pending`}
+      >
+        <ul className="flex flex-col gap-3">
+          {nextDecisions.map((d) => (
+            <li
+              key={d.id}
+              className="flex flex-col gap-1 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-3 shadow-[var(--shadow-card-ring)]"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-[var(--workspace-text)]">
+                  {d.label}
                 </span>
-              </li>
-            ))}
-          </ul>
-        </SectionPanel>
+                <span className="text-xs font-medium text-[var(--workspace-text-secondary)]">
+                  Due {d.due}
+                </span>
+              </div>
+              <span className="text-xs text-[var(--workspace-text-secondary)]">
+                {d.context}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </SectionPanel>
 
-        <SectionPanel
-          title="Overdue"
-          description="Past due based on the dates on file."
-        >
-          <p className="text-sm text-[var(--color-text-muted)]">
-            No tasks are flagged as overdue. Dates are working entries — review
-            against current calendar before relying on this view.
-          </p>
-        </SectionPanel>
-
-        <SectionPanel
-          title="Punch List"
-          description={`${punchList.length} punch list item${
-            punchList.length === 1 ? "" : "s"
-          }`}
-          padded={false}
-        >
-          <TaskList items={punchList} />
-        </SectionPanel>
-
-        <SectionPanel
-          title="Completed"
-          description={`${done.length} · ${laneDescriptions.done}`}
-          padded={false}
-        >
-          <TaskList items={done} isDone />
-        </SectionPanel>
-      </div>
+      <AiTasksPanel />
     </>
+  );
+}
+
+// =============================================================
+// Lane panel
+// =============================================================
+
+function LanePanel({
+  lane,
+  items,
+  gmailEnabled,
+  gmailConnected,
+}: {
+  lane: TaskExecutionLane;
+  items: Task[];
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
+}) {
+  const meta = taskExecutionLaneLabels[lane];
+  const tone = LANE_TONE[lane];
+  const isDone = lane === "done";
+
+  return (
+    <section className="flex min-w-0 flex-col gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)]">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-display text-sm font-semibold text-[var(--workspace-text)]">
+              {meta.label}
+            </h3>
+            <ToneTag
+              label={`${items.length}`}
+              tone={items.length === 0 ? "neutral" : tone}
+            />
+          </div>
+          <p className="text-[12px] text-[var(--workspace-text-secondary)]">
+            {meta.description}
+          </p>
+        </div>
+      </header>
+
+      {items.length === 0 ? (
+        <p className="rounded-[var(--radius-md)] bg-[var(--color-surface)] px-3 py-4 text-center text-[12.5px] text-[var(--workspace-text-muted)]">
+          Nothing in this lane right now.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {items.map((t) => (
+            <TaskCard
+              key={t.id}
+              task={t}
+              isDone={isDone}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// =============================================================
+// Task card
+// =============================================================
+
+function TaskCard({
+  task,
+  isDone,
+  gmailEnabled,
+  gmailConnected,
+}: {
+  task: Task;
+  isDone: boolean;
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
+}) {
+  const property = task.propertySlug
+    ? trackedProperties.find((p) => p.slug === task.propertySlug) ?? null
+    : null;
+  const bid: Bid | null = task.linkedBidId
+    ? bids.find((b) => b.id === task.linkedBidId) ?? null
+    : null;
+  const doc: DocumentRecord | null = task.linkedDocumentId
+    ? documents.find((d) => d.id === task.linkedDocumentId) ?? null
+    : null;
+  const budgetCategory: BudgetCategory | null = task.linkedBudgetCategoryId
+    ? budgetCategories.find((b) => b.id === task.linkedBudgetCategoryId) ??
+      null
+    : null;
+
+  const priority = priorityLabels[task.priority];
+  const priorityTokens = statusTokens[priority.tone];
+
+  const showDraft = !isDone;
+  const recipient = task.contactEmail ?? null;
+  const draft = showDraft ? buildTaskDraft(task, property?.address ?? null) : null;
+
+  return (
+    <li className="rounded-[var(--radius-md)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-card-ring)]">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-2">
+          <span
+            className={`text-sm font-medium [overflow-wrap:anywhere] ${
+              isDone
+                ? "text-[var(--workspace-text-muted)] line-through"
+                : "text-[var(--workspace-text)]"
+            }`}
+          >
+            {task.title}
+          </span>
+          <span className="shrink-0 text-[11px] font-semibold text-[var(--workspace-text-secondary)]">
+            {task.dueDate}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--workspace-text-secondary)]">
+          <span>{task.context}</span>
+          <span aria-hidden>·</span>
+          <span>Owner: {task.owner}</span>
+          {!isDone ? (
+            <span
+              className="inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{
+                background: priorityTokens.background,
+                color: priorityTokens.text,
+                borderColor: priorityTokens.border,
+              }}
+            >
+              {priority.label}
+            </span>
+          ) : null}
+        </div>
+
+        {task.notes ? (
+          <p className="text-[12px] text-[var(--workspace-text-secondary)]">
+            {task.notes}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-1.5">
+          {property ? (
+            <LinkChip href={`/properties/${property.slug}`}>
+              {property.address}
+            </LinkChip>
+          ) : null}
+          {bid ? (
+            <LinkChip href="/bids">Bid: {bid.contractor}</LinkChip>
+          ) : null}
+          {budgetCategory ? (
+            <LinkChip href="/budget">Budget: {budgetCategory.name}</LinkChip>
+          ) : null}
+          {doc ? <LinkChip href="/documents">Doc: {doc.name}</LinkChip> : null}
+          {!bid && !budgetCategory && !doc ? (
+            <span className="inline-flex min-h-[26px] items-center rounded-full border border-dashed border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-muted)]">
+              No linked items
+            </span>
+          ) : null}
+        </div>
+
+        {draft ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <GmailDraftButton
+                enabled={gmailEnabled}
+                connected={gmailConnected}
+                to={recipient}
+                subject={draft.subject}
+                body={draft.body}
+                context={{ kind: "task", label: task.title }}
+                compact
+                label="Draft follow-up email"
+                returnTo="/tasks"
+              />
+            </div>
+            {!recipient ? (
+              <p className="text-[11px] text-[var(--workspace-text-muted)]">
+                Add contact email to create follow-up draft.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function LinkChip({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex min-h-[26px] items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+    >
+      {children}
+    </Link>
+  );
+}
+
+// =============================================================
+// Gmail draft body
+// =============================================================
+
+function buildTaskDraft(
+  task: Task,
+  propertyAddress: string | null
+): { subject: string; body: string } {
+  const statusLabel = `${taskExecutionLaneLabels[executionLaneFor(task)].label} · ${
+    priorityLabels[task.priority].label
+  } priority`;
+  const greetingName = task.contactName || task.owner || "there";
+  const subject = `Follow-up: ${task.title}${
+    propertyAddress ? ` (${propertyAddress})` : ""
+  }`;
+
+  const lines: string[] = [
+    `Hi ${greetingName},`,
+    "",
+    `Quick follow-up on "${task.title}".`,
+    "",
+    "Quick reference:",
+    `  • Task: ${task.title}`,
+    `  • Status: ${statusLabel}`,
+    `  • Context: ${task.context}`,
+  ];
+  if (propertyAddress) lines.push(`  • Property: ${propertyAddress}`);
+  if (task.dueDate) lines.push(`  • Target: ${task.dueDate}`);
+  if (task.notes) lines.push(`  • Notes: ${task.notes}`);
+  lines.push("");
+  lines.push(
+    "Could you share the latest status and confirm next steps when you have a moment?"
+  );
+  lines.push("");
+  lines.push("Thanks,");
+
+  return { subject, body: lines.join("\n") };
+}
+
+// =============================================================
+// AI placeholder
+// =============================================================
+
+const AI_TASK_ACTIONS = [
+  {
+    label: "Create tasks from bid scope",
+    description:
+      "Read the awarded bid's scope of work and propose a task list — never written to the board without your approval.",
+  },
+  {
+    label: "Draft vendor follow-up",
+    description:
+      "Pick a task and draft a vendor follow-up email tailored to its current state and linked bid.",
+  },
+  {
+    label: "Summarize blockers",
+    description:
+      "Plain-language summary of what's blocking the project and which owner can unblock each item.",
+  },
+  {
+    label: "Build weekly renovation plan",
+    description:
+      "Lay out the next 7 days of work that respects field availability, permits, and decision-due dates.",
+  },
+  {
+    label: "Find budget risks",
+    description:
+      "Cross-reference open tasks against budget categories to flag categories at risk of overrun.",
+  },
+];
+
+function AiTasksPanel() {
+  return (
+    <SectionPanel
+      title="AI execution review"
+      description="Runs only when you click an action. Output is a draft review — verify before relying."
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {AI_TASK_ACTIONS.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            disabled
+            aria-disabled
+            title="AI execution review is not wired in this first-pass build."
+            className="flex cursor-not-allowed flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 text-left shadow-[var(--shadow-card-ring)]"
+          >
+            <span className="text-sm font-semibold text-[var(--workspace-text)]">
+              {a.label}
+            </span>
+            <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+              {a.description}
+            </span>
+            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              First pass · not yet wired
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-[12px] text-[var(--workspace-text-secondary)]">
+        AI execution review is a draft aid. Verify scope, permits, insurance,
+        and contract terms before relying.
+      </p>
+    </SectionPanel>
   );
 }
