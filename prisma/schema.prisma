@@ -146,6 +146,25 @@ model MarketManualEntry {
 //   "VALUE_ESTIMATE" — value only (reserved for future granular fetches)
 //   "RENT_ESTIMATE"  — rent only  (reserved for future granular fetches)
 // ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
+// WorkspaceSetting — minimal key/value store for workspace-wide
+// configuration that needs to outlive the per-browser session cookie.
+//
+// First consumer is Google Drive folder bookkeeping (see
+// src/lib/google-drive.ts), which needs to remember which Drive folder
+// IDs the workspace has created so re-running the setup action does
+// not duplicate the folder tree on a second browser.
+//
+// The value is stored as JSONB so future settings (key-value preferences,
+// other singleton state) can reuse the same row shape without another
+// migration. Schemas for each `key` are validated in app code.
+// ----------------------------------------------------------------------
+model WorkspaceSetting {
+  key       String   @id
+  valueJson Json
+  updatedAt DateTime @updatedAt
+}
+
 model MarketSourceSnapshot {
   id                 String    @id @default(cuid())
   propertyId         String

@@ -20,9 +20,11 @@
  *     via `sessionHasScope` and never logs or returns the token.
  */
 
+import { prisma } from "@/lib/prisma";
 import {
   DRIVE_FILE_SCOPE,
   getGoogleSession,
+  getValidGoogleSession,
   hasGoogleClient,
   isDriveStorageEnabled,
   sessionHasScope,
@@ -158,4 +160,343 @@ export function suggestedWorkspaceFolders(
   }));
 
   return [...topLevel, ...properties];
+}
+
+// =============================================================
+// Workspace folder persistence (Postgres via Prisma)
+// =============================================================
+
+const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3";
+const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+
+const WORKSPACE_FOLDERS_KEY = "google_drive_workspace_folders";
+
+/**
+ * Persisted shape for the Drive folder tree. Keys under `children` are
+ * the slash-joined path-from-root (`"Properties"`, `"Properties/322 Osborne Rd"`,
+ * etc.) so lookups are O(1) and lossless when new properties are added.
+ */
+export type WorkspaceFolderMap = {
+  /** Drive file id of the root workspace folder. */
+  rootId: string;
+  /** Drive web URL of the root folder. May be empty if unavailable. */
+  rootWebUrl: string;
+  /** path-from-root (slash-joined) → Drive file id. */
+  children: Record<string, string>;
+  /** ISO timestamp of the most recent successful create/verify. */
+  lastVerifiedAt: string;
+};
+
+export type WorkspaceFolderRecord = {
+  map: WorkspaceFolderMap;
+  updatedAt: Date;
+};
+
+/**
+ * Read the persisted folder map. Returns null when nothing has been
+ * stored yet, or when the row exists but doesn't match the expected
+ * shape (corrupt — caller should treat as "not created yet").
+ */
+export async function getStoredWorkspaceFolders(): Promise<WorkspaceFolderRecord | null> {
+  let row: { valueJson: unknown; updatedAt: Date } | null = null;
+  try {
+    row = await prisma.workspaceSetting.findUnique({
+      where: { key: WORKSPACE_FOLDERS_KEY },
+    });
+  } catch {
+    // Database unreachable. Treat as "no record yet" so the UI shows
+    // the un-created state rather than crashing the page. The user can
+    // still trigger creation; that path will surface the underlying
+    // error via the server action's catch.
+    return null;
+  }
+  if (!row) return null;
+  const parsed = parseFolderMap(row.valueJson);
+  if (!parsed) return null;
+  return { map: parsed, updatedAt: row.updatedAt };
+}
+
+function parseFolderMap(value: unknown): WorkspaceFolderMap | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<WorkspaceFolderMap> & Record<string, unknown>;
+  if (typeof v.rootId !== "string" || v.rootId.length === 0) return null;
+  const rootWebUrl = typeof v.rootWebUrl === "string" ? v.rootWebUrl : "";
+  const children =
+    v.children && typeof v.children === "object"
+      ? (v.children as Record<string, unknown>)
+      : {};
+  const cleanChildren: Record<string, string> = {};
+  for (const [k, val] of Object.entries(children)) {
+    if (typeof val === "string" && val.length > 0) cleanChildren[k] = val;
+  }
+  const lastVerifiedAt =
+    typeof v.lastVerifiedAt === "string"
+      ? v.lastVerifiedAt
+      : new Date(0).toISOString();
+  return {
+    rootId: v.rootId,
+    rootWebUrl,
+    children: cleanChildren,
+    lastVerifiedAt,
+  };
+}
+
+async function writeWorkspaceFolders(map: WorkspaceFolderMap): Promise<void> {
+  // Cast through `unknown` because Prisma's Json input type doesn't
+  // accept arbitrary structured objects without a satisfies-style cast.
+  const value = map as unknown as Parameters<
+    typeof prisma.workspaceSetting.upsert
+  >[0]["create"]["valueJson"];
+  await prisma.workspaceSetting.upsert({
+    where: { key: WORKSPACE_FOLDERS_KEY },
+    update: { valueJson: value },
+    create: { key: WORKSPACE_FOLDERS_KEY, valueJson: value },
+  });
+}
+
+// =============================================================
+// Drive REST helpers
+// =============================================================
+
+type DriveFileResource = {
+  id: string;
+  name?: string;
+  trashed?: boolean;
+  webViewLink?: string;
+};
+
+/**
+ * Verify a Drive file id still exists and is not trashed. Returns the
+ * lightweight resource (incl. webViewLink) on success, null when the
+ * file is gone/trashed, and throws on transport errors so the caller
+ * can decide whether to retry. Only fields we display are requested.
+ */
+async function getDriveFile(
+  accessToken: string,
+  id: string
+): Promise<DriveFileResource | null> {
+  const url = new URL(`${DRIVE_API_BASE}/files/${encodeURIComponent(id)}`);
+  url.searchParams.set("fields", "id,name,trashed,webViewLink");
+  url.searchParams.set("supportsAllDrives", "true");
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Drive files.get failed (HTTP ${response.status}).`);
+  }
+  const body = (await response.json()) as DriveFileResource;
+  if (body.trashed) return null;
+  return body;
+}
+
+async function createDriveFolder(
+  accessToken: string,
+  input: { name: string; parentId: string | null }
+): Promise<DriveFileResource> {
+  const url = new URL(`${DRIVE_API_BASE}/files`);
+  url.searchParams.set("fields", "id,name,webViewLink");
+  url.searchParams.set("supportsAllDrives", "true");
+  const body = JSON.stringify({
+    name: input.name,
+    mimeType: FOLDER_MIME_TYPE,
+    ...(input.parentId ? { parents: [input.parentId] } : {}),
+  });
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Drive files.create failed (HTTP ${response.status}).`);
+  }
+  return (await response.json()) as DriveFileResource;
+}
+
+// =============================================================
+// Workspace folder creation (idempotent, user-click only)
+// =============================================================
+
+export type CreateFoldersInput = {
+  /** Property addresses to create per-property subfolders for. */
+  propertyAddresses: string[];
+};
+
+export type CreateFoldersResult =
+  | {
+      ok: true;
+      map: WorkspaceFolderMap;
+      /** Counts so the UI can show "created N · reused M". */
+      summary: { created: number; reused: number };
+    }
+  | {
+      ok: false;
+      message: string;
+      needsConnect?: boolean;
+      needsScope?: boolean;
+    };
+
+/**
+ * Create the J.G. Walsh & Co. Workspace folder tree in Drive. Idempotent:
+ * each folder's id is persisted in `WorkspaceSetting` and verified via
+ * `files.get` before re-use; a verified-missing id triggers a fresh
+ * create. Runs only on user click (never auto-invoked).
+ *
+ * Safety:
+ *   - Never deletes a Drive folder.
+ *   - Never uploads a file.
+ *   - Uses `drive.file` scope only — cannot see or modify any folder it
+ *     did not itself create via this OAuth client.
+ *   - Returns the resulting map (no token) so the caller can show
+ *     "Created" status and an Open Drive link.
+ */
+export async function createDriveWorkspaceFolders(
+  input: CreateFoldersInput
+): Promise<CreateFoldersResult> {
+  if (!isDriveStorageEnabled()) {
+    return {
+      ok: false,
+      message:
+        "Google Drive storage is not enabled. Set GOOGLE_DRIVE_STORAGE_ENABLED=true on the server.",
+    };
+  }
+
+  const auth = await getValidGoogleSession({ requireScope: DRIVE_FILE_SCOPE });
+  if (!auth.ok) {
+    return {
+      ok: false,
+      message: auth.message,
+      needsConnect: auth.needsConnect,
+      needsScope: auth.needsScope,
+    };
+  }
+  const accessToken = auth.session.accessToken;
+
+  const existing = (await getStoredWorkspaceFolders())?.map ?? null;
+  let map: WorkspaceFolderMap = existing ?? {
+    rootId: "",
+    rootWebUrl: "",
+    children: {},
+    lastVerifiedAt: new Date(0).toISOString(),
+  };
+
+  let created = 0;
+  let reused = 0;
+
+  try {
+    // ---- Root ----
+    if (map.rootId) {
+      const verified = await getDriveFile(accessToken, map.rootId);
+      if (verified) {
+        reused++;
+        if (verified.webViewLink) map.rootWebUrl = verified.webViewLink;
+      } else {
+        const root = await createDriveFolder(accessToken, {
+          name: WORKSPACE_DRIVE_ROOT_NAME,
+          parentId: null,
+        });
+        map = {
+          rootId: root.id,
+          rootWebUrl: root.webViewLink ?? "",
+          children: {}, // root recreated → previous children references are dead
+          lastVerifiedAt: new Date().toISOString(),
+        };
+        created++;
+        await writeWorkspaceFolders(map);
+      }
+    } else {
+      const root = await createDriveFolder(accessToken, {
+        name: WORKSPACE_DRIVE_ROOT_NAME,
+        parentId: null,
+      });
+      map = {
+        rootId: root.id,
+        rootWebUrl: root.webViewLink ?? "",
+        children: {},
+        lastVerifiedAt: new Date().toISOString(),
+      };
+      created++;
+      await writeWorkspaceFolders(map);
+    }
+
+    // ---- Top-level folders + per-property folders, in path order ----
+    const planned = suggestedWorkspaceFolders(input.propertyAddresses);
+    for (const folder of planned) {
+      const key = folder.pathFromRoot.join("/");
+      const parentKey = folder.pathFromRoot.slice(0, -1).join("/");
+      const parentId = parentKey === "" ? map.rootId : map.children[parentKey];
+      if (!parentId) {
+        // Parent missing — skip; will be picked up on a follow-up run
+        // once the parent is created. Defensive only; the planned order
+        // means we always create parents first.
+        continue;
+      }
+
+      const existingId = map.children[key];
+      if (existingId) {
+        const verified = await getDriveFile(accessToken, existingId);
+        if (verified) {
+          reused++;
+          continue;
+        }
+        // Verified missing — fall through to create
+      }
+
+      const file = await createDriveFolder(accessToken, {
+        name: folder.name,
+        parentId,
+      });
+      map = {
+        ...map,
+        children: { ...map.children, [key]: file.id },
+        lastVerifiedAt: new Date().toISOString(),
+      };
+      created++;
+      await writeWorkspaceFolders(map);
+    }
+
+    map = { ...map, lastVerifiedAt: new Date().toISOString() };
+    await writeWorkspaceFolders(map);
+
+    return { ok: true, map, summary: { created, reused } };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? `Drive error: ${error.message.slice(0, 180)}`
+          : "Unknown Drive error.",
+    };
+  }
+}
+
+// =============================================================
+// Status surface (extended)
+// =============================================================
+
+/**
+ * Lightweight read for UI — returns the stored map without touching
+ * Drive. Used by /documents and /settings to show "Created" status and
+ * the Open Drive folder link.
+ */
+export async function getStoredWorkspaceFoldersForUi(): Promise<{
+  rootId: string | null;
+  rootWebUrl: string | null;
+  childCount: number;
+  lastVerifiedAt: string | null;
+} | null> {
+  const record = await getStoredWorkspaceFolders();
+  if (!record) return null;
+  return {
+    rootId: record.map.rootId || null,
+    rootWebUrl: record.map.rootWebUrl || null,
+    childCount: Object.keys(record.map.children).length,
+    lastVerifiedAt: record.map.lastVerifiedAt,
+  };
 }

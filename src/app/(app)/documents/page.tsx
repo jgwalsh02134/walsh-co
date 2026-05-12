@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { GoogleDriveSetupButton } from "@/components/google-drive-setup-button";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
 import { ToneTag } from "@/components/tone-tag";
 import {
   getDriveStatus,
+  getStoredWorkspaceFoldersForUi,
   suggestedWorkspaceFolders,
   WORKSPACE_DRIVE_ROOT_NAME,
   type DriveStatusSummary,
@@ -101,6 +103,7 @@ export default async function DocumentsPage({
   // Drive status is computed server-side. This only reads env vars and
   // the encrypted session cookie — no Drive API call is made on render.
   const driveStatus = await getDriveStatus();
+  const storedFolders = await getStoredWorkspaceFoldersForUi();
 
   const counts = {
     total: documents.length,
@@ -142,7 +145,10 @@ export default async function DocumentsPage({
         <DocumentList docs={filtered} activeCategory={activeCategory} />
       </SectionPanel>
 
-      <GoogleDriveStoragePanel status={driveStatus} />
+      <GoogleDriveStoragePanel
+        status={driveStatus}
+        storedFolders={storedFolders}
+      />
 
       <AdobePdfServicesPanel configured={hasAdobePdfServices()} />
 
@@ -339,27 +345,12 @@ function DocumentGmailDraftPlaceholder() {
 // Google Drive storage panel
 // =============================================================
 
-const DRIVE_ACTIONS: { label: string; description: string }[] = [
-  {
-    label: "Create workspace folder",
-    description: `Creates the "${WORKSPACE_DRIVE_ROOT_NAME}" root folder in your Google Drive, plus top-level subfolders (Properties, Bids, Permits, Reports, Invoices, Photos). Drafted on click — nothing is created until you confirm.`,
-  },
-  {
-    label: "Create property folders",
-    description:
-      "Creates a per-property subfolder under Properties for each tracked property. Idempotent: existing folders are reused, not duplicated.",
-  },
-  {
-    label: "Open Drive folder",
-    description:
-      "Opens the workspace folder in Drive once it has been created. Available after the workspace folder exists.",
-  },
-];
-
 function GoogleDriveStoragePanel({
   status,
+  storedFolders,
 }: {
   status: DriveStatusSummary;
+  storedFolders: Awaited<ReturnType<typeof getStoredWorkspaceFoldersForUi>>;
 }) {
   const folders = suggestedWorkspaceFolders(
     trackedProperties.map((p) => p.address)
@@ -480,40 +471,53 @@ function GoogleDriveStoragePanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {DRIVE_ACTIONS.map((a) => (
-          <button
-            key={a.label}
-            type="button"
-            disabled
-            aria-disabled
-            title={
-              status.status === "configured"
-                ? "Drive action is not wired in this first-pass build."
-                : "Connect Google with Drive scope to enable this action."
-            }
-            className="flex cursor-not-allowed flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 text-left shadow-[var(--shadow-card-ring)]"
+      <div className="flex flex-col gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)]">
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-semibold text-[var(--workspace-text)]">
+            {storedFolders?.rootId
+              ? "Workspace folder created"
+              : "Set up workspace folder"}
+          </span>
+          <p className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+            Creates the &ldquo;{WORKSPACE_DRIVE_ROOT_NAME}&rdquo; root in your
+            Google Drive plus top-level and per-property subfolders. Idempotent
+            — re-running the action reuses existing folder ids and only creates
+            what&apos;s missing.
+          </p>
+          {storedFolders ? (
+            <p className="text-[11px] text-[var(--workspace-text-muted)]">
+              Stored ids: 1 root + {storedFolders.childCount} subfolders. Last
+              verified {formatVerifiedAt(storedFolders.lastVerifiedAt)}.
+            </p>
+          ) : null}
+        </div>
+
+        <GoogleDriveSetupButton
+          ready={status.status === "configured"}
+          connectHref="/api/auth/google/start?returnTo=/documents"
+          disabledReason={driveSetupDisabledReason(status.status)}
+          alreadyCreated={Boolean(storedFolders?.rootId)}
+        />
+
+        {storedFolders?.rootWebUrl ? (
+          <a
+            href={storedFolders.rootWebUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-[28px] items-center gap-1.5 self-start rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
           >
-            <span className="flex items-center gap-2 text-sm font-semibold text-[var(--workspace-text)]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/icons/workspace/icons8-google-drive.svg"
-                alt=""
-                aria-hidden
-                width={16}
-                height={16}
-                className="inline-block shrink-0"
-              />
-              {a.label}
-            </span>
-            <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
-              {a.description}
-            </span>
-            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-              First pass · not yet wired
-            </span>
-          </button>
-        ))}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/workspace/icons8-google-drive.svg"
+              alt=""
+              aria-hidden
+              width={12}
+              height={12}
+              className="inline-block shrink-0"
+            />
+            Open Drive folder
+          </a>
+        ) : null}
       </div>
 
       <details className="mt-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] p-3">
@@ -539,6 +543,32 @@ function GoogleDriveStoragePanel({
       </details>
     </SectionPanel>
   );
+}
+
+function driveSetupDisabledReason(status: DriveStatusSummary["status"]): string {
+  switch (status) {
+    case "not_configured":
+      return "Set GOOGLE_DRIVE_STORAGE_ENABLED=true and configure Google client on the server.";
+    case "needs_connect":
+      return "Connect Google to grant Gmail compose and Drive file scopes.";
+    case "needs_scope":
+      return "Reconnect Google to add the Drive file scope.";
+    case "configured":
+    default:
+      return "";
+  }
+}
+
+function formatVerifiedAt(iso: string | null): string {
+  if (!iso) return "never";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime()) || date.getTime() === 0) return "never";
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 // =============================================================

@@ -1,9 +1,18 @@
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+
+// Settings reads the encrypted Google session cookie and the
+// WorkspaceSetting row that stores Drive folder ids. Both are
+// per-request data, so prerender as dynamic to avoid touching the
+// database at build time.
+export const dynamic = "force-dynamic";
 import { hasAttomKey } from "@/lib/attom";
 import { hasCensusKey } from "@/lib/census";
 import { hasFredKey } from "@/lib/fred";
-import { getDriveStatus } from "@/lib/google-drive";
+import {
+  getDriveStatus,
+  getStoredWorkspaceFoldersForUi,
+} from "@/lib/google-drive";
 import { hasGoogleMapsServerKey } from "@/lib/google-maps";
 import {
   hasGoogleClient,
@@ -66,6 +75,7 @@ export default async function SettingsPage() {
 
   const adobePdfConfigured = hasAdobePdfServices();
   const driveStatus = await getDriveStatus();
+  const driveStoredFolders = await getStoredWorkspaceFoldersForUi();
   const driveIntegrationStatus =
     driveStatus.status === "configured"
       ? "configured"
@@ -239,6 +249,14 @@ export default async function SettingsPage() {
                   {driveStatus.connectedEmail
                     ? ` · Connected as ${driveStatus.connectedEmail}`
                     : null}
+                  {driveStoredFolders?.rootId ? (
+                    <>
+                      {" · "}
+                      Workspace folder created · {driveStoredFolders.childCount}{" "}
+                      subfolder
+                      {driveStoredFolders.childCount === 1 ? "" : "s"} on file
+                    </>
+                  ) : null}
                 </>
               ) : driveStatus.status === "needs_scope" ? (
                 <>
@@ -278,6 +296,23 @@ export default async function SettingsPage() {
                   {driveStatus.status === "needs_connect"
                     ? "Connect Google for Drive"
                     : "Reconnect Google for Drive"}
+                </a>
+              ) : driveStoredFolders?.rootWebUrl ? (
+                <a
+                  href={driveStoredFolders.rootWebUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--workspace-text)] transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={ICON.googleDrive}
+                    alt=""
+                    aria-hidden
+                    width={14}
+                    height={14}
+                  />
+                  Open Drive folder
                 </a>
               ) : null
             }

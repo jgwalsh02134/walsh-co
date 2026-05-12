@@ -420,6 +420,65 @@ export async function exchangeAuthorizationCode(input: {
 }
 
 /**
+ * Get a valid Google session for the current request, refreshing the
+ * access token if it is near expiry. Returns:
+ *   - { ok: true, session, needsConnect: false, needsScope: false } on success
+ *   - { ok: false, needsConnect: true, ... } when there is no session
+ *   - { ok: false, needsConnect: true, ... } when refresh fails (revoked)
+ *   - { ok: false, needsScope: true, ... } when the optional `requireScope`
+ *     argument is supplied and the session doesn't have it
+ *
+ * Used by both the Gmail draft action (inline) and the Drive folder
+ * server action so that token refresh + scope checks live in one place.
+ * Never returns the raw token to callers via this object — they pull
+ * `session.accessToken` only when they make their own API call.
+ */
+export async function getValidGoogleSession(input?: {
+  requireScope?: string;
+}): Promise<
+  | { ok: true; session: GoogleTokenSession }
+  | {
+      ok: false;
+      needsConnect?: boolean;
+      needsScope?: boolean;
+      message: string;
+    }
+> {
+  if (!hasGoogleClient()) {
+    return {
+      ok: false,
+      message:
+        "Google client is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server.",
+    };
+  }
+  const stored = await getGoogleSession();
+  if (!stored) {
+    return {
+      ok: false,
+      needsConnect: true,
+      message: "Connect Google to continue.",
+    };
+  }
+  const refreshed = await refreshIfNeeded(stored);
+  if (!refreshed) {
+    await clearGoogleSession();
+    return {
+      ok: false,
+      needsConnect: true,
+      message: "Google session expired. Reconnect Google.",
+    };
+  }
+  if (input?.requireScope && !sessionHasScope(refreshed, input.requireScope)) {
+    return {
+      ok: false,
+      needsScope: true,
+      message: `Google permission needed: ${input.requireScope}. Reconnect Google to grant it.`,
+    };
+  }
+  return { ok: true, session: refreshed };
+}
+
+/**
  * Refresh the access token if it is within 60 seconds of expiry. Falls
  * back to returning the existing session unchanged when no refresh
  * token is available.
