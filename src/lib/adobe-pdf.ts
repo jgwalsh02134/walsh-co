@@ -202,18 +202,31 @@ async function downloadExtractZip(downloadUri: string): Promise<Buffer> {
 }
 
 // =============================================================
-// Minimal ZIP extractor — single entry, deflate or stored.
-// Avoids adding `jszip` as a dependency. The Adobe Extract ZIP is
-// small (typically <500 KB) and always contains `structuredData.json`
-// at the root.
+// Minimal ZIP enumerator — handles stored + deflate entries.
+// Avoids adding `jszip` as a dependency. Designed for Adobe Extract
+// result ZIPs (typically <500 KB). Two-stage so callers can list the
+// entry names for diagnostics when the expected file is missing.
+//
+// Important: sizes are read from the CENTRAL DIRECTORY (offset +20/+24
+// from the central directory entry), not from the local file header.
+// Streaming-mode ZIPs set general-purpose bit 3 and zero out the local
+// header sizes; the central directory is the authoritative source.
 // =============================================================
 
-function extractFileFromZip(zip: Buffer, fileName: string): Buffer | null {
+type ZipEntry = {
+  name: string;
+  method: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  /** Offset of this entry's record within the central directory. */
+  cdOffset: number;
+};
+
+function listZipEntries(zip: Buffer): ZipEntry[] | null {
   if (zip.length < 22) return null;
 
-  // Locate End-of-Central-Directory record (signature 0x06054b50).
-  // It sits within the last 64 KB of the file in spec; we search from
-  // the end backward.
+  // Locate End-of-Central-Directory record (signature 0x06054b50)
+  // within the last 64 KB.
   let eocdOffset = -1;
   const searchStart = Math.max(0, zip.length - 65557);
   for (let i = zip.length - 22; i >= searchStart; i--) {
@@ -227,35 +240,84 @@ function extractFileFromZip(zip: Buffer, fileName: string): Buffer | null {
   const centralDirSize = zip.readUInt32LE(eocdOffset + 12);
   const centralDirOffset = zip.readUInt32LE(eocdOffset + 16);
   const cdEnd = centralDirOffset + centralDirSize;
+  if (cdEnd > zip.length) return null;
 
+  const entries: ZipEntry[] = [];
   let cdPos = centralDirOffset;
-  while (cdPos < cdEnd) {
+  while (cdPos + 46 <= cdEnd) {
     if (zip.readUInt32LE(cdPos) !== 0x02014b50) return null;
+    const method = zip.readUInt16LE(cdPos + 10);
+    const compressedSize = zip.readUInt32LE(cdPos + 20);
+    const uncompressedSize = zip.readUInt32LE(cdPos + 24);
     const fileNameLen = zip.readUInt16LE(cdPos + 28);
     const extraLen = zip.readUInt16LE(cdPos + 30);
     const commentLen = zip.readUInt16LE(cdPos + 32);
-    const localHeaderOffset = zip.readUInt32LE(cdPos + 42);
-    const entryName = zip
+    const name = zip
       .subarray(cdPos + 46, cdPos + 46 + fileNameLen)
       .toString("utf-8");
 
-    if (entryName === fileName) {
-      if (zip.readUInt32LE(localHeaderOffset) !== 0x04034b50) return null;
-      const method = zip.readUInt16LE(localHeaderOffset + 8);
-      const compressedSize = zip.readUInt32LE(localHeaderOffset + 18);
-      const localFileNameLen = zip.readUInt16LE(localHeaderOffset + 26);
-      const localExtraLen = zip.readUInt16LE(localHeaderOffset + 28);
-      const dataStart =
-        localHeaderOffset + 30 + localFileNameLen + localExtraLen;
-      const compressed = zip.subarray(dataStart, dataStart + compressedSize);
-
-      if (method === 0) return Buffer.from(compressed);
-      if (method === 8) return zlib.inflateRawSync(compressed);
-      return null;
-    }
+    entries.push({
+      name,
+      method,
+      compressedSize,
+      uncompressedSize,
+      cdOffset: cdPos,
+    });
     cdPos += 46 + fileNameLen + extraLen + commentLen;
   }
+  return entries;
+}
+
+function readZipEntry(zip: Buffer, entry: ZipEntry): Buffer | null {
+  const localHeaderOffset = zip.readUInt32LE(entry.cdOffset + 42);
+  if (
+    localHeaderOffset + 30 > zip.length ||
+    zip.readUInt32LE(localHeaderOffset) !== 0x04034b50
+  ) {
+    return null;
+  }
+  const localFileNameLen = zip.readUInt16LE(localHeaderOffset + 26);
+  const localExtraLen = zip.readUInt16LE(localHeaderOffset + 28);
+  const dataStart =
+    localHeaderOffset + 30 + localFileNameLen + localExtraLen;
+  if (dataStart + entry.compressedSize > zip.length) return null;
+  const compressed = zip.subarray(dataStart, dataStart + entry.compressedSize);
+
+  if (entry.method === 0) return Buffer.from(compressed);
+  if (entry.method === 8) return zlib.inflateRawSync(compressed);
   return null;
+}
+
+function findStructuredDataEntry(entries: ZipEntry[]): ZipEntry | null {
+  // Accept the file at the root or nested under any subfolder, so the
+  // parser keeps working if Adobe ever wraps the result in a folder.
+  // Case-insensitive on the final segment for resilience.
+  for (const e of entries) {
+    if (e.name.endsWith("/")) continue; // directory entry
+    const lower = e.name.toLowerCase();
+    if (lower === "structureddata.json" || lower.endsWith("/structureddata.json")) {
+      return e;
+    }
+  }
+  return null;
+}
+
+/**
+ * Render the entry name list as a single capped diagnostic string for
+ * use inside an error message. Names are filenames from the Adobe
+ * service, not user document content, so it is safe to surface them
+ * to the user.
+ */
+function summarizeEntryNames(entries: ZipEntry[]): string {
+  const names = entries
+    .map((e) => e.name)
+    .filter((n) => !n.endsWith("/"));
+  if (names.length === 0) return "(no files)";
+  const MAX = 12;
+  const head = names.slice(0, MAX).join(", ");
+  return names.length > MAX
+    ? `${head} (+${names.length - MAX} more)`
+    : head;
 }
 
 // =============================================================
@@ -305,11 +367,27 @@ export async function extractTextFromPdf(
     }
 
     const zip = await downloadExtractZip(job.content.downloadUri);
-    const structuredBuffer = extractFileFromZip(zip, "structuredData.json");
+    const entries = listZipEntries(zip);
+    if (!entries) {
+      return {
+        ok: false,
+        message: "Adobe extract ZIP could not be parsed (no central directory).",
+      };
+    }
+    const target = findStructuredDataEntry(entries);
+    if (!target) {
+      return {
+        ok: false,
+        message: `structuredData.json not found. ZIP entries found: ${summarizeEntryNames(
+          entries
+        )}`,
+      };
+    }
+    const structuredBuffer = readZipEntry(zip, target);
     if (!structuredBuffer) {
       return {
         ok: false,
-        message: "structuredData.json not found in Adobe extract ZIP.",
+        message: `Could not read ${target.name} from Adobe extract ZIP (compression method ${target.method}).`,
       };
     }
 
@@ -319,7 +397,7 @@ export async function extractTextFromPdf(
     } catch {
       return {
         ok: false,
-        message: "structuredData.json was not valid JSON.",
+        message: `${target.name} was not valid JSON.`,
       };
     }
 

@@ -1304,70 +1304,103 @@ function AdobePdfServicesPanel({ configured }: { configured: boolean }) {
 // AI Extraction placeholder panel
 // =============================================================
 
-const EXTRACTION_ACTIONS: {
+type DocAiAction = {
   label: string;
   description: string;
-}[] = [
+  status: "available" | "planned";
+};
+
+const DOC_AI_ACTIONS: DocAiAction[] = [
   {
-    label: "Extract document facts",
+    label: "Extract PDF facts (Adobe)",
     description:
-      "Read the document and propose document type, parties, dates, costs, and reference numbers as a draft for review.",
+      'Click "Extract PDF facts" on an uploaded PDF row above to run Adobe PDF Extract. Surfaces text and structure as a draft.',
+    status: "available",
   },
   {
-    label: "Find risks",
+    label: "AI draft review (OpenAI / xAI)",
     description:
-      "Surface clauses, liabilities, exclusions, expirations, and missing information that warrant attention.",
+      'Click "Review extracted text with AI" on a row with a completed extraction to get structured draft cards: document type, parties, dates, dollar amounts, risks, missing info, suggested tasks.',
+    status: "available",
   },
   {
-    label: "Create tasks",
+    label: "Create draft tasks from review",
     description:
-      "Suggest follow-up tasks (signatures, COIs, permits to obtain, replies due) — never written to the database without your approval.",
+      'Each suggested task in an AI review can be promoted to a persisted draft task on the Tasks page. Click "Create draft task" inside the proposals panel — nothing is created automatically.',
+    status: "available",
   },
   {
-    label: "Link to budget",
+    label: "Link to budget category",
     description:
-      "Map line items, prices, and committed amounts to budget categories for review.",
+      "Map line items, prices, and committed amounts from a document to a budget category for review.",
+    status: "planned",
   },
   {
     label: "Draft contractor questions",
     description:
-      "Generate questions to send back to the vendor or municipality based on what is unclear or missing.",
+      "Generate vendor/municipality questions from the AI review and pair them with a Gmail draft for one-click follow-up.",
+    status: "planned",
   },
 ];
+
+const DOC_AI_STATUS_STYLES: Record<
+  DocAiAction["status"],
+  { label: string; bg: string; text: string; border: string }
+> = {
+  available: {
+    label: "Available per uploaded PDF",
+    bg: "var(--status-success-bg)",
+    text: "var(--status-success-text)",
+    border: "var(--status-success-border)",
+  },
+  planned: {
+    label: "Planned",
+    bg: "var(--status-neutral-bg)",
+    text: "var(--status-neutral-text)",
+    border: "var(--status-neutral-border)",
+  },
+};
 
 function ExtractionPanel() {
   return (
     <SectionPanel
-      title="AI document extraction"
-      description="Runs only when you click an action. Output is a draft review — verify before relying."
+      title="Document AI · what's available"
+      description="Document AI review is available after Adobe extraction. Both run only when you click an action on the row above — nothing is processed automatically. Listed actions below describe what each step produces."
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {EXTRACTION_ACTIONS.map((a) => (
-          <button
-            key={a.label}
-            type="button"
-            disabled
-            aria-disabled
-            title="Extraction is not wired in this first-pass build."
-            className="flex cursor-not-allowed flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 text-left shadow-[var(--shadow-card-ring)] transition-colors"
-          >
-            <span className="text-sm font-semibold text-[var(--workspace-text)]">
-              {a.label}
-            </span>
-            <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
-              {a.description}
-            </span>
-            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-              First pass · not yet wired
-            </span>
-          </button>
-        ))}
+        {DOC_AI_ACTIONS.map((a) => {
+          const meta = DOC_AI_STATUS_STYLES[a.status];
+          return (
+            <div
+              key={a.label}
+              className="flex flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)]"
+            >
+              <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-[var(--workspace-text)]">
+                  {a.label}
+                </span>
+                <span
+                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    background: meta.bg,
+                    color: meta.text,
+                    borderColor: meta.border,
+                  }}
+                >
+                  {meta.label}
+                </span>
+              </div>
+              <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+                {a.description}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <p className="mt-3 text-[12px] text-[var(--workspace-text-secondary)]">
-        Future extraction will produce: document type, linked property,
-        vendor / contact, dates, costs, risks, permit / code questions,
-        action items, and missing information — all surfaced as draft
-        notes you can edit, accept, or discard before anything is saved.
+        AI draft reviews and task proposals are aids — verify against the
+        original document before relying. Suggested tasks and budget
+        implications are recommendations only.
       </p>
     </SectionPanel>
   );
