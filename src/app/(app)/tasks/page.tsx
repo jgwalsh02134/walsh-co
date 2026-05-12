@@ -4,6 +4,12 @@ import { GmailDraftButton } from "@/components/gmail-draft-button";
 import { MetricTile } from "@/components/metric-tile";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+import {
+  TaskDetailsEditor,
+  TaskDueDateInput,
+  TaskPrioritySelect,
+  TaskStatusSelect,
+} from "@/components/task-edit-controls";
 import { ToneTag } from "@/components/tone-tag";
 import {
   isGmailDraftsEnabled,
@@ -72,6 +78,53 @@ const LANE_ORDER: TaskExecutionLane[] = [
   "done",
 ];
 
+// Persisted tasks include a `draft` status before they enter the
+// workflow proper. Order keeps Draft first so brand-new proposals are
+// immediately visible.
+type PersistedLane = TaskStatus;
+
+const PERSISTED_LANE_ORDER: PersistedLane[] = [
+  "draft",
+  "blocked",
+  "needs_decision",
+  "ready",
+  "in_progress",
+  "waiting_on_vendor",
+  "done",
+];
+
+const PERSISTED_LANE_LABEL: Record<PersistedLane, string> = {
+  draft: "Draft",
+  blocked: "Blocked",
+  needs_decision: "Needs decision",
+  ready: "Ready",
+  in_progress: "In progress",
+  waiting_on_vendor: "Waiting on vendor",
+  done: "Done",
+};
+
+const PERSISTED_LANE_TONE: Record<PersistedLane, StatusTone> = {
+  draft: "info",
+  blocked: "error",
+  needs_decision: "warning",
+  ready: "info",
+  in_progress: "review",
+  waiting_on_vendor: "neutral",
+  done: "success",
+};
+
+function emptyPersistedBuckets(): Record<PersistedLane, PersistedTaskRow[]> {
+  return {
+    draft: [],
+    blocked: [],
+    needs_decision: [],
+    ready: [],
+    in_progress: [],
+    waiting_on_vendor: [],
+    done: [],
+  };
+}
+
 // =============================================================
 // Page
 // =============================================================
@@ -84,10 +137,20 @@ export default async function TasksPage() {
   // future, the manual create form). Tolerant of an unreachable DB so
   // the page still renders with mock data when Postgres is offline.
   const persistedTasks = await prisma.task
-    .findMany({ orderBy: { createdAt: "desc" }, take: 200 })
+    .findMany({ orderBy: { createdAt: "desc" }, take: 500 })
     .catch(() => [] as PersistedTaskRow[]);
 
-  // Bucket mock tasks for the legacy sample panels.
+  // Bucket persisted tasks into the 7 workflow lanes. Unknown status
+  // values land in Draft so we never silently lose a row.
+  const persistedByLane = emptyPersistedBuckets();
+  for (const t of persistedTasks) {
+    const lane: PersistedLane = isTaskStatus(t.status) ? t.status : "draft";
+    persistedByLane[lane].push(t);
+  }
+  const persistedActiveCount =
+    persistedTasks.length - persistedByLane.done.length;
+
+  // Bucket mock tasks for the sample-data panel at the bottom.
   const byLane: Record<TaskExecutionLane, Task[]> = {
     blocked: [],
     needs_decision: [],
@@ -97,16 +160,6 @@ export default async function TasksPage() {
     done: [],
   };
   for (const t of tasks) byLane[executionLaneFor(t)].push(t);
-
-  const activeCount =
-    byLane.blocked.length +
-    byLane.needs_decision.length +
-    byLane.ready.length +
-    byLane.in_progress.length +
-    byLane.waiting_on_vendor.length;
-  const draftPersistedCount = persistedTasks.filter(
-    (t) => t.status === "draft"
-  ).length;
 
   return (
     <>
@@ -118,64 +171,63 @@ export default async function TasksPage() {
 
       <SectionPanel
         title="Task summary"
-        description="Active count by lane. Done is shown so closed work stays visible without dominating."
+        description="Persisted task counts by lane. Sample/mock tasks are shown separately further down."
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <MetricTile
             label="Active"
-            value={String(activeCount)}
+            value={String(persistedActiveCount)}
             hint="Everything not Done"
           />
           <MetricTile
-            label="Blocked"
-            value={String(byLane.blocked.length)}
-            hint="Cannot move forward"
+            label="Draft"
+            value={String(persistedByLane.draft.length)}
+            hint="New proposals to review"
           />
           <MetricTile
             label="Needs decision"
-            value={String(byLane.needs_decision.length)}
+            value={String(persistedByLane.needs_decision.length)}
             hint="Waiting on you"
           />
           <MetricTile
             label="In progress"
-            value={String(byLane.in_progress.length)}
+            value={String(persistedByLane.in_progress.length)}
             hint="Active right now"
           />
           <MetricTile
             label="Waiting on vendor"
-            value={String(byLane.waiting_on_vendor.length)}
+            value={String(persistedByLane.waiting_on_vendor.length)}
             hint="Pending vendor reply"
           />
           <MetricTile
             label="Done"
-            value={String(byLane.done.length)}
+            value={String(persistedByLane.done.length)}
             hint="Recently closed"
           />
         </div>
       </SectionPanel>
 
       <SectionPanel
-        title="Drafted tasks (persisted)"
+        title="Workflow lanes"
         description={
           persistedTasks.length === 0
-            ? "Nothing drafted yet. Use “Create draft task” on an AI document review under /documents to add one."
+            ? "Nothing persisted yet. Use “Create draft task” on an AI document review under /documents to add one — it will land in the Draft lane below."
             : `${persistedTasks.length} persisted task${
                 persistedTasks.length === 1 ? "" : "s"
-              } · ${draftPersistedCount} still in draft. Sourced from AI document reviews — review before promoting.`
+              }. Status, priority, and due date are editable inline; changes save immediately and re-bucket the task on the next render.`
         }
       >
-        {persistedTasks.length === 0 ? null : (
-          <ul className="flex flex-col gap-3">
-            {persistedTasks.map((t) => (
-              <PersistedTaskCard
-                key={t.id}
-                task={t}
-                gmailEnabled={gmailEnabled}
-                gmailConnected={gmailConnected}
-              />
-            ))}
-          </ul>
-        )}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {PERSISTED_LANE_ORDER.map((lane) => (
+            <PersistedLanePanel
+              key={lane}
+              lane={lane}
+              items={persistedByLane[lane]}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+            />
+          ))}
+        </div>
       </SectionPanel>
 
       <SectionPanel
@@ -517,30 +569,34 @@ function PersistedTaskCard({
     return lines.join("\n");
   })();
 
+  const dueDateValue = task.dueDate
+    ? task.dueDate.toISOString().slice(0, 10) // YYYY-MM-DD for <input type="date">
+    : "";
+
   return (
     <li className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-3 shadow-[var(--shadow-card-ring)]">
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="text-sm font-semibold text-[var(--workspace-text)] [overflow-wrap:anywhere]">
+          <span className="min-w-0 text-sm font-semibold text-[var(--workspace-text)] [overflow-wrap:anywhere]">
             {task.title}
           </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <ToneTag
-              label={PERSISTED_STATUS_LABEL[status]}
-              tone={PERSISTED_STATUS_TONE[status]}
-            />
-            <ToneTag
-              label={`${PERSISTED_PRIORITY_LABEL[priority]} priority`}
-              tone={priority === "urgent" || priority === "high" ? "warning" : "neutral"}
-            />
-          </div>
+          <ToneTag
+            label={`${PERSISTED_PRIORITY_LABEL[priority]} priority`}
+            tone={priority === "urgent" || priority === "high" ? "warning" : "neutral"}
+          />
         </div>
 
         {task.description ? (
-          <p className="text-[12px] text-[var(--workspace-text-secondary)]">
+          <p className="text-[12px] text-[var(--workspace-text-secondary)] [overflow-wrap:anywhere]">
             {task.description}
           </p>
         ) : null}
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <TaskStatusSelect taskId={task.id} status={status} />
+          <TaskPrioritySelect taskId={task.id} priority={priority} />
+          <TaskDueDateInput taskId={task.id} dueDate={dueDateValue} />
+        </div>
 
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--workspace-text-secondary)]">
           {property ? (
@@ -564,6 +620,11 @@ function PersistedTaskCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <TaskDetailsEditor
+            taskId={task.id}
+            title={task.title}
+            description={task.description}
+          />
           <GmailDraftButton
             enabled={gmailEnabled}
             connected={gmailConnected}
@@ -578,6 +639,54 @@ function PersistedTaskCard({
         </div>
       </div>
     </li>
+  );
+}
+
+function PersistedLanePanel({
+  lane,
+  items,
+  gmailEnabled,
+  gmailConnected,
+}: {
+  lane: PersistedLane;
+  items: PersistedTaskRow[];
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
+}) {
+  const label = PERSISTED_LANE_LABEL[lane];
+  const tone = PERSISTED_LANE_TONE[lane];
+
+  return (
+    <section className="flex min-w-0 flex-col gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)]">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-display text-sm font-semibold text-[var(--workspace-text)]">
+            {label}
+          </h3>
+          <ToneTag
+            label={`${items.length}`}
+            tone={items.length === 0 ? "neutral" : tone}
+          />
+        </div>
+      </header>
+
+      {items.length === 0 ? (
+        <p className="rounded-[var(--radius-md)] bg-[var(--color-surface)] px-3 py-4 text-center text-[12.5px] text-[var(--workspace-text-muted)]">
+          Nothing in this lane.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {items.map((t) => (
+            <PersistedTaskCard
+              key={t.id}
+              task={t}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
