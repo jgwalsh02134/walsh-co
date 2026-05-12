@@ -234,6 +234,60 @@ model DriveDocument {
   @@index([uploadedAt])
 }
 
+// ----------------------------------------------------------------------
+// Task — persisted workspace task. First-pass shape is intentionally
+// thin: enough fields to render the same kind of card the legacy
+// mock-data `Task` produces (in src/lib/mock-data.ts) plus a source
+// reference for tasks drafted from an AI document review.
+//
+// `status` and `priority` are stored as strings (validated in app code,
+// see src/lib/task-proposal.ts allowlists) so adding new values does
+// not require another migration. The mock `Task` type is kept for the
+// older /renovation reads; this model is the authoritative store going
+// forward.
+//
+// Source linkage:
+//   - sourceType = "manual" — created via a manual form (future work).
+//   - sourceType = "document_proposal" — created from a suggestion in
+//     `DriveDocument.aiReviewJson.suggestedTasks`. `sourceProposalIndex`
+//     identifies which entry in that array drove the task so the create
+//     action can dedupe idempotently.
+// ----------------------------------------------------------------------
+model Task {
+  id                   String    @id @default(cuid())
+  title                String
+  description          String?   @db.Text
+  /// "draft" | "blocked" | "needs_decision" | "ready" | "in_progress" | "waiting_on_vendor" | "done"
+  status               String    @default("draft")
+  /// "low" | "medium" | "high" | "urgent"
+  priority             String    @default("medium")
+  /// Optional slug of a tracked property (src/lib/market-data.ts).
+  propertySlug         String?
+  /// Optional document category copied from the source document.
+  category             String?
+  /// "manual" | "document_proposal"
+  sourceType           String    @default("manual")
+  /// FK-like reference to DriveDocument.id when sourceType = document_proposal.
+  /// String + index, not a foreign key, so the column nulls cleanly if a
+  /// document is later removed without touching this row.
+  sourceDocumentId     String?
+  /// Copy of DriveDocument.name at the time the task was drafted, kept so
+  /// the source document name renders even if the doc record changes.
+  sourceDocumentName   String?
+  /// Index into the source document's aiReviewJson.suggestedTasks array.
+  /// Used for dedupe on re-click.
+  sourceProposalIndex  Int?
+  dueDate              DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([propertySlug])
+  @@index([sourceDocumentId])
+  @@index([createdAt])
+}
+
 model MarketSourceSnapshot {
   id                 String    @id @default(cuid())
   propertyId         String

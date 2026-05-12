@@ -16,6 +16,8 @@ import {
   isGmailDraftsEnabled,
   isGoogleConnected,
 } from "@/lib/google-gmail";
+import { prisma } from "@/lib/prisma";
+import { inferPriorityFromText } from "@/lib/task-proposal";
 import {
   getDriveStatus,
   getStoredWorkspaceFoldersForUi,
@@ -146,6 +148,32 @@ export default async function DocumentsPage({
   const gmailEnabled = isGmailDraftsEnabled();
   const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
 
+  // Lookup of already-drafted proposal indices per document so each
+  // proposal card can render "Draft task created" instead of the
+  // create button on a refresh. One Prisma query for the whole page;
+  // tolerant of an unreachable database (degrades to empty set).
+  const docIds = driveDocuments.map((d) => d.id);
+  const draftedTasks =
+    docIds.length === 0
+      ? []
+      : await prisma.task
+          .findMany({
+            where: {
+              sourceType: "document_proposal",
+              sourceDocumentId: { in: docIds },
+              sourceProposalIndex: { not: null },
+            },
+            select: { sourceDocumentId: true, sourceProposalIndex: true },
+          })
+          .catch(() => []);
+  const draftedByDoc = new Map<string, Set<number>>();
+  for (const t of draftedTasks) {
+    if (!t.sourceDocumentId || t.sourceProposalIndex == null) continue;
+    const set = draftedByDoc.get(t.sourceDocumentId) ?? new Set<number>();
+    set.add(t.sourceProposalIndex);
+    draftedByDoc.set(t.sourceDocumentId, set);
+  }
+
   const counts = {
     total: documents.length,
     needsReview: documents.filter((d) => d.verified === "needs_verification")
@@ -194,6 +222,7 @@ export default async function DocumentsPage({
         reviewReady={reviewReady}
         reviewDisabledReason={reviewDisabledReason}
         gmail={{ enabled: gmailEnabled, connected: gmailConnected }}
+        draftedByDoc={draftedByDoc}
       />
 
       <SectionPanel
@@ -506,6 +535,7 @@ function DriveDocumentsPanel({
   reviewReady,
   reviewDisabledReason,
   gmail,
+  draftedByDoc,
 }: {
   documents: DriveDocumentSummary[];
   uploadReady: boolean;
@@ -515,6 +545,7 @@ function DriveDocumentsPanel({
   reviewReady: boolean;
   reviewDisabledReason: string;
   gmail: { enabled: boolean; connected: boolean };
+  draftedByDoc: Map<string, Set<number>>;
 }) {
   const propertyOptions = trackedProperties.map((p) => ({
     slug: p.slug,
@@ -553,6 +584,7 @@ function DriveDocumentsPanel({
                 reviewReady={reviewReady}
                 reviewDisabledReason={reviewDisabledReason}
                 gmail={gmail}
+                draftedIndices={draftedByDoc.get(d.id) ?? new Set()}
               />
             ))}
           </ul>
@@ -569,6 +601,7 @@ function DriveDocumentRow({
   reviewReady,
   reviewDisabledReason,
   gmail,
+  draftedIndices,
 }: {
   doc: DriveDocumentSummary;
   extractionReady: boolean;
@@ -576,6 +609,7 @@ function DriveDocumentRow({
   reviewReady: boolean;
   reviewDisabledReason: string;
   gmail: { enabled: boolean; connected: boolean };
+  draftedIndices: Set<number>;
 }) {
   const property = doc.linkedPropertySlug
     ? trackedProperties.find((p) => p.slug === doc.linkedPropertySlug) ?? null
@@ -699,7 +733,7 @@ function DriveDocumentRow({
           provider={doc.aiReviewProvider}
           reviewedAt={doc.aiReviewedAt}
           extractedText={doc.extractedText}
-          proposals={buildTaskProposals(doc, aiReview)}
+          proposals={buildTaskProposals(doc, aiReview, draftedIndices)}
           gmail={gmail}
         />
       ) : hasExtractDraft ? (
@@ -709,28 +743,10 @@ function DriveDocumentRow({
   );
 }
 
-const HIGH_PRIORITY_KEYWORDS = [
-  "urgent",
-  "asap",
-  "immediately",
-  "deadline",
-  "expir",
-  "overdue",
-  "due now",
-  "critical",
-];
-
-function inferPriority(text: string): "high" | "medium" | "low" {
-  const lower = text.toLowerCase();
-  for (const k of HIGH_PRIORITY_KEYWORDS) {
-    if (lower.includes(k)) return "high";
-  }
-  return "medium";
-}
-
 function buildTaskProposals(
   doc: DriveDocumentSummary,
-  review: RenderableAiReview
+  review: RenderableAiReview,
+  draftedIndices: Set<number>
 ): TaskProposal[] {
   if (review.suggestedTasks.length === 0) return [];
   const property = doc.linkedPropertySlug
@@ -742,13 +758,16 @@ function buildTaskProposals(
 
   return review.suggestedTasks.map((title, index) => ({
     id: `${doc.id}-${index}`,
+    documentId: doc.id,
+    proposalIndex: index,
     title,
     propertyContext: property?.address ?? null,
-    prioritySuggestion: inferPriority(title),
+    prioritySuggestion: inferPriorityFromText(title),
     categoryHint: categoryLabel,
     sourceDocumentName: doc.name,
     sourceDocumentUrl: doc.driveWebUrl,
     reason: `Drafted from AI review of ${doc.name}.`,
+    alreadyDrafted: draftedIndices.has(index),
   }));
 }
 

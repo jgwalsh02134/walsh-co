@@ -16,18 +16,27 @@
  */
 
 import { useState } from "react";
+import { CreateTaskFromProposalButton } from "@/components/create-task-from-proposal-button";
 import { GmailDraftButton } from "@/components/gmail-draft-button";
 
 export type TaskProposal = {
   /** Stable id for React keys (derived from index + a hash of the title). */
   id: string;
+  /** Source document id — needed for the create-task server action. */
+  documentId: string;
+  /** Index into the AI review's suggestedTasks array. */
+  proposalIndex: number;
   title: string;
   propertyContext: string | null;
-  prioritySuggestion: "high" | "medium" | "low";
+  prioritySuggestion: "urgent" | "high" | "medium" | "low";
   categoryHint: string | null;
   sourceDocumentName: string;
   sourceDocumentUrl: string;
   reason: string;
+  /** True when a persisted draft task already exists for this
+   *  (document, proposalIndex). Controls whether the create button or
+   *  a static "Draft task created" pill is rendered. */
+  alreadyDrafted: boolean;
 };
 
 export type TaskProposalsPanelProps = {
@@ -43,6 +52,12 @@ const PRIORITY_TONE: Record<
   TaskProposal["prioritySuggestion"],
   { bg: string; text: string; border: string; label: string }
 > = {
+  urgent: {
+    label: "Urgent priority",
+    bg: "var(--status-warning-bg)",
+    text: "var(--status-warning-text)",
+    border: "var(--status-warning-border)",
+  },
   high: {
     label: "High priority",
     bg: "var(--status-warning-bg)",
@@ -174,13 +189,11 @@ function ProposalCard({
             label="Draft Gmail follow-up"
             returnTo="/documents"
           />
-          <span
-            aria-disabled
-            title="Task persistence is not yet wired. Create from the Tasks page once persistence lands."
-            className="inline-flex min-h-[28px] cursor-not-allowed items-center gap-1.5 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text-muted)]"
-          >
-            Create task · not yet wired
-          </span>
+          <CreateTaskFromProposalButton
+            documentId={proposal.documentId}
+            proposalIndex={proposal.proposalIndex}
+            alreadyDrafted={proposal.alreadyDrafted}
+          />
         </div>
       </div>
     </li>

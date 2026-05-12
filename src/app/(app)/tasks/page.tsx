@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Task as PersistedTaskRow } from "@prisma/client";
 import { GmailDraftButton } from "@/components/gmail-draft-button";
 import { MetricTile } from "@/components/metric-tile";
 import { PageHeader } from "@/components/page-header";
@@ -22,7 +23,19 @@ import {
   type Task,
   type TaskExecutionLane,
 } from "@/lib/mock-data";
+import { prisma } from "@/lib/prisma";
 import { priorityLabels, statusTokens, type StatusTone } from "@/lib/status";
+import {
+  isTaskPriority,
+  isTaskStatus,
+  type TaskPriority,
+  type TaskStatus,
+} from "@/lib/task-proposal";
+
+// Tasks reads the persisted `Task` table; per-request rendering keeps
+// the page in sync with the database without relying on
+// `revalidatePath` alone after every external write.
+export const dynamic = "force-dynamic";
 
 // =============================================================
 // Lane derivation
@@ -67,7 +80,14 @@ export default async function TasksPage() {
   const gmailEnabled = isGmailDraftsEnabled();
   const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
 
-  // Bucket tasks once and re-use across the metrics + lane panels.
+  // Persisted tasks: created from AI document proposals (and, in the
+  // future, the manual create form). Tolerant of an unreachable DB so
+  // the page still renders with mock data when Postgres is offline.
+  const persistedTasks = await prisma.task
+    .findMany({ orderBy: { createdAt: "desc" }, take: 200 })
+    .catch(() => [] as PersistedTaskRow[]);
+
+  // Bucket mock tasks for the legacy sample panels.
   const byLane: Record<TaskExecutionLane, Task[]> = {
     blocked: [],
     needs_decision: [],
@@ -84,6 +104,9 @@ export default async function TasksPage() {
     byLane.ready.length +
     byLane.in_progress.length +
     byLane.waiting_on_vendor.length;
+  const draftPersistedCount = persistedTasks.filter(
+    (t) => t.status === "draft"
+  ).length;
 
   return (
     <>
@@ -132,8 +155,32 @@ export default async function TasksPage() {
       </SectionPanel>
 
       <SectionPanel
-        title="Priority lanes"
-        description="Tasks bucketed by execution state. Blocked and Needs decision come first because they're what holds the project."
+        title="Drafted tasks (persisted)"
+        description={
+          persistedTasks.length === 0
+            ? "Nothing drafted yet. Use “Create draft task” on an AI document review under /documents to add one."
+            : `${persistedTasks.length} persisted task${
+                persistedTasks.length === 1 ? "" : "s"
+              } · ${draftPersistedCount} still in draft. Sourced from AI document reviews — review before promoting.`
+        }
+      >
+        {persistedTasks.length === 0 ? null : (
+          <ul className="flex flex-col gap-3">
+            {persistedTasks.map((t) => (
+              <PersistedTaskCard
+                key={t.id}
+                task={t}
+                gmailEnabled={gmailEnabled}
+                gmailConnected={gmailConnected}
+              />
+            ))}
+          </ul>
+        )}
+      </SectionPanel>
+
+      <SectionPanel
+        title="Sample tasks · planning view"
+        description="Pre-populated examples for shaping the workspace. These are not persisted; real tasks live in the Drafted tasks panel above."
       >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {LANE_ORDER.map((lane) => (
@@ -377,6 +424,160 @@ function LinkChip({
     >
       {children}
     </Link>
+  );
+}
+
+// =============================================================
+// Persisted task card
+// =============================================================
+
+const PERSISTED_STATUS_TONE: Record<TaskStatus, StatusTone> = {
+  draft: "info",
+  blocked: "error",
+  needs_decision: "warning",
+  ready: "info",
+  in_progress: "review",
+  waiting_on_vendor: "neutral",
+  done: "success",
+};
+
+const PERSISTED_STATUS_LABEL: Record<TaskStatus, string> = {
+  draft: "Draft",
+  blocked: "Blocked",
+  needs_decision: "Needs decision",
+  ready: "Ready",
+  in_progress: "In progress",
+  waiting_on_vendor: "Waiting on vendor",
+  done: "Done",
+};
+
+const PERSISTED_PRIORITY_LABEL: Record<TaskPriority, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
+function formatTaskTimestamp(date: Date): string {
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  });
+  return `${dateFmt.format(date)}, ${timeFmt.format(date)}`;
+}
+
+function PersistedTaskCard({
+  task,
+  gmailEnabled,
+  gmailConnected,
+}: {
+  task: PersistedTaskRow;
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
+}) {
+  const status = isTaskStatus(task.status) ? task.status : "draft";
+  const priority = isTaskPriority(task.priority) ? task.priority : "medium";
+  const property = task.propertySlug
+    ? trackedProperties.find((p) => p.slug === task.propertySlug) ?? null
+    : null;
+
+  const draftSubject = `Follow-up: ${task.title}${
+    property ? ` (${property.address})` : ""
+  }`;
+  const draftBody = (() => {
+    const lines: string[] = [
+      "Hi,",
+      "",
+      `Following up on the task "${task.title}".`,
+      "",
+      "Quick reference:",
+      `  • Task: ${task.title}`,
+      `  • Status: ${PERSISTED_STATUS_LABEL[status]}`,
+      `  • Priority: ${PERSISTED_PRIORITY_LABEL[priority]}`,
+    ];
+    if (property) lines.push(`  • Property: ${property.address}`);
+    if (task.category) lines.push(`  • Category: ${task.category}`);
+    if (task.sourceDocumentName)
+      lines.push(`  • Source document: ${task.sourceDocumentName}`);
+    lines.push("");
+    lines.push(
+      "Could you share the latest status and confirm next steps when you have a moment?"
+    );
+    lines.push("");
+    lines.push("Thanks,");
+    return lines.join("\n");
+  })();
+
+  return (
+    <li className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-3 shadow-[var(--shadow-card-ring)]">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="text-sm font-semibold text-[var(--workspace-text)] [overflow-wrap:anywhere]">
+            {task.title}
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ToneTag
+              label={PERSISTED_STATUS_LABEL[status]}
+              tone={PERSISTED_STATUS_TONE[status]}
+            />
+            <ToneTag
+              label={`${PERSISTED_PRIORITY_LABEL[priority]} priority`}
+              tone={priority === "urgent" || priority === "high" ? "warning" : "neutral"}
+            />
+          </div>
+        </div>
+
+        {task.description ? (
+          <p className="text-[12px] text-[var(--workspace-text-secondary)]">
+            {task.description}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--workspace-text-secondary)]">
+          {property ? (
+            <LinkChip href={`/properties/${property.slug}`}>
+              {property.address}
+            </LinkChip>
+          ) : null}
+          {task.category ? (
+            <span className="inline-flex items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 font-medium">
+              {task.category}
+            </span>
+          ) : null}
+          {task.sourceType === "document_proposal" && task.sourceDocumentName ? (
+            <LinkChip href="/documents">
+              Source: {task.sourceDocumentName}
+            </LinkChip>
+          ) : null}
+          <span className="text-[var(--workspace-text-muted)]">
+            Created {formatTaskTimestamp(task.createdAt)}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <GmailDraftButton
+            enabled={gmailEnabled}
+            connected={gmailConnected}
+            to={null}
+            subject={draftSubject}
+            body={draftBody}
+            context={{ kind: "task", label: task.title }}
+            compact
+            label="Draft follow-up email"
+            returnTo="/tasks"
+          />
+        </div>
+      </div>
+    </li>
   );
 }
 
