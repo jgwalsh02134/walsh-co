@@ -102,6 +102,10 @@ function DriveResult({
 }) {
   if (state.ok) {
     const { created, reused } = state.summary;
+    // Open Drive folder link is rendered once at the Drive card level
+    // (always visible whenever stored folders exist). The button result
+    // panel only shows the success chip so there's a single primary
+    // "Open Drive folder" affordance.
     return (
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--status-success)]">
@@ -110,17 +114,6 @@ function DriveResult({
             ? "Up to date · all folders reused"
             : `Created ${created} · reused ${reused}`}
         </span>
-        {state.map.rootWebUrl ? (
-          <a
-            href={state.map.rootWebUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-semibold text-[var(--workspace-text)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-          >
-            <DriveIcon size={12} />
-            Open Drive folder
-          </a>
-        ) : null}
       </div>
     );
   }

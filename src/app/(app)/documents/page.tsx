@@ -486,8 +486,8 @@ function GoogleDriveStoragePanel({
           </p>
           {storedFolders ? (
             <p className="text-[11px] text-[var(--workspace-text-muted)]">
-              Stored ids: 1 root + {storedFolders.childCount} subfolders. Last
-              verified {formatVerifiedAt(storedFolders.lastVerifiedAt)}.
+              Stored ids: 1 root + {storedFolders.childCount} subfolders ·
+              Last verified {formatVerifiedAt(storedFolders.lastVerifiedAt)}
             </p>
           ) : null}
         </div>
@@ -559,16 +559,31 @@ function driveSetupDisabledReason(status: DriveStatusSummary["status"]): string 
   }
 }
 
+/**
+ * Render a Drive folder timestamp in the user-facing workspace timezone
+ * (America/New_York), with the short zone name appended so the value is
+ * unambiguous across DST transitions. Runs server-side only (the
+ * Documents page is a dynamic server component), so no hydration
+ * mismatch is possible.
+ */
 function formatVerifiedAt(iso: string | null): string {
-  if (!iso) return "never";
+  if (!iso) return "—";
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime()) || date.getTime() === 0) return "never";
-  return date.toLocaleString("en-US", {
+  if (Number.isNaN(date.getTime()) || date.getTime() === 0) return "—";
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
     month: "short",
     day: "numeric",
+    year: "numeric",
+  });
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
   });
+  return `${dateFmt.format(date)}, ${timeFmt.format(date)}`;
 }
 
 // =============================================================
