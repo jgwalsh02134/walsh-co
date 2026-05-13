@@ -129,6 +129,43 @@ export default function RenovationPage() {
       </SectionPanel>
 
       <SectionPanel
+        title="Project tools"
+        description="External tools scoped to 322 Osborne."
+      >
+        <a
+          href="https://chatgpt.com/g/g-6a04898961088191aa4a241adce51b83-322-osborne-gpt"
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-start gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)] transition-colors hover:bg-[var(--color-surface)] hover:shadow-[var(--shadow-card),var(--shadow-card-ring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] sm:items-center"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/workspace/openai-icon-black.svg"
+            alt=""
+            aria-hidden
+            width={28}
+            height={28}
+            className="mt-0.5 shrink-0 sm:mt-0"
+          />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-sm font-semibold text-[var(--workspace-text)]">
+              Open 322 Osborne GPT
+            </span>
+            <span className="text-[12.5px] leading-relaxed text-[var(--workspace-text-secondary)]">
+              Use the project GPT for renovation, permitting, document review,
+              contractor questions, and rental-readiness planning.
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className="ml-1 hidden shrink-0 self-center text-[var(--workspace-text-muted)] sm:inline"
+          >
+            ↗
+          </span>
+        </a>
+      </SectionPanel>
+
+      <SectionPanel
         title="Current Phase"
         description="What this phase covers and what closes it out."
       >
