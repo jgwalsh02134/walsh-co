@@ -281,11 +281,51 @@ model Task {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
+  // ---- Team identity (first-pass team foundation) ----
+  // All three FKs are nullable + SetNull so a deleted User does not
+  // cascade-delete tasks; the row stays with the audit field cleared.
+  createdById          String?
+  createdBy            User?     @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById          String?
+  updatedBy            User?     @relation("TaskUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  assignedToId         String?
+  assignedTo           User?     @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
   @@index([status])
   @@index([priority])
   @@index([propertySlug])
   @@index([sourceDocumentId])
   @@index([createdAt])
+  @@index([assignedToId])
+  @@index([createdById])
+}
+
+// ----------------------------------------------------------------------
+// User — workspace member identity. Populated on first request from the
+// Cloudflare Access / Microsoft Entra headers via the upsert in
+// `src/lib/current-user.ts`. Records ownership and assignment metadata
+// across team-collaborative modules (first consumer: Task).
+//
+// `role` is a free-form string defaulting to "operator". RBAC is not
+// wired in this pass — the field exists so future work can branch on it
+// without another migration.
+// ----------------------------------------------------------------------
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  /// "owner" | "operator" — validated in app code. Not enforced by RBAC
+  /// in this pass.
+  role          String    @default("operator")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastSeenAt    DateTime?
+
+  tasksCreated  Task[] @relation("TaskCreatedBy")
+  tasksUpdated  Task[] @relation("TaskUpdatedBy")
+  tasksAssigned Task[] @relation("TaskAssignedTo")
+
+  @@index([email])
 }
 
 model MarketSourceSnapshot {

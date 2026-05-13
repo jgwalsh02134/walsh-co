@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+import { getCurrentUser } from "@/lib/current-user";
 
 // Settings reads the encrypted Google session cookie and the
 // WorkspaceSetting row that stores Drive folder ids. Both are
@@ -58,6 +59,11 @@ function hasAdobePdfServices(): boolean {
 const DEFAULT_OPENAI_MODEL = "gpt-5.1";
 
 export default async function SettingsPage() {
+  // Identity from Cloudflare Access + Entra headers (null in local dev
+  // without the tunnel). Only the email / name / role are rendered —
+  // never the JWT assertion or any token.
+  const currentUser = await getCurrentUser();
+
   // All status booleans come from server-side env checks. No secret
   // values are read into the page — only Boolean(env?.trim()).
   const openAIConfigured = hasOpenAIKey();
@@ -164,6 +170,42 @@ export default async function SettingsPage() {
             </dd>
           </div>
         </dl>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Your account"
+        description="Identity resolved from the Cloudflare Access / Entra headers on this request. Tokens are never rendered."
+      >
+        {currentUser ? (
+          <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+            <div className="flex flex-col gap-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
+                Name
+              </dt>
+              <dd className="text-[var(--color-text)]">
+                {currentUser.name ?? "—"}
+              </dd>
+            </div>
+            <div className="flex flex-col gap-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
+                Email
+              </dt>
+              <dd className="text-[var(--color-text)]">{currentUser.email}</dd>
+            </div>
+            <div className="flex flex-col gap-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
+                Role
+              </dt>
+              <dd className="text-[var(--color-text)]">{currentUser.role}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="text-sm text-[var(--workspace-text-secondary)]">
+            User identity unavailable in local dev. In production the
+            Cloudflare Access + Entra headers populate this section
+            automatically.
+          </p>
+        )}
       </SectionPanel>
 
       <SectionPanel

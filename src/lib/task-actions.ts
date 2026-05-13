@@ -18,6 +18,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
   inferPriorityFromText,
@@ -94,6 +95,11 @@ export async function createTaskFromProposalAction(
     return { ok: true, taskId: existing.id, alreadyExisted: true };
   }
 
+  // Record the acting user when the request carries Cloudflare Access /
+  // Entra identity headers. Both fields are nullable in the schema, so
+  // anonymous local-dev requests still write a row.
+  const actor = await getCurrentUser();
+
   const created = await prisma.task.create({
     data: {
       title,
@@ -106,6 +112,8 @@ export async function createTaskFromProposalAction(
       sourceDocumentId: documentId,
       sourceDocumentName: doc.name,
       sourceProposalIndex: proposalIndex,
+      createdById: actor?.id ?? null,
+      updatedById: actor?.id ?? null,
     },
     select: { id: true },
   });
@@ -159,10 +167,15 @@ async function commitTaskUpdate(
   taskId: string,
   data: Record<string, unknown>
 ): Promise<UpdateTaskResult> {
+  // Stamp the acting user on every update. Anonymous local-dev requests
+  // resolve to `null`, which leaves the existing audit pointer in place
+  // rather than wiping it.
+  const actor = await getCurrentUser();
+  const merged = actor ? { ...data, updatedById: actor.id } : data;
   try {
     await prisma.task.update({
       where: { id: taskId },
-      data,
+      data: merged,
     });
   } catch (error) {
     return {
@@ -252,4 +265,46 @@ export async function updateTaskDetailsAction(
       ? descriptionRaw.trim().slice(0, 4000) || null
       : null;
   return commitTaskUpdate(taskId, { title, description });
+}
+
+/**
+ * Assign a task to a workspace user. Both `taskId` and `userId` are
+ * required; an empty `userId` is rejected here so the call site is
+ * forced to use `unassignTaskAction` for clearing, keeping the two
+ * code paths visually distinct in the UI.
+ */
+export async function assignTaskAction(
+  _prev: UpdateTaskState,
+  formData: FormData
+): Promise<UpdateTaskResult> {
+  const taskId = readTaskId(formData);
+  if (!taskId) return { ok: false, message: "Missing task id." };
+  const userIdRaw = formData.get("userId");
+  if (typeof userIdRaw !== "string" || userIdRaw.trim().length === 0) {
+    return { ok: false, message: "Missing user id." };
+  }
+  const userId = userIdRaw.trim();
+
+  // Validate the target user exists before writing the FK — gives a
+  // friendlier error than a Prisma constraint failure.
+  const target = await prisma.user
+    .findUnique({ where: { id: userId }, select: { id: true } })
+    .catch(() => null);
+  if (!target) {
+    return { ok: false, message: "Selected user not found." };
+  }
+  return commitTaskUpdate(taskId, { assignedToId: userId });
+}
+
+/**
+ * Clear the assignment on a task. Separate from `assignTaskAction` so
+ * the destructive-ish "unassign" intent is explicit at the call site.
+ */
+export async function unassignTaskAction(
+  _prev: UpdateTaskState,
+  formData: FormData
+): Promise<UpdateTaskResult> {
+  const taskId = readTaskId(formData);
+  if (!taskId) return { ok: false, message: "Missing task id." };
+  return commitTaskUpdate(taskId, { assignedToId: null });
 }

@@ -1,9 +1,14 @@
 import Link from "next/link";
-import type { Task as PersistedTaskRow } from "@prisma/client";
+import type { Task as PersistedTaskRow, User } from "@prisma/client";
 import { GmailDraftButton } from "@/components/gmail-draft-button";
 import { MetricTile } from "@/components/metric-tile";
 import { PageHeader } from "@/components/page-header";
 import { SectionPanel } from "@/components/section-panel";
+import {
+  TaskAssigneeControls,
+  type AssignableUser,
+  type CurrentUserSummary,
+} from "@/components/task-assignee-controls";
 import {
   TaskDetailsEditor,
   TaskDueDateInput,
@@ -11,6 +16,7 @@ import {
   TaskStatusSelect,
 } from "@/components/task-edit-controls";
 import { ToneTag } from "@/components/tone-tag";
+import { getCurrentUser } from "@/lib/current-user";
 import {
   isGmailDraftsEnabled,
   isGoogleConnected,
@@ -113,7 +119,10 @@ const PERSISTED_LANE_TONE: Record<PersistedLane, StatusTone> = {
   done: "success",
 };
 
-function emptyPersistedBuckets(): Record<PersistedLane, PersistedTaskRow[]> {
+function emptyPersistedBucketsWithAssignee(): Record<
+  PersistedLane,
+  PersistedTaskWithAssignee[]
+> {
   return {
     draft: [],
     blocked: [],
@@ -129,20 +138,68 @@ function emptyPersistedBuckets(): Record<PersistedLane, PersistedTaskRow[]> {
 // Page
 // =============================================================
 
+type PersistedTaskWithAssignee = PersistedTaskRow & {
+  assignedTo: User | null;
+};
+
 export default async function TasksPage() {
   const gmailEnabled = isGmailDraftsEnabled();
   const gmailConnected = gmailEnabled ? await isGoogleConnected() : false;
+
+  // Resolve the request's identity (Cloudflare Access + Entra). Returns
+  // `null` in local dev when the headers are missing — the UI degrades
+  // to "show all" mode rather than failing.
+  const currentUser = await getCurrentUser();
+  // Pull the list of assignable users for the picker. Capped + ordered
+  // by `lastSeenAt` so the most-active operators bubble to the top.
+  const teamUsers = await prisma.user
+    .findMany({
+      orderBy: [{ lastSeenAt: "desc" }, { createdAt: "asc" }],
+      take: 50,
+    })
+    .catch(() => [] as User[]);
 
   // Persisted tasks: created from AI document proposals (and, in the
   // future, the manual create form). Tolerant of an unreachable DB so
   // the page still renders with mock data when Postgres is offline.
   const persistedTasks = await prisma.task
-    .findMany({ orderBy: { createdAt: "desc" }, take: 500 })
-    .catch(() => [] as PersistedTaskRow[]);
+    .findMany({
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      include: { assignedTo: true },
+    })
+    .catch(() => [] as PersistedTaskWithAssignee[]);
+
+  // Bucket persisted tasks by assignment relative to the current user.
+  // When no current user is available (local dev w/o Access headers),
+  // everything lands in `all` and the UI hides the per-group panels.
+  const assignmentBuckets = {
+    mine: [] as PersistedTaskWithAssignee[],
+    unassigned: [] as PersistedTaskWithAssignee[],
+    others: [] as PersistedTaskWithAssignee[],
+  };
+  for (const t of persistedTasks) {
+    if (!t.assignedToId) {
+      assignmentBuckets.unassigned.push(t);
+    } else if (currentUser && t.assignedToId === currentUser.id) {
+      assignmentBuckets.mine.push(t);
+    } else {
+      assignmentBuckets.others.push(t);
+    }
+  }
+
+  const assignableUsers: AssignableUser[] = teamUsers.map((u) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+  }));
+  const currentUserSummary: CurrentUserSummary | null = currentUser
+    ? { id: currentUser.id, email: currentUser.email, name: currentUser.name }
+    : null;
 
   // Bucket persisted tasks into the 7 workflow lanes. Unknown status
   // values land in Draft so we never silently lose a row.
-  const persistedByLane = emptyPersistedBuckets();
+  const persistedByLane = emptyPersistedBucketsWithAssignee();
   for (const t of persistedTasks) {
     const lane: PersistedLane = isTaskStatus(t.status) ? t.status : "draft";
     persistedByLane[lane].push(t);
@@ -208,6 +265,66 @@ export default async function TasksPage() {
       </SectionPanel>
 
       <SectionPanel
+        title="Team view"
+        description={
+          currentUser
+            ? `Signed in as ${currentUser.name ?? currentUser.email}. Persisted tasks grouped by assignment.`
+            : "User identity unavailable in local dev. Showing all persisted tasks; assignment controls still work."
+        }
+      >
+        {currentUser ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <AssignmentGroupPanel
+              title="Assigned to me"
+              emptyHint="Nothing on your plate."
+              items={assignmentBuckets.mine}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+              currentUser={currentUserSummary}
+              users={assignableUsers}
+            />
+            <AssignmentGroupPanel
+              title="Unassigned"
+              emptyHint="No unassigned tasks right now."
+              items={assignmentBuckets.unassigned}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+              currentUser={currentUserSummary}
+              users={assignableUsers}
+            />
+            <AssignmentGroupPanel
+              title="Assigned to others"
+              emptyHint="No tasks owned by other team members yet."
+              items={assignmentBuckets.others}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+              currentUser={currentUserSummary}
+              users={assignableUsers}
+            />
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {persistedTasks.length === 0 ? (
+              <li className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] px-3 py-4 text-center text-[12.5px] text-[var(--workspace-text-muted)]">
+                Nothing persisted yet.
+              </li>
+            ) : (
+              persistedTasks.map((t) => (
+                <PersistedTaskCard
+                  key={t.id}
+                  task={t}
+                  gmailEnabled={gmailEnabled}
+                  gmailConnected={gmailConnected}
+                  currentUser={currentUserSummary}
+                  users={assignableUsers}
+                />
+              ))
+            )}
+          </ul>
+        )}
+      </SectionPanel>
+
+      <SectionPanel
         title="Workflow lanes"
         description={
           persistedTasks.length === 0
@@ -225,6 +342,8 @@ export default async function TasksPage() {
               items={persistedByLane[lane]}
               gmailEnabled={gmailEnabled}
               gmailConnected={gmailConnected}
+              currentUser={currentUserSummary}
+              users={assignableUsers}
             />
           ))}
         </div>
@@ -531,10 +650,14 @@ function PersistedTaskCard({
   task,
   gmailEnabled,
   gmailConnected,
+  currentUser,
+  users,
 }: {
-  task: PersistedTaskRow;
+  task: PersistedTaskWithAssignee;
   gmailEnabled: boolean;
   gmailConnected: boolean;
+  currentUser: CurrentUserSummary | null;
+  users: AssignableUser[];
 }) {
   const status = isTaskStatus(task.status) ? task.status : "draft";
   const priority = isTaskPriority(task.priority) ? task.priority : "medium";
@@ -598,6 +721,21 @@ function PersistedTaskCard({
           <TaskDueDateInput taskId={task.id} dueDate={dueDateValue} />
         </div>
 
+        <TaskAssigneeControls
+          taskId={task.id}
+          assignedTo={
+            task.assignedTo
+              ? {
+                  id: task.assignedTo.id,
+                  email: task.assignedTo.email,
+                  name: task.assignedTo.name,
+                }
+              : null
+          }
+          currentUser={currentUser}
+          users={users}
+        />
+
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--workspace-text-secondary)]">
           {property ? (
             <LinkChip href={`/properties/${property.slug}`}>
@@ -647,11 +785,15 @@ function PersistedLanePanel({
   items,
   gmailEnabled,
   gmailConnected,
+  currentUser,
+  users,
 }: {
   lane: PersistedLane;
-  items: PersistedTaskRow[];
+  items: PersistedTaskWithAssignee[];
   gmailEnabled: boolean;
   gmailConnected: boolean;
+  currentUser: CurrentUserSummary | null;
+  users: AssignableUser[];
 }) {
   const label = PERSISTED_LANE_LABEL[lane];
   const tone = PERSISTED_LANE_TONE[lane];
@@ -682,6 +824,58 @@ function PersistedLanePanel({
               task={t}
               gmailEnabled={gmailEnabled}
               gmailConnected={gmailConnected}
+              currentUser={currentUser}
+              users={users}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function AssignmentGroupPanel({
+  title,
+  emptyHint,
+  items,
+  gmailEnabled,
+  gmailConnected,
+  currentUser,
+  users,
+}: {
+  title: string;
+  emptyHint: string;
+  items: PersistedTaskWithAssignee[];
+  gmailEnabled: boolean;
+  gmailConnected: boolean;
+  currentUser: CurrentUserSummary | null;
+  users: AssignableUser[];
+}) {
+  return (
+    <section className="flex min-w-0 flex-col gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 shadow-[var(--shadow-card-ring)]">
+      <header className="flex flex-wrap items-center gap-2">
+        <h3 className="font-display text-sm font-semibold text-[var(--workspace-text)]">
+          {title}
+        </h3>
+        <ToneTag
+          label={`${items.length}`}
+          tone={items.length === 0 ? "neutral" : "info"}
+        />
+      </header>
+      {items.length === 0 ? (
+        <p className="rounded-[var(--radius-md)] bg-[var(--color-surface)] px-3 py-4 text-center text-[12.5px] text-[var(--workspace-text-muted)]">
+          {emptyHint}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {items.map((t) => (
+            <PersistedTaskCard
+              key={t.id}
+              task={t}
+              gmailEnabled={gmailEnabled}
+              gmailConnected={gmailConnected}
+              currentUser={currentUser}
+              users={users}
             />
           ))}
         </ul>
