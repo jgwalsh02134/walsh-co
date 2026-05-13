@@ -50,7 +50,7 @@ type CategoryMeta = {
 const CATEGORIES: CategoryMeta[] = [
   { id: "all", label: "All documents" },
   { id: "inspection", label: "Inspection" },
-  { id: "contractor_bid", label: "Contractor bid" },
+  { id: "contractor_bid", label: "Contractor quote" },
   { id: "survey", label: "Survey" },
   { id: "deed_title", label: "Deed / title" },
   { id: "tax_assessment", label: "Tax / assessment" },
@@ -64,7 +64,7 @@ const CATEGORIES: CategoryMeta[] = [
 
 const CATEGORY_LABEL: Record<DocumentCategory, string> = {
   inspection: "Inspection",
-  contractor_bid: "Contractor bid",
+  contractor_bid: "Contractor quote",
   survey: "Survey",
   deed_title: "Deed / title",
   tax_assessment: "Tax / assessment",
@@ -190,7 +190,7 @@ export default async function DocumentsPage({
       <PageHeader
         eyebrow="Documents"
         title="Document workspace"
-        description="A central library for property records, contracts, permits, insurance, bids, and supporting media. AI extraction surfaces facts, risks, and action items as draft notes you review before relying on."
+        description="A central library for property records, contracts, permits, insurance, quotes, and supporting media. AI extraction surfaces facts, risks, and action items as draft notes you review before relying on."
         primaryAction={
           uploadReady ? (
             <a
@@ -421,7 +421,7 @@ function DocumentGmailDraftPlaceholder() {
 // =============================================================
 
 const UPLOAD_CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
-  { value: "contractor_bid", label: "Contractor bid" },
+  { value: "contractor_bid", label: "Contractor quote" },
   { value: "permit", label: "Permit" },
   { value: "inspection", label: "Inspection" },
   { value: "survey", label: "Survey" },
@@ -1205,7 +1205,7 @@ const ADOBE_PDF_ACTIONS: { label: string; description: string }[] = [
   {
     label: "Extract tables",
     description:
-      "Identify and pull tabular data (line items, bid summaries) into a structured format.",
+      "Identify and pull tabular data (line items, quote summaries) into a structured format.",
   },
   {
     label: "Split / compress / prepare PDF",

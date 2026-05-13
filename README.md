@@ -88,7 +88,8 @@ Microsoft Graph / Google Workspace / Apple Contacts sync).
   professionals, municipal, vendors). DB-backed; full CRUD + favorites.
 - **Market Tracker** (`/market`) — placeholder market intelligence panels.
 - **Portfolio / Properties / Renovation / Documents / Budget / Tasks /
-  Bids / Settings** — workspace pages.
+  Quotes / Settings** — workspace pages. The Quotes workspace may still use
+  `/bids` internally for routing compatibility.
 
 ## Learn More
 

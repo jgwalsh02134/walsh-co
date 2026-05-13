@@ -81,7 +81,7 @@ const formatCurrency = (n: number | null | undefined) => {
 
 function lifecycleFor(bid: Bid): BidLifecycleStatus {
   // Fallback when lifecycle is missing — map from legacy fields so the
-  // UI never errors on a partially-annotated bid.
+  // UI never errors on a partially-annotated quote.
   if (bid.lifecycle) return bid.lifecycle;
   if (bid.decision === "approved") return "accepted";
   if (bid.decision === "rejected") return "rejected";
@@ -124,7 +124,7 @@ type BidDraftContent = {
 
 /**
  * Build the Gmail draft payload (subject, body, recipient, label) for a
- * bid row. Reused by the inline row button and the Open issues panel so
+ * quote row. Reused by the inline row button and the Open issues panel so
  * both surfaces produce identical draft content.
  */
 function buildBidDraftContent(bid: Bid): BidDraftContent {
@@ -145,15 +145,15 @@ function buildBidDraftContent(bid: Bid): BidDraftContent {
     propertyName ? ` (${propertyName})` : ""
   }`;
   const subject = isClarification
-    ? `Bid clarification: ${subjectBase}`
-    : `Bid follow-up: ${subjectBase}`;
+    ? `Quote clarification: ${subjectBase}`
+    : `Quote follow-up: ${subjectBase}`;
 
   const clarificationQuestions = [
     "Can you confirm the full scope covered by your proposal — including any work assumed but not itemized?",
-    "Which items are explicitly excluded from your bid (permits, dump fees, decking, allowances, etc.)?",
+    "Which items are explicitly excluded from your quote (permits, dump fees, decking, allowances, etc.)?",
     bid.nextAction
       ? `Can you address the open item we flagged: "${bid.nextAction}"?`
-      : "Are there any scope gaps you noticed when comparing against the bid request?",
+      : "Are there any scope gaps you noticed when comparing against the quote request?",
     "What is your expected start window and projected duration on site?",
     "Is your insurance (GL + workers comp) current through the project window, and can you share a COI?",
     formattedAmount
@@ -167,10 +167,10 @@ function buildBidDraftContent(bid: Bid): BidDraftContent {
   ];
   lines.push(
     isClarification
-      ? `Thanks again for the ${tradeLabel.toLowerCase()} proposal${
+      ? `I'm reviewing your ${tradeLabel.toLowerCase()} quote${
           bid.dateReceived ? ` received ${bid.dateReceived}` : ""
         }${propertyName ? ` for ${propertyName}` : ""}. Before we can finalize a decision we have a few clarifications.`
-      : `Following up on your ${tradeLabel.toLowerCase()} proposal${
+      : `Following up on your ${tradeLabel.toLowerCase()} quote${
           bid.dateReceived ? ` received ${bid.dateReceived}` : ""
         }${propertyName ? ` for ${propertyName}` : ""}.`
   );
@@ -180,7 +180,7 @@ function buildBidDraftContent(bid: Bid): BidDraftContent {
   lines.push(`  • Contractor: ${bid.contractor}`);
   lines.push(`  • Trade: ${tradeLabel}`);
   if (formattedAmount)
-    lines.push(`  • Bid amount on file: ${formattedAmount}`);
+    lines.push(`  • Quote amount on file: ${formattedAmount}`);
   if (bid.nextAction) lines.push(`  • Open item: ${bid.nextAction}`);
   lines.push("");
   lines.push("Clarification questions:");
@@ -256,18 +256,18 @@ export default async function BidsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Bids"
+        eyebrow="Quotes"
         title="Contractor comparison"
-        description="Compare contractor proposals across trades, surface scope gaps, and decide what to award. AI bid review is a draft aid — verify scope, permits, insurance, and contract terms before relying."
+        description="Compare contractor proposals across trades, surface scope gaps, and decide what to award. AI quote review is a draft aid — verify scope, permits, insurance, and contract terms before relying."
         primaryAction={
           <button
             type="button"
             disabled
             aria-disabled
-            title="Bid request flow is not wired in this build."
+            title="Quote request flow is not wired in this build."
             className="inline-flex min-h-[40px] cursor-not-allowed items-center justify-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface-soft)] px-3.5 py-2 text-sm font-medium text-[var(--workspace-text-secondary)]"
           >
-            Request bid
+            Request quote
           </button>
         }
       />
@@ -280,7 +280,7 @@ export default async function BidsPage({
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <MetricTile
-            label="Total bids"
+            label="Total quotes"
             value={String(bids.length)}
             hint="In pipeline"
           />
@@ -292,7 +292,7 @@ export default async function BidsPage({
           <MetricTile
             label="Total quoted"
             value={formatCurrency(totalQuoted)}
-            hint="Sum of received bids"
+            hint="Sum of received quotes"
           />
           <MetricTile
             label="Need clarification"
@@ -300,12 +300,12 @@ export default async function BidsPage({
             hint="Open scope questions"
           />
           <MetricTile
-            label="Accepted amount"
+            label="Accepted quote total"
             value={formatCurrency(acceptedAmount)}
             hint={
               lifecycleCounts.accepted === 0
                 ? "Nothing accepted yet"
-                : `${lifecycleCounts.accepted} bid${
+                : `${lifecycleCounts.accepted} quote${
                     lifecycleCounts.accepted === 1 ? "" : "s"
                   } accepted`
             }
@@ -315,7 +315,7 @@ export default async function BidsPage({
 
       <SectionPanel
         title="Comparison"
-        description={`${filtered.length} bid${
+        description={`${filtered.length} quote${
           filtered.length === 1 ? "" : "s"
         } shown.`}
       >
@@ -348,7 +348,7 @@ function SampleBanner({ total }: { total: number }) {
     <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] px-4 py-3 text-sm shadow-[var(--shadow-card-ring)]">
       <ToneTag label="Sample data" tone="neutral" />
       <span className="text-[var(--workspace-text-secondary)]">
-        {total} sample bids shown. Bid request, document storage, and AI
+        {total} sample quotes shown. Quote request, document storage, and AI
         review are placeholders in this first-pass build.
       </span>
     </div>
@@ -362,7 +362,7 @@ function SampleBanner({ total }: { total: number }) {
 function TradeFilters({ active }: { active: TradeFilterOption["id"] }) {
   return (
     <nav
-      aria-label="Filter bids by trade"
+      aria-label="Filter quotes by trade"
       className="-mx-1 flex flex-wrap gap-2 pb-3"
     >
       {TRADE_OPTIONS.map((opt) => {
@@ -408,7 +408,7 @@ function BidList({
   if (bids.length === 0) {
     return (
       <div className="rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] px-4 py-6 text-center text-sm text-[var(--workspace-text-secondary)] shadow-[var(--shadow-card-ring)]">
-        No bids in this trade yet.
+        No quotes in this trade yet.
         {activeTrade !== "all" ? (
           <>
             {" "}
@@ -534,7 +534,7 @@ function BidRow({
               </Link>
             ) : (
               <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-muted)]">
-                No bid PDF linked
+                No quote PDF linked
               </span>
             )}
           </div>
@@ -613,7 +613,7 @@ function RowLink({ href, label }: { href: string; label: string }) {
 // =============================================================
 
 /**
- * Surfaces every bid currently in `needs_clarification` regardless of
+ * Surfaces every quote currently in `needs_clarification` regardless of
  * the active trade filter — these are the next things to act on, and
  * burying them inside the filtered comparison list makes them easy to
  * miss. Each item leads with the prominent Gmail "Draft clarification
@@ -639,14 +639,14 @@ function OpenIssuesPanel({
       description={
         clarificationBids.length === 0
           ? "Nothing pending clarification right now."
-          : `${clarificationBids.length} bid${
+          : `${clarificationBids.length} quote${
               clarificationBids.length === 1 ? "" : "s"
             } waiting on a contractor response. Drafts only — nothing is sent.`
       }
     >
       {clarificationBids.length === 0 ? (
         <p className="text-sm text-[var(--workspace-text-secondary)]">
-          When a bid is flagged as Needs Clarification, it will surface
+          When a quote is flagged as Needs Clarification, it will surface
           here with a prominent Gmail draft action.
         </p>
       ) : (
@@ -746,29 +746,29 @@ function OpenIssueRow({
 }
 
 // =============================================================
-// AI bid review placeholder
+// AI quote review placeholder
 // =============================================================
 
 const REVIEW_ACTIONS: { label: string; description: string }[] = [
   {
-    label: "Compare bids",
+    label: "Compare quotes",
     description:
-      "Side-by-side scope/cost compare across received bids in the active trade. Flags pricing outliers and missing line items.",
+      "Side-by-side scope/cost compare across received quotes in the active trade. Flags pricing outliers and missing line items.",
   },
   {
     label: "Find missing scope",
     description:
-      "Read each bid for omissions vs. the project scope of work — permit fees, dump fees, decking allowance, etc.",
+      "Read each quote for omissions vs. the project scope of work — permit fees, dump fees, decking allowance, etc.",
   },
   {
     label: "Draft contractor questions",
     description:
-      "Generate a punch list of clarification questions per bidder before award.",
+      "Generate a punch list of clarification questions per contractor before award.",
   },
   {
     label: "Convert scope to tasks",
     description:
-      "Turn the awarded bid's scope of work into a draft task list — never written without your approval.",
+      "Turn the awarded quote's scope of work into a draft task list — never written without your approval.",
   },
   {
     label: "Send accepted items to budget",
@@ -780,7 +780,7 @@ const REVIEW_ACTIONS: { label: string; description: string }[] = [
 function AiReviewPanel() {
   return (
     <SectionPanel
-      title="AI bid review"
+      title="AI quote review"
       description="Runs only when you click an action. Output is a draft review — verify scope, permits, insurance, and contract terms before relying."
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -789,7 +789,7 @@ function AiReviewPanel() {
         ))}
       </div>
       <p className="mt-3 text-[12px] text-[var(--workspace-text-secondary)]">
-        AI bid review is a draft aid. Nothing is sent to vendors, written to
+        AI quote review is a draft aid. Nothing is sent to vendors, written to
         the budget, or written to tasks without your explicit action. Future
         review will surface scope gaps, pricing outliers, missing
         insurance/permit references, and proposed next steps.
@@ -810,7 +810,7 @@ function ReviewAction({
       type="button"
       disabled
       aria-disabled
-      title="AI bid review is not wired in this first-pass build."
+      title="AI quote review is not wired in this first-pass build."
       className="flex cursor-not-allowed flex-col items-start gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface-soft)] p-4 text-left shadow-[var(--shadow-card-ring)]"
     >
       <span className="text-sm font-semibold text-[var(--workspace-text)]">

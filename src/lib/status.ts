@@ -107,7 +107,7 @@ export type BidStatus =
   | "declined";
 
 export const bidStatusLabels: Record<BidStatus, { label: string; tone: StatusTone }> = {
-  none: { label: "No bid", tone: "neutral" },
+  none: { label: "No quote", tone: "neutral" },
   requested: { label: "Requested", tone: "info" },
   received: { label: "Received", tone: "review" },
   shortlisted: { label: "Shortlisted", tone: "review" },

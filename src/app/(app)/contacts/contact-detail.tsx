@@ -242,7 +242,7 @@ export async function ContactDetail({ contact }: { contact: Contact }) {
               </div>
               {!hasContext ? (
                 <p className="text-[11px] text-[var(--color-text-muted)]">
-                  Add a related property, task, or bid for a better draft.
+                  Add a related property, task, or quote for a better draft.
                 </p>
               ) : null}
             </div>

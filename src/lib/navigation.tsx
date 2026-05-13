@@ -132,7 +132,7 @@ export const sidebarNav: NavItem[] = [
   { label: "Properties", href: "/properties", icon: icons.properties },
   { label: "322 Osborne Workspace", href: "/renovation", icon: icons.renovation },
   { label: "Contacts", href: "/contacts", icon: icons.contacts },
-  { label: "Bids", href: "/bids", icon: icons.bids },
+  { label: "Quotes", href: "/bids", icon: icons.bids },
   { label: "Documents", href: "/documents", icon: icons.documents },
   { label: "Budget", href: "/budget", icon: icons.budget },
   { label: "Tasks", href: "/tasks", icon: icons.tasks },
@@ -186,7 +186,7 @@ export const landingCards: LandingCard[] = [
   {
     title: "322 Osborne Workspace",
     description:
-      "Manage renovation scope, contractors, bids, tasks, budget, and documents.",
+      "Manage renovation scope, contractors, quotes, tasks, budget, and documents.",
     href: "/renovation",
     icon: cardIcons.renovation,
     blueprintIcon: `${BLUEPRINT_DIR}/renovation.svg`,
@@ -202,7 +202,7 @@ export const landingCards: LandingCard[] = [
   {
     title: "Documents",
     description:
-      "Organize deeds, insurance, permits, contracts, COIs, bids, and photos.",
+      "Organize deeds, insurance, permits, contracts, COIs, quotes, and photos.",
     href: "/documents",
     icon: cardIcons.documents,
     blueprintIcon: `${BLUEPRINT_DIR}/documents.svg`,

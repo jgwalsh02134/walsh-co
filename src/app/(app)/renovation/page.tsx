@@ -108,7 +108,7 @@ export default function RenovationPage() {
           </div>
           <div className="flex flex-col gap-1">
             <dt className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
-              Open bids
+              Open quotes
             </dt>
             <dd className="font-semibold text-[var(--color-text)]">
               {openBids.length}
@@ -133,7 +133,7 @@ export default function RenovationPage() {
         description="What this phase covers and what closes it out."
       >
         <p className="text-sm text-[var(--color-text-muted)]">
-          {propertyProfile.phase}. Bids are being collected and qualified, with
+          {propertyProfile.phase}. Quotes are being collected and qualified, with
           award decisions pending insurance verification, scope alignment, and
           permit readiness.
         </p>
@@ -241,14 +241,14 @@ export default function RenovationPage() {
       </SectionPanel>
 
       <SectionPanel
-        title="Open Bids"
+        title="Open Quotes"
         description={`${openBids.length} awaiting decision`}
         action={
           <Link
             href="/bids"
             className="text-xs font-semibold text-[var(--color-primary)] hover:underline"
           >
-            Compare bids
+            Compare quotes
           </Link>
         }
         padded={false}
@@ -413,7 +413,7 @@ export default function RenovationPage() {
           </li>
           <li>
             Roofing decking allowance variance between Northline and Capital
-            bids is unresolved.
+            quotes is unresolved.
           </li>
         </ul>
       </SectionPanel>

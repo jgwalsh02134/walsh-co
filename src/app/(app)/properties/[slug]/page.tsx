@@ -169,7 +169,7 @@ export default async function PropertyDetailPage({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SectionPanel
           title="Documents"
-          description="Deeds, insurance, permits, contracts, COIs, bids, photos."
+          description="Deeds, insurance, permits, contracts, COIs, quotes, photos."
           action={
             <Link
               href="/documents"
@@ -186,19 +186,19 @@ export default async function PropertyDetailPage({
         </SectionPanel>
 
         <SectionPanel
-          title="Bids"
-          description="Vendor bids, follow-ups, and award status."
+          title="Quotes"
+          description="Vendor quotes, follow-ups, and award status."
           action={
             <Link
               href="/bids"
               className="text-xs font-semibold text-[var(--color-primary)] hover:underline"
             >
-              Open Bids
+              Open Quotes
             </Link>
           }
         >
           <Placeholder>
-            No property-scoped bid list yet. Use the Bids page for now;
+            No property-scoped quote list yet. Use the Quotes page for now;
             per-property linking is planned.
           </Placeholder>
         </SectionPanel>

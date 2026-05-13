@@ -166,7 +166,7 @@ export default async function TasksPage() {
       <PageHeader
         eyebrow="Tasks"
         title="Renovation execution"
-        description="Work bucketed by what it's actually waiting on. Each task links to the bid, document, or budget category that drives it. Gmail follow-up drafts are user-click only — nothing is sent."
+        description="Work bucketed by what it's actually waiting on. Each task links to the quote, document, or budget category that drives it. Gmail follow-up drafts are user-click only — nothing is sent."
       />
 
       <SectionPanel
@@ -422,7 +422,7 @@ function TaskCard({
             </LinkChip>
           ) : null}
           {bid ? (
-            <LinkChip href="/bids">Bid: {bid.contractor}</LinkChip>
+            <LinkChip href="/bids">Quote: {bid.contractor}</LinkChip>
           ) : null}
           {budgetCategory ? (
             <LinkChip href="/budget">Budget: {budgetCategory.name}</LinkChip>
@@ -735,14 +735,14 @@ function buildTaskDraft(
 
 const AI_TASK_ACTIONS = [
   {
-    label: "Create tasks from bid scope",
+    label: "Create tasks from quote scope",
     description:
-      "Read the awarded bid's scope of work and propose a task list — never written to the board without your approval.",
+      "Read the awarded quote's scope of work and propose a task list — never written to the board without your approval.",
   },
   {
     label: "Draft vendor follow-up",
     description:
-      "Pick a task and draft a vendor follow-up email tailored to its current state and linked bid.",
+      "Pick a task and draft a vendor follow-up email tailored to its current state and linked quote.",
   },
   {
     label: "Summarize blockers",

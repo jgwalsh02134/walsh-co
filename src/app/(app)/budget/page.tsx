@@ -112,12 +112,12 @@ export default function BudgetPage() {
             hint="Construction work only (no acquisition/contingency)"
           />
           <MetricTile
-            label="Accepted bid total"
+            label="Accepted quote total"
             value={formatCurrency(acceptedBidTotal)}
             hint={
               acceptedBidTotal === 0
                 ? "Nothing accepted yet"
-                : "Sum of accepted contractor bids"
+                : "Sum of accepted contractor quotes"
             }
           />
           <MetricTile
@@ -159,7 +159,7 @@ export default function BudgetPage() {
 
       <SectionPanel
         title="Cost categories"
-        description="Each line shows estimate, quoted, committed, and paid — plus the bid(s) feeding it, if any."
+        description="Each line shows estimate, quoted, committed, and paid — plus the quote(s) feeding it, if any."
       >
         <ul className="flex flex-col gap-3">
           {renovationCategories.map((c) => (
@@ -298,12 +298,12 @@ function BudgetCategoryRow({ category }: { category: BudgetCategory }) {
                   href="/bids"
                   className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
                 >
-                  Bid: {bid.contractor}
+                  Quote: {bid.contractor}
                 </Link>
               ))
             ) : category.kind !== "acquisition" && category.kind !== "contingency" ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--workspace-text-muted)]">
-                No bid linked
+                No quote linked
               </span>
             ) : null}
             {category.issue ? (
@@ -337,7 +337,7 @@ function BudgetCategoryRow({ category }: { category: BudgetCategory }) {
               href="/bids"
               className="inline-flex min-h-[28px] items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
             >
-              Bids
+              Quotes
             </Link>
             <Link
               href="/documents"
@@ -483,7 +483,7 @@ function OpenBudgetIssuesPanel({
                     href="/bids"
                     className="inline-flex min-h-[28px] items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--workspace-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
                   >
-                    Open bids
+                    Open quotes
                   </Link>
                   <Link
                     href="/documents"
