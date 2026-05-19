@@ -1414,14 +1414,6 @@ export default async function MarketPage() {
 
       <SourceStatusRow sources={sourceStatuses} />
 
-      <AiMarketAnalysisPanel
-        marketInput={marketNoteInput}
-        propertyCards={
-          privateCard ? [...businessCards, privateCard] : businessCards
-        }
-        xaiAvailable={xaiKeyConfigured}
-      />
-
       <NeedsAttentionPanel groups={attentionGroups} />
 
       <section className="flex flex-col gap-4">
@@ -1430,12 +1422,12 @@ export default async function MarketPage() {
             Property comparison
           </h2>
           <p className="text-xs text-[var(--market-text-secondary)]">
-            House market value, market rent, ZIP trend, and ATTOM
+            House market value, market rent, area trend, and public-record
             verification — kept on separate pipelines per property.
           </p>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {businessCards.map((d) => (
             <PropertyCard key={d.property.id} data={d} />
           ))}
@@ -1456,6 +1448,11 @@ export default async function MarketPage() {
           </div>
         ) : null}
       </section>
+
+      <AiMarketAnalysisPanel
+        marketInput={marketNoteInput}
+        xaiAvailable={xaiKeyConfigured}
+      />
 
       <LocationDemographicsPanel
         geocodes={geocodeRows}

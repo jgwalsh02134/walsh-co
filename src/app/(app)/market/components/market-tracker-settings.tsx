@@ -30,6 +30,7 @@ import {
   type CoverageRow,
   type RoadmapRow,
 } from "./data-coverage-panel";
+import { OpenOnHash } from "./open-on-hash";
 import {
   SourceDiagnosticsPanel,
   type SourceDiagnosticsRow,
@@ -50,27 +51,36 @@ export type MarketTrackerSettingsProps = {
 
 export function MarketTrackerSettings(props: MarketTrackerSettingsProps) {
   return (
-    <details
-      id="market-tracker-settings"
-      className="group border border-[var(--market-border)] bg-[var(--market-surface)] [&[open]>summary>span.icon]:rotate-180"
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-[var(--market-surface-raised)] sm:px-5">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-display text-base font-semibold text-[var(--market-text)]">
-            Market Tracker Settings
-          </span>
-          <span className="text-[12px] text-[var(--market-text-muted)]">
-            Per-provider refresh controls, data coverage, and source
-            diagnostics. Manual refresh only — nothing here runs on its own.
-          </span>
-        </div>
-        <span
-          className="icon shrink-0 select-none text-[var(--market-text-muted)] transition-transform"
-          aria-hidden
+    <>
+      <OpenOnHash targetId="market-tracker-settings" />
+      <details
+        id="market-tracker-settings"
+        className="group border border-[var(--market-border)] bg-[var(--market-surface)] [&[open]>summary>span.icon]:rotate-180 [&[open]>summary>span.show-label]:hidden [&:not([open])>summary>span.hide-label]:hidden"
+      >
+        <summary
+          className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-[var(--market-surface-raised)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)] sm:px-5"
+          aria-controls="market-tracker-settings"
         >
-          ▾
-        </span>
-      </summary>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-display text-base font-semibold text-[var(--market-text)]">
+              Market Tracker Settings
+            </span>
+            <span className="text-[12px] text-[var(--market-text-muted)]">
+              Per-provider refresh controls, data coverage, and source
+              diagnostics. Manual refresh only — nothing here runs on its own.
+            </span>
+          </div>
+          <span className="flex shrink-0 items-center gap-2 text-[12px] font-semibold text-[var(--market-text-secondary)]">
+            <span className="show-label">Show settings</span>
+            <span className="hide-label">Hide settings</span>
+            <span
+              className="icon select-none text-[var(--market-text-muted)] transition-transform"
+              aria-hidden
+            >
+              ▾
+            </span>
+          </span>
+        </summary>
 
       <div className="flex flex-col gap-5 border-t border-[var(--market-border)] px-4 py-4 sm:px-5 sm:py-5">
         <section className="flex flex-col gap-3">
@@ -110,7 +120,8 @@ export function MarketTrackerSettings(props: MarketTrackerSettingsProps) {
           counts={props.diagnosticsCounts}
         />
       </div>
-    </details>
+      </details>
+    </>
   );
 }
 

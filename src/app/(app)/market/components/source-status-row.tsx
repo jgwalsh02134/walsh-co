@@ -2,16 +2,21 @@
  * Compact source-health strip.
  *
  * Replaces the full Source Diagnostics table on the main page. Shows
- * one chip per provider with a coloured dot:
- *   • green  — Connected
- *   • amber  — Configured / no snapshot
- *   • muted  — Not configured
+ * one chip per provider with a coloured dot and a canonical state label
+ * (Live / Pending / Off / Planned) so the user-facing vocabulary is
+ * consistent everywhere on the page.
  *
  * The ⚙ link points at the `#market-tracker-settings` disclosure for
  * users who want to drill into the full diagnostics view.
  */
 
 import Link from "next/link";
+import {
+  CANONICAL_LABEL,
+  canonicalStateColors,
+  fromSourceStatusRowKind,
+  type CanonicalSourceState,
+} from "./source-status-display";
 
 export type SourceStatusKind = "connected" | "configured" | "missing";
 
@@ -53,29 +58,26 @@ export function SourceStatusRow({
 }
 
 function SourceChip({ label, kind }: SourceStatus) {
-  const dotColor =
-    kind === "connected"
-      ? "var(--semantic-success)"
-      : kind === "configured"
-      ? "var(--semantic-warning)"
-      : "var(--market-text-muted)";
-  const subLabel =
-    kind === "connected"
-      ? null
-      : kind === "configured"
-      ? "no snapshot"
-      : "not configured";
+  const state: CanonicalSourceState = fromSourceStatusRowKind(kind);
+  const colors = canonicalStateColors(state);
+  const stateLabel = CANONICAL_LABEL[state];
   return (
-    <span className="inline-flex items-center gap-1.5 text-[12px]">
+    <span
+      className="inline-flex items-center gap-1.5 text-[12px]"
+      aria-label={`${label}: ${stateLabel}`}
+    >
       <span
         aria-hidden
         className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{ background: dotColor }}
+        style={{ background: colors.dot }}
       />
       <span className="text-[var(--market-text)]">{label}</span>
-      {subLabel ? (
-        <span className="text-[var(--market-text-muted)]">· {subLabel}</span>
-      ) : null}
+      <span className="text-[var(--market-text-muted)]" aria-hidden>
+        ·
+      </span>
+      <span style={{ color: colors.fg }} className="font-semibold">
+        {stateLabel}
+      </span>
     </span>
   );
 }

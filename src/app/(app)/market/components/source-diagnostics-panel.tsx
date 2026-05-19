@@ -6,6 +6,11 @@
  */
 
 import type { MarketSource, SourceStatus } from "@/lib/market-sources";
+import {
+  CANONICAL_LABEL,
+  canonicalStateColors,
+  fromRegistryStatus,
+} from "./source-status-display";
 
 export type SourceDiagnosticsRow = MarketSource & {
   lastRefreshed: string | null;
@@ -71,41 +76,26 @@ export function SourceDiagnosticsPanel({
 }
 
 function StatusPill({ status }: { status: SourceStatus }) {
-  const style = (() => {
-    switch (status) {
-      case "Connected":
-        return {
-          color: "var(--semantic-success)",
-          background: "var(--semantic-success-bg)",
-          border: "var(--semantic-success-border)",
-        };
-      case "Manual":
-        return {
-          color: "var(--semantic-info)",
-          background: "var(--semantic-info-bg)",
-          border: "var(--semantic-info-border)",
-        };
-      case "Planned":
-        return {
-          color: "var(--semantic-warning)",
-          background: "var(--semantic-warning-bg)",
-          border: "var(--semantic-warning-border)",
-        };
-      case "Not connected":
-      default:
-        return {
-          color: "var(--market-text-muted)",
-          background: "var(--market-surface-raised)",
-          border: "var(--market-border)",
-        };
-    }
-  })();
+  const state = fromRegistryStatus(status);
+  const colors = canonicalStateColors(state);
+  const label = CANONICAL_LABEL[state];
   return (
     <span
-      className="inline-flex items-center justify-self-start border px-1.5 py-0.5 text-[11px] font-semibold sm:justify-self-end"
-      style={style}
+      className="inline-flex items-center gap-1 justify-self-start border px-1.5 py-0.5 text-[11px] font-semibold sm:justify-self-end"
+      style={{
+        color: colors.fg,
+        background: colors.bg,
+        borderColor: colors.border,
+      }}
+      title={status}
+      aria-label={`${label} (raw provider state: ${status})`}
     >
-      {status}
+      <span
+        aria-hidden
+        className="inline-block h-1.5 w-1.5 rounded-full"
+        style={{ background: colors.dot }}
+      />
+      {label}
     </span>
   );
 }

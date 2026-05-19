@@ -3,16 +3,18 @@
 /**
  * Ψ Market Intelligence Assistant
  *
- * Light-surface AI research panel that sits above the property cards.
+ * Portfolio-scoped AI research panel. Per-property research is intentionally
+ * handled inside each PropertyCard (where it is contextually anchored), so
+ * this panel only offers two portfolio-wide modes:
+ *
+ *   • Internal Summary  — interprets what is already on the dashboard.
+ *   • Web Research      — finds NEW external context, conflicts, and next
+ *                          checks beyond the dashboard data.
  *
  * Provider:
  *   • OpenAI (default)
- *   • Grok / xAI (optional, only shown when XAI_API_KEY is configured server-side)
- *
- * Mode:
- *   • Internal Summary  — interprets what is already on the dashboard.
- *   • Web Research      — finds NEW external context, conflicts, next checks.
- *   • Property Research — same, scoped to one selected property.
+ *   • Grok / xAI (optional, only shown when XAI_API_KEY is configured
+ *                  server-side)
  *
  * UX rules baked in:
  *   - The output card supports Minimize and Clear, so users do not have
@@ -20,32 +22,22 @@
  *   - Disclaimers are calm: one short footer line, not flashing warnings.
  *   - API keys are never sent to the client; the parent page tells us
  *     boolean availability for each provider.
- *   - Both providers wire all three modes: OpenAI uses the Responses API
- *     with `web_search`; xAI uses the same Responses API shape against
- *     its OpenAI-compatible base URL. Source extraction normalizes both
- *     into the AiSource shape used by the response card.
  */
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   generateMarketNote,
   generateMarketNoteWithWebSearch,
-  generatePropertyAnalysisWithWebSearch,
   type AiProvider,
   type MarketNoteInput,
   type MarketNoteState,
 } from "../market-note-actions";
-import { buildPropertyNoteInput } from "../property-note-builder";
 import { AiResponseCard } from "./ai-response-card";
-import type { PropertyCardData } from "./property-card";
 
-type Mode = "internal" | "web" | "property";
+type Mode = "internal" | "web";
 
 export type AiMarketAnalysisPanelProps = {
   marketInput: MarketNoteInput;
-  /** Tracked properties (business + private). The Property Research mode
-   *  uses this list to populate the property selector. */
-  propertyCards: PropertyCardData[];
   /** True when XAI_API_KEY is configured on the server. The page passes
    *  this in; the panel never reads server env directly. */
   xaiAvailable: boolean;
@@ -53,66 +45,30 @@ export type AiMarketAnalysisPanelProps = {
 
 export function AiMarketAnalysisPanel({
   marketInput,
-  propertyCards,
   xaiAvailable,
 }: AiMarketAnalysisPanelProps) {
   const [provider, setProvider] = useState<AiProvider>("openai");
   const [mode, setMode] = useState<Mode>("internal");
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
-    propertyCards.find((c) => !c.property.isPrivate)?.property.id ??
-      propertyCards[0]?.property.id ??
-      ""
-  );
   const [state, setState] = useState<MarketNoteState | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const selected = useMemo(
-    () => propertyCards.find((c) => c.property.id === selectedPropertyId),
-    [propertyCards, selectedPropertyId]
-  );
-
   const run = () => {
     setState(null);
-    // Capture the mode + provider at request time so the rendered badges
-    // always reflect what the user clicked, even if a future server-side
-    // label drifts. Prevents "Web research selected, output reads
-    // Internal summary" mismatches.
     const requestedMode = mode;
     const requestedProvider = provider;
-    const requestedModeLabel: "Internal summary" | "Web research" | "Property research" =
-      requestedMode === "internal"
-        ? "Internal summary"
-        : requestedMode === "web"
-        ? "Web research"
-        : "Property research";
+    const requestedModeLabel: "Internal summary" | "Web research" =
+      requestedMode === "internal" ? "Internal summary" : "Web research";
     const requestedProviderLabel: "OpenAI" | "Grok" =
       requestedProvider === "xai" ? "Grok" : "OpenAI";
 
     startTransition(async () => {
-      let result: MarketNoteState;
-      if (requestedMode === "internal") {
-        result = await generateMarketNote(marketInput, requestedProvider);
-      } else if (requestedMode === "web") {
-        result = await generateMarketNoteWithWebSearch(
-          marketInput,
-          requestedProvider
-        );
-      } else {
-        if (!selected) {
-          setState({
-            ok: false,
-            message: "Select a property to research.",
-            modeLabel: requestedModeLabel,
-            providerLabel: requestedProviderLabel,
-          });
-          return;
-        }
-        const input = buildPropertyNoteInput(selected);
-        result = await generatePropertyAnalysisWithWebSearch(
-          input,
-          requestedProvider
-        );
-      }
+      const result: MarketNoteState =
+        requestedMode === "internal"
+          ? await generateMarketNote(marketInput, requestedProvider)
+          : await generateMarketNoteWithWebSearch(
+              marketInput,
+              requestedProvider
+            );
       setState({
         ...result,
         modeLabel: requestedModeLabel,
@@ -123,13 +79,11 @@ export function AiMarketAnalysisPanel({
 
   const ctaLabel =
     mode === "internal"
-      ? "Generate internal summary"
-      : mode === "web"
-      ? "Research market with web"
-      : "Research selected property";
+      ? "Generate portfolio market note"
+      : "Research portfolio with web";
 
   const helper =
-    mode === "web" || mode === "property"
+    mode === "web"
       ? "Web research looks for external corroboration, conflicts, and missing context beyond the dashboard data."
       : "Interprets what is already on the dashboard. No web search.";
 
@@ -171,14 +125,14 @@ export function AiMarketAnalysisPanel({
               className="font-display text-[18px] font-semibold leading-tight"
               style={{ color: "#0F172A" }}
             >
-              Market Intelligence Assistant
+              Portfolio Market Research
             </h2>
             <p
               className="mt-0.5 text-[12.5px] leading-snug [overflow-wrap:anywhere]"
               style={{ color: "#475569" }}
             >
-              Finds external context, conflicts, and next checks beyond the
-              provider dashboard.
+              Portfolio-scoped AI. For per-property research use the AI
+              controls on each property card.
             </p>
           </div>
         </div>
@@ -193,18 +147,10 @@ export function AiMarketAnalysisPanel({
 
         <ModeSegmented mode={mode} onChange={setMode} />
 
-        {mode === "property" ? (
-          <PropertyPicker
-            propertyCards={propertyCards}
-            value={selectedPropertyId}
-            onChange={setSelectedPropertyId}
-          />
-        ) : null}
-
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <button
             type="button"
-            disabled={pending || (mode === "property" && !selected)}
+            disabled={pending}
             onClick={run}
             className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full px-4 py-2 text-[13px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             style={{
@@ -224,15 +170,17 @@ export function AiMarketAnalysisPanel({
           </p>
         </div>
 
-        {state ? (
-          <AiResponseCard
-            state={state}
-            variant="light"
-            onClear={() => setState(null)}
-          />
-        ) : (
-          <EmptyHint />
-        )}
+        <div aria-live="polite" aria-atomic="true">
+          {state ? (
+            <AiResponseCard
+              state={state}
+              variant="light"
+              onClear={() => setState(null)}
+            />
+          ) : (
+            <EmptyHint />
+          )}
+        </div>
 
         <p className="text-[11px]" style={{ color: "#9CA3AF" }}>
           Research mode uses configured AI providers only when you click
@@ -388,11 +336,6 @@ function ModeSegmented({
           onClick={() => onChange("web")}
           label="Web research"
         />
-        <SegmentButton
-          active={mode === "property"}
-          onClick={() => onChange("property")}
-          label="Property research"
-        />
       </div>
     </div>
   );
@@ -422,66 +365,6 @@ function SegmentButton({
     >
       {label}
     </button>
-  );
-}
-
-// =============================================================
-// Property picker
-// =============================================================
-
-function PropertyPicker({
-  propertyCards,
-  value,
-  onChange,
-}: {
-  propertyCards: PropertyCardData[];
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const business = propertyCards.filter((c) => !c.property.isPrivate);
-  const privateRefs = propertyCards.filter((c) => c.property.isPrivate);
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor="ai-property-picker"
-        className="text-[11px] font-semibold uppercase tracking-wider"
-        style={{ color: "#6B7280" }}
-      >
-        Research property
-      </label>
-      <select
-        id="ai-property-picker"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="min-h-[44px] w-full rounded-full border bg-white px-4 py-2 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{
-          borderColor: "#E5DDD0",
-          color: "#1F2937",
-          outlineColor: "#2563EB",
-        }}
-      >
-        {business.length > 0 ? (
-          <optgroup label="Business">
-            {business.map((c) => (
-              <option key={c.property.id} value={c.property.id}>
-                {c.property.address} — {c.property.city}, {c.property.state}{" "}
-                {c.property.zip ?? ""}
-              </option>
-            ))}
-          </optgroup>
-        ) : null}
-        {privateRefs.length > 0 ? (
-          <optgroup label="Private / Reference">
-            {privateRefs.map((c) => (
-              <option key={c.property.id} value={c.property.id}>
-                {c.property.address} (reference only)
-              </option>
-            ))}
-          </optgroup>
-        ) : null}
-      </select>
-    </div>
   );
 }
 

@@ -53,6 +53,13 @@ export function MarketHeader({
         </Link>
         <Link
           href={settingsHref}
+          title="Opens Data Source Settings where each provider has its own refresh button."
+          className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-[var(--market-border-strong)] bg-transparent px-3.5 py-2 text-sm font-medium text-[var(--market-text)] transition hover:border-[var(--market-cyan)] hover:bg-[var(--market-surface-raised)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]"
+        >
+          Refresh market data
+        </Link>
+        <Link
+          href={settingsHref}
           className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-[var(--market-border-strong)] bg-transparent px-3.5 py-2 text-sm font-medium text-[var(--market-text)] transition hover:border-[var(--market-cyan)] hover:bg-[var(--market-surface-raised)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]"
         >
           Data source settings

@@ -27,12 +27,17 @@ export function NeedsAttentionPanel({
       className="flex flex-col border border-[var(--market-border)] bg-[var(--market-surface)]"
     >
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--market-border)] px-4 py-3">
-        <h2
-          id="needs-attention-heading"
-          className="font-display text-base font-semibold text-[var(--market-text)]"
-        >
-          Needs Attention
-        </h2>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h2
+            id="needs-attention-heading"
+            className="font-display text-base font-semibold text-[var(--market-text)]"
+          >
+            Needs attention
+          </h2>
+          <p className="text-[11.5px] text-[var(--market-text-secondary)]">
+            Items that reduce confidence or need verification.
+          </p>
+        </div>
         <span className="text-[11px] text-[var(--market-text-muted)]">
           {groups.length === 0 ? "Clear" : `${groups.length} issues`}
         </span>

@@ -209,7 +209,7 @@ const TAB_LABELS: Record<TabId, string> = {
   chart: "Chart",
   comps: "Comps",
   records: "Records",
-  trend: "Area trend",
+  trend: "Area Trend",
 };
 
 // =============================================================
@@ -665,7 +665,7 @@ function ZillowMiniTrend({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <div className="text-[11px] uppercase tracking-wide text-[var(--market-text-muted)]">
-            Zillow ZHVI ZIP trend
+            Area home-value trend
           </div>
           <div className="mt-1 font-display text-sm font-semibold text-[var(--market-text)]">
             {hasZip ? `ZIP ${trend.zip}` : "ZIP not assigned"}
@@ -686,7 +686,7 @@ function ZillowMiniTrend({
         <ChangeChip label="5Y" value={trend.fiveYearChange} />
       </div>
       <p className="mt-2 text-[11px] text-[var(--market-text-muted)]">
-        Trend context only — not a property estimate.
+        ZIP-level trend only — not this property&rsquo;s estimate.
       </p>
     </div>
   );
@@ -999,14 +999,14 @@ function TrendPanel({ data }: { data: PropertyCardData }) {
       <div className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] p-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="font-display text-sm font-semibold text-[var(--market-text)]">
-            ZIP Home Value Trend
+            Area home-value trend
           </div>
           <div className="text-[11px] text-[var(--market-text-muted)]">
             {trend.latestDate ? `as of ${formatDate(trend.latestDate)}` : "no data"}
           </div>
         </div>
         <p className="mt-1 text-[11px] text-[var(--market-text-muted)]">
-          Area trend only — not this property&rsquo;s estimate.
+          ZIP-level trend only — not this property&rsquo;s estimate.
           {trend.zip ? ` ZIP ${trend.zip} home-value index.` : ""}
         </p>
         <div className="mt-3 font-data text-2xl font-semibold tabular-nums text-[var(--market-text)] [overflow-wrap:anywhere]">

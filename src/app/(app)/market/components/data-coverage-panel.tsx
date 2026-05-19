@@ -1,3 +1,9 @@
+import {
+  CANONICAL_LABEL,
+  canonicalStateColors,
+  fromCoverageStatus,
+} from "./source-status-display";
+
 export type CoverageStatus = "Connected" | "Missing" | "Planned" | "Optional";
 
 export type CoverageRow = {
@@ -81,25 +87,26 @@ export function DataCoveragePanel({
 }
 
 function CoverageBadge({ status }: { status: CoverageStatus }) {
-  const color =
-    status === "Connected"
-      ? "var(--semantic-success)"
-      : status === "Missing"
-      ? "var(--market-amber)"
-      : status === "Planned"
-      ? "var(--market-cyan)"
-      : "var(--market-text-muted)";
-
+  const state = fromCoverageStatus(status);
+  const colors = canonicalStateColors(state);
+  const label = CANONICAL_LABEL[state];
   return (
     <span
-      className="shrink-0 border px-1.5 py-0.5 text-[11px] font-semibold"
+      className="inline-flex shrink-0 items-center gap-1 border px-1.5 py-0.5 text-[11px] font-semibold"
       style={{
-        color,
-        borderColor: "var(--market-border)",
-        background: "var(--market-surface-raised)",
+        color: colors.fg,
+        borderColor: colors.border,
+        background: colors.bg,
       }}
+      title={status}
+      aria-label={`${label} (coverage state: ${status})`}
     >
-      {status}
+      <span
+        aria-hidden
+        className="inline-block h-1.5 w-1.5 rounded-full"
+        style={{ background: colors.dot }}
+      />
+      {label}
     </span>
   );
 }
