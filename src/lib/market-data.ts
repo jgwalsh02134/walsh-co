@@ -6,6 +6,8 @@
  * until a real data source is wired in. The UI shows em-dashes when null.
  */
 
+import { prisma } from "./prisma";
+
 export type AssetKind = "business" | "private";
 
 export type AssetRole =
@@ -102,6 +104,56 @@ export const trackedProperties: TrackedProperty[] = [
 /** Lookup by URL slug for the property detail route. */
 export function getPropertyBySlug(slug: string): TrackedProperty | null {
   return trackedProperties.find((p) => p.slug === slug) ?? null;
+}
+
+// =============================================================
+// Database-backed loader (light migration from hardcoded data)
+// =============================================================
+
+/**
+ * Loads tracked properties from the database.
+ * Falls back to the static list if the table is empty (first run / seed).
+ */
+export async function getTrackedProperties(): Promise<TrackedProperty[]> {
+  try {
+    const fromDb = await prisma.trackedProperty.findMany({
+      orderBy: { id: "asc" },
+    });
+
+    if (fromDb.length > 0) {
+      return fromDb.map(mapPrismaToTrackedProperty);
+    }
+  } catch {
+    // DB not available or table not yet populated — fall back to static
+  }
+
+  return trackedProperties;
+}
+
+export async function getPropertyBySlugFromDb(slug: string): Promise<TrackedProperty | null> {
+  try {
+    const p = await prisma.trackedProperty.findUnique({ where: { slug } });
+    return p ? mapPrismaToTrackedProperty(p) : null;
+  } catch {
+    return getPropertyBySlug(slug);
+  }
+}
+
+function mapPrismaToTrackedProperty(p: any): TrackedProperty {
+  return {
+    id: p.id,
+    slug: p.slug,
+    address: p.address,
+    city: p.city,
+    state: p.state,
+    zip: p.zip ?? null,
+    zipNeedsVerification: p.zipNeedsVerification,
+    factsNeedVerification: p.factsNeedVerification,
+    assetRole: p.assetRole as AssetRole,
+    kind: p.kind as AssetKind,
+    workspaceHref: p.workspaceHref ?? undefined,
+    notes: p.notes ?? undefined,
+  };
 }
 
 /** Confidence on a 0-100 scale, or null if unknown. */

@@ -15,6 +15,7 @@
  */
 
 import Link from "next/link";
+import { StatusBadge } from "@/components/status-badge";
 
 export type MarketHeaderProps = {
   hasManualEntries: boolean;
@@ -38,9 +39,7 @@ export function MarketHeader({
           House value, market rent, area trends, and AI research.
         </p>
         {!databaseAvailable ? (
-          <span className="mt-1 inline-flex w-fit border border-[var(--semantic-error-border)] bg-[var(--semantic-error-bg)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--semantic-error)]">
-            Database unavailable
-          </span>
+          <StatusBadge kind="error" label="Database unavailable" compact />
         ) : null}
       </div>
 

@@ -48,7 +48,7 @@ import {
   dash,
   formatCurrency,
   formatRent,
-  trackedProperties,
+  getTrackedProperties,
   type TrackedProperty,
 } from "@/lib/market-data";
 import {
@@ -601,10 +601,9 @@ function buildValuationSeries(
 // =============================================================
 
 export default async function MarketPage() {
-  const businessProperties = trackedProperties.filter(
-    (p) => p.kind === "business"
-  );
-  const privateProperty = trackedProperties.find((p) => p.kind === "private");
+  const allProperties = await getTrackedProperties();
+  const businessProperties = allProperties.filter((p) => p.kind === "business");
+  const privateProperty = allProperties.find((p) => p.kind === "private");
 
   // ---------- Load every data source in parallel ----------
   let manualEntries = new Map<string, MarketManualEntry>();
@@ -757,7 +756,7 @@ export default async function MarketPage() {
     }
   }
 
-  const geocodeRows: GeocodeRow[] = trackedProperties.map((p) => {
+  const geocodeRows: GeocodeRow[] = allProperties.map((p) => {
     const snap = latestGeocodeByProperty.get(p.id) ?? null;
     const raw = snap?.raw as
       | { normalized?: GoogleGeocodeNormalized | null }
@@ -783,7 +782,7 @@ export default async function MarketPage() {
 
   const trackedZips = Array.from(
     new Set(
-      trackedProperties
+      allProperties
         .map((p) => p.zip)
         .filter((z): z is string => typeof z === "string" && z.length > 0)
     )
@@ -1386,7 +1385,7 @@ export default async function MarketPage() {
 
   // ---------- Render ----------
   return (
-    <div className="market-shell -mx-4 -my-6 flex flex-col gap-5 px-3 py-4 sm:-mx-6 sm:-my-8 sm:px-5 sm:py-5 lg:-mx-8 lg:-my-10 lg:gap-6 lg:px-6 lg:py-6">
+    <div className="flex flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
       <MarketHeader
         hasManualEntries={manualEntries.size > 0}
         databaseAvailable={dbAvailable}
@@ -1429,7 +1428,7 @@ export default async function MarketPage() {
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {businessCards.map((d) => (
-            <PropertyCard key={d.property.id} data={d} />
+            <PropertyCard key={d.property.id} data={d} xaiAvailable={xaiKeyConfigured} />
           ))}
         </div>
 
@@ -1444,7 +1443,7 @@ export default async function MarketPage() {
                 KPIs and AI portfolio analysis. Shown as reference context only.
               </p>
             </div>
-            <PropertyCard data={privateCard} />
+            <PropertyCard data={privateCard} xaiAvailable={xaiKeyConfigured} />
           </div>
         ) : null}
       </section>

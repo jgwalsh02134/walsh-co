@@ -339,6 +339,74 @@ async function main() {
     console.log(`  +  created: ${data.displayName}`);
   }
   console.log(`Done. ${seedContacts.length} sample contact(s) processed.`);
+
+  // --- Tracked Properties (light seed) ---
+  console.log("Seeding tracked properties (idempotent)…");
+
+  const seedProperties = [
+    {
+      id: "loudonwood-51",
+      slug: "51-loudonwood",
+      address: "51 Loudonwood E",
+      city: "Loudonville",
+      state: "NY",
+      zip: "12211",
+      zipNeedsVerification: false,
+      factsNeedVerification: false,
+      assetRole: "Active_Rental" as const,
+      kind: "business" as const,
+      notes: "Active rental asset.",
+    },
+    {
+      id: "momrow-16",
+      slug: "16-momrow",
+      address: "16 Momrow Ct",
+      city: "Menands",
+      state: "NY",
+      zip: "12204",
+      zipNeedsVerification: false,
+      factsNeedVerification: false,
+      assetRole: "Active_Rental" as const,
+      kind: "business" as const,
+      notes: "Active rental asset.",
+    },
+    {
+      id: "osborne-322",
+      slug: "322-osborne",
+      address: "322 Osborne Rd",
+      city: "Loudonville",
+      state: "NY",
+      zip: "12211",
+      zipNeedsVerification: false,
+      factsNeedVerification: true,
+      assetRole: "Active_Renovation_Project" as const,
+      kind: "business" as const,
+      workspaceHref: "/renovation",
+      notes: "Renovation in bidding & procurement. Address records pending official-source verification.",
+    },
+    {
+      id: "macaffer-14",
+      slug: "14-macaffer",
+      address: "14 MacAffer Dr",
+      city: "Menands",
+      state: "NY",
+      zip: "12204",
+      zipNeedsVerification: false,
+      factsNeedVerification: true,
+      assetRole: "Private_Reference_Only" as const,
+      kind: "private" as const,
+      notes: "Held outside the business structure. Excluded from business portfolio KPIs. Displayed facts are reference-only until separately confirmed.",
+    },
+  ];
+
+  for (const p of seedProperties) {
+    await prisma.trackedProperty.upsert({
+      where: { id: p.id },
+      update: p,
+      create: p,
+    });
+  }
+  console.log(`Done. ${seedProperties.length} tracked properties seeded.`);
 }
 
 main()

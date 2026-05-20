@@ -1,8 +1,5 @@
-import {
-  CANONICAL_LABEL,
-  canonicalStateColors,
-  fromCoverageStatus,
-} from "./source-status-display";
+import { StatusBadge, type StatusKind } from "@/components/status-badge";
+import { CANONICAL_LABEL, fromCoverageStatus } from "./source-status-display";
 
 export type CoverageStatus = "Connected" | "Missing" | "Planned" | "Optional";
 
@@ -88,25 +85,14 @@ export function DataCoveragePanel({
 
 function CoverageBadge({ status }: { status: CoverageStatus }) {
   const state = fromCoverageStatus(status);
-  const colors = canonicalStateColors(state);
   const label = CANONICAL_LABEL[state];
+
   return (
-    <span
-      className="inline-flex shrink-0 items-center gap-1 border px-1.5 py-0.5 text-[11px] font-semibold"
-      style={{
-        color: colors.fg,
-        borderColor: colors.border,
-        background: colors.bg,
-      }}
-      title={status}
-      aria-label={`${label} (coverage state: ${status})`}
-    >
-      <span
-        aria-hidden
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{ background: colors.dot }}
-      />
-      {label}
-    </span>
+    <StatusBadge
+      kind={state as StatusKind}
+      label={label}
+      showIcon
+      compact
+    />
   );
 }

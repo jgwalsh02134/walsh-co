@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { AppShell } from "@/components/app-shell";
+import { AppLayoutClient } from "./app-layout-client";
 
 export default function AppGroupLayout({ children }: { children: ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+  return <AppLayoutClient>{children}</AppLayoutClient>;
 }

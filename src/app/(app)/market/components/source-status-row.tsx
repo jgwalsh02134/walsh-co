@@ -11,6 +11,7 @@
  */
 
 import Link from "next/link";
+import { StatusBadge, type StatusKind } from "@/components/status-badge";
 import {
   CANONICAL_LABEL,
   canonicalStateColors,
@@ -61,23 +62,21 @@ function SourceChip({ label, kind }: SourceStatus) {
   const state: CanonicalSourceState = fromSourceStatusRowKind(kind);
   const colors = canonicalStateColors(state);
   const stateLabel = CANONICAL_LABEL[state];
+
   return (
     <span
       className="inline-flex items-center gap-1.5 text-[12px]"
       aria-label={`${label}: ${stateLabel}`}
     >
-      <span
-        aria-hidden
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{ background: colors.dot }}
-      />
       <span className="text-[var(--market-text)]">{label}</span>
       <span className="text-[var(--market-text-muted)]" aria-hidden>
         ·
       </span>
-      <span style={{ color: colors.fg }} className="font-semibold">
-        {stateLabel}
-      </span>
+      <StatusBadge
+        kind={state as StatusKind}
+        label={stateLabel}
+        compact
+      />
     </span>
   );
 }

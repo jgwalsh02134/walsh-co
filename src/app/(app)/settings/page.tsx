@@ -27,6 +27,7 @@ import { hasZillowZhviUrl } from "@/lib/zillow-research";
 import { GmailIntegrationCard } from "./gmail-integration-card";
 import { IntegrationRow } from "./integration-row";
 import { OpenAITestPanel } from "./openai-test-panel";
+import { XaiTestPanel } from "./xai-test-panel";
 
 const ICON = {
   cloudflare: "/icons/workspace/cloudflare-icon.svg",
@@ -265,7 +266,9 @@ export default async function SettingsPage() {
               )
             }
             status={xaiConfigured ? "configured" : "not_configured"}
-          />
+          >
+            <XaiTestPanel configured={xaiConfigured} />
+          </IntegrationRow>
         </div>
       </SectionPanel>
 

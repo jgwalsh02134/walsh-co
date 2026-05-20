@@ -1,16 +1,20 @@
 "use server";
 
 import {
+  getAiProvider,
+  hasAiKey,
+  type AiProviderName,
+} from "@/lib/ai";
+
+// Re-export the old names for any external callers that still use them directly.
+// They delegate to the unified layer under the hood.
+export {
   generateWorkspaceText,
   generateWorkspaceTextWithWebSearch,
-  hasOpenAIKey,
-} from "@/lib/openai";
-import {
   generateXaiMarketText,
   generateXaiMarketTextWithWebSearch,
   generateXaiPropertyResearch,
-  hasXaiKey,
-} from "@/lib/xai";
+} from "@/lib/ai";
 
 // =============================================================
 // Public types
@@ -63,7 +67,7 @@ export type AiSource = {
 
 export type MarketNoteMode = "internal" | "web" | "property";
 
-export type AiProvider = "openai" | "xai";
+export type AiProvider = AiProviderName; // re-exported type from unified layer
 
 export type MarketNoteState = {
   ok: boolean;
@@ -82,7 +86,7 @@ export type MarketNoteState = {
 
 /** Server-side check used by the page to gate the Grok provider option. */
 export async function isXaiProviderAvailable(): Promise<boolean> {
-  return hasXaiKey();
+  return hasAiKey("xai");
 }
 
 // =============================================================
@@ -434,21 +438,15 @@ function providerLabelFor(provider: AiProvider): "OpenAI" | "Grok" {
 }
 
 function providerKeyMissing(provider: AiProvider): string | null {
-  if (provider === "xai") {
-    return hasXaiKey() ? null : "xAI API key not configured.";
-  }
-  return hasOpenAIKey() ? null : "OpenAI API key not configured.";
+  return hasAiKey(provider) ? null : `${providerLabelFor(provider)} API key not configured.`;
 }
 
 async function runInternal(
   provider: AiProvider,
   prompt: string
 ): Promise<InternalResult> {
-  if (provider === "xai") {
-    const result = await generateXaiMarketText({ prompt });
-    return { outputText: result.outputText };
-  }
-  const result = await generateWorkspaceText({ prompt });
+  const p = getAiProvider(provider);
+  const result = await p.generateText({ prompt });
   return { outputText: result.outputText };
 }
 
@@ -457,17 +455,10 @@ async function runWebSearch(
   prompt: string,
   context: WebSearchContext = "market"
 ): Promise<WebSearchResult> {
-  if (provider === "xai") {
-    const result =
-      context === "property"
-        ? await generateXaiPropertyResearch({ prompt })
-        : await generateXaiMarketTextWithWebSearch({ prompt });
-    return {
-      outputText: result.outputText,
-      sources: result.sources,
-    };
-  }
-  const result = await generateWorkspaceTextWithWebSearch({ prompt });
+  const p = getAiProvider(provider);
+  // Both "market" and "property" web research use the same web_search tool.
+  // The old xai-specific alias existed only for naming; behavior is identical.
+  const result = await p.generateWithWebSearch({ prompt });
   return { outputText: result.outputText, sources: result.sources };
 }
 

@@ -33,6 +33,7 @@ import {
   type MarketNoteState,
 } from "../market-note-actions";
 import { AiResponseCard } from "./ai-response-card";
+import { AiProviderSegmented } from "@/components/ai-provider-segmented";
 
 type Mode = "internal" | "web";
 
@@ -139,10 +140,12 @@ export function AiMarketAnalysisPanel({
       </header>
 
       <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
-        <ProviderSegmented
+        <AiProviderSegmented
           provider={provider}
           onChange={setProvider}
           xaiAvailable={xaiAvailable}
+          lightTheme
+          label="AI provider"
         />
 
         <ModeSegmented mode={mode} onChange={setMode} />
@@ -195,114 +198,8 @@ export function AiMarketAnalysisPanel({
 // Provider segmented control (OpenAI / Grok)
 // =============================================================
 
-function ProviderSegmented({
-  provider,
-  onChange,
-  xaiAvailable,
-}: {
-  provider: AiProvider;
-  onChange: (p: AiProvider) => void;
-  xaiAvailable: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span
-        className="text-[11px] font-semibold uppercase tracking-wider"
-        style={{ color: "#6B7280" }}
-      >
-        AI provider
-      </span>
-      <div
-        role="tablist"
-        aria-label="AI provider"
-        className="inline-flex w-full max-w-full overflow-x-auto rounded-full border p-1"
-        style={{ background: "#FFFFFF", borderColor: "#E5DDD0" }}
-      >
-        <ProviderButton
-          active={provider === "openai"}
-          onClick={() => onChange("openai")}
-          label="OpenAI"
-          icon={
-            <ProviderIcon
-              src={
-                provider === "openai"
-                  ? "/icons/workspace/openai-icon-white.svg"
-                  : "/icons/workspace/openai-icon-black.svg"
-              }
-            />
-          }
-        />
-        <ProviderButton
-          active={provider === "xai"}
-          onClick={() => xaiAvailable && onChange("xai")}
-          label="Grok"
-          icon={
-            <ProviderIcon
-              src={
-                provider === "xai"
-                  ? "/icons/workspace/xai-icon-white.svg"
-                  : "/icons/workspace/xai-icon-black.svg"
-              }
-            />
-          }
-          disabled={!xaiAvailable}
-          tooltip={xaiAvailable ? undefined : "xAI API key not configured."}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ProviderIcon({ src }: { src: string }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" width={14} height={14} />
-    </span>
-  );
-}
-
-function ProviderButton({
-  active,
-  onClick,
-  label,
-  icon,
-  disabled,
-  tooltip,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  icon?: React.ReactNode;
-  disabled?: boolean;
-  tooltip?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      disabled={disabled}
-      title={tooltip}
-      onClick={onClick}
-      className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-      style={{
-        background: active ? "#1F2937" : "transparent",
-        color: active ? "#FBF8F3" : "#475569",
-        outlineColor: "#2563EB",
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
 // =============================================================
-// Mode segmented control
+// Mode segmented control (kept local because it is specific to the portfolio AI panel)
 // =============================================================
 
 function ModeSegmented({

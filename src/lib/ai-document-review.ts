@@ -13,10 +13,10 @@
  */
 
 import {
-  generateWorkspaceJsonObject,
-  hasOpenAIKey,
-} from "@/lib/openai";
-import { generateXaiMarketText, hasXaiKey } from "@/lib/xai";
+  getAiProvider,
+  hasAiKey,
+  type AiProviderName,
+} from "@/lib/ai";
 
 if (typeof window !== "undefined") {
   throw new Error(
@@ -66,12 +66,12 @@ export type AiReviewResult =
 export function isAiReviewProviderConfigured(
   provider: AiReviewProvider
 ): boolean {
-  return provider === "openai" ? hasOpenAIKey() : hasXaiKey();
+  return hasAiKey(provider as AiProviderName);
 }
 
 export function defaultAiReviewProvider(): AiReviewProvider | null {
-  if (hasOpenAIKey()) return "openai";
-  if (hasXaiKey()) return "xai";
+  if (hasAiKey("openai")) return "openai";
+  if (hasAiKey("xai")) return "xai";
   return null;
 }
 
@@ -309,20 +309,21 @@ export async function reviewExtractedText(
 
   let raw: string;
   try {
-    if (provider === "openai") {
-      // JSON mode enforces a single JSON object response server-side at
-      // OpenAI, which prevents the markdown/code-fence wrapping that
-      // tripped the old text-mode parser.
-      const r = await generateWorkspaceJsonObject(
+    const p = getAiProvider(provider as AiProviderName);
+
+    if (p.generateJsonObject) {
+      // Preferred path: structured JSON mode when the provider supports it
+      // (currently OpenAI). This gives the strongest guarantee against
+      // markdown wrappers and truncation.
+      const r = await p.generateJsonObject(
         { prompt, instructions: REVIEW_INSTRUCTIONS },
         { maxOutputTokens: 4000 }
       );
       raw = r.outputText;
     } else {
-      // xAI is OpenAI-compatible but we don't depend on its JSON-mode
-      // support; keep it as text generation guarded by the prompt
-      // instructions and the tolerant parser below.
-      const r = await generateXaiMarketText({
+      // Fallback for providers without first-class JSON mode (xAI today):
+      // plain text + the existing tolerant JSON parser.
+      const r = await p.generateText({
         prompt,
         instructions: REVIEW_INSTRUCTIONS,
       });

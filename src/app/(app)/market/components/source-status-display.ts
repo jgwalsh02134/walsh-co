@@ -105,3 +105,16 @@ export function fromCoverageStatus(
       return "off";
   }
 }
+
+/**
+ * Convenience helper so panels can easily get the props needed for <StatusBadge>.
+ */
+export function getStatusBadgeProps(state: CanonicalSourceState): {
+  kind: import("@/components/status-badge").StatusKind;
+  label: string;
+} {
+  return {
+    kind: state,
+    label: CANONICAL_LABEL[state],
+  };
+}

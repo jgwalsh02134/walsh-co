@@ -24,6 +24,8 @@ import {
   generatePropertyAnalysisWithWebSearch,
   type MarketNoteState,
 } from "../market-note-actions";
+import { AiProviderSegmented } from "@/components/ai-provider-segmented";
+import { StatusBadge } from "@/components/status-badge";
 import { buildPropertyNoteInput } from "../property-note-builder";
 import {
   PropertyValuationChart,
@@ -219,9 +221,13 @@ const TAB_LABELS: Record<TabId, string> = {
 export function PropertyCard({
   data,
   defaultTab = "overview",
+  xaiAvailable = false,
 }: {
   data: PropertyCardData;
   defaultTab?: TabId;
+  /** Whether the xAI/Grok provider is configured server-side (controls whether
+   *  the per-property AI panel offers a provider choice). */
+  xaiAvailable?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
   const titleId = useId();
@@ -237,11 +243,6 @@ export function PropertyCard({
       .pop() ?? null;
 
   const stale = isStaleIso(lastRefreshedIso, 30);
-  const verificationLabel = verification.verifiedByAttom
-    ? "Public record matched"
-    : property.factsNeedVerification || property.zipNeedsVerification
-    ? "Records pending"
-    : "Manual notes";
 
   return (
     <article
@@ -316,22 +317,24 @@ export function PropertyCard({
               {lastRefreshedIso ? relativeAge(lastRefreshedIso) : "no snapshot"}
               {stale ? " · stale" : ""}
             </span>
-            <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+            <StatusBadge
+              kind={
                 verification.verifiedByAttom
-                  ? "border-[var(--market-border-strong)] bg-[var(--market-surface-raised)] text-[var(--market-text-secondary)]"
+                  ? "live"
                   : property.factsNeedVerification || property.zipNeedsVerification
-                  ? "border-[var(--market-amber)] bg-transparent text-[var(--market-amber)]"
-                  : "border-[var(--market-border)] bg-transparent text-[var(--market-text-secondary)]"
-              }`}
-              title={
-                verification.verifiedByAttom
-                  ? "Record source: ATTOM"
-                  : undefined
+                  ? "pending"
+                  : "off"
               }
-            >
-              {verificationLabel}
-            </span>
+              label={
+                verification.verifiedByAttom
+                  ? "Verified"
+                  : property.factsNeedVerification || property.zipNeedsVerification
+                  ? "Pending"
+                  : "Manual"
+              }
+              showIcon
+              compact
+            />
           </div>
         </div>
 
@@ -352,7 +355,7 @@ export function PropertyCard({
         {activeTab === "trend" ? <TrendPanel data={data} /> : null}
       </div>
 
-      <PropertyAiPanel data={data} />
+      <PropertyAiPanel data={data} xaiAvailable={xaiAvailable} />
     </article>
   );
 }
@@ -1070,7 +1073,14 @@ function ProjectionCell({
 // Per-property AI panel
 // =============================================================
 
-function PropertyAiPanel({ data }: { data: PropertyCardData }) {
+function PropertyAiPanel({
+  data,
+  xaiAvailable = false,
+}: {
+  data: PropertyCardData;
+  xaiAvailable?: boolean;
+}) {
+  const [provider, setProvider] = useState<"openai" | "xai">("openai");
   const [state, setState] = useState<MarketNoteState | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -1079,8 +1089,8 @@ function PropertyAiPanel({ data }: { data: PropertyCardData }) {
     const input = buildPropertyNoteInput(data);
     startTransition(async () => {
       const result = webSearch
-        ? await generatePropertyAnalysisWithWebSearch(input)
-        : await generatePropertyAnalysis(input);
+        ? await generatePropertyAnalysisWithWebSearch(input, provider)
+        : await generatePropertyAnalysis(input, provider);
       setState(result);
     });
   };
@@ -1096,6 +1106,19 @@ function PropertyAiPanel({ data }: { data: PropertyCardData }) {
             Server-side draft from the data already loaded above.
           </div>
         </div>
+
+        {xaiAvailable ? (
+          <div className="w-full max-w-[200px] sm:max-w-[220px]">
+            <AiProviderSegmented
+              provider={provider}
+              onChange={setProvider}
+              xaiAvailable={xaiAvailable}
+              size="compact"
+              label=""
+            />
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2">
           <button
             type="button"

@@ -6,9 +6,9 @@
  */
 
 import type { MarketSource, SourceStatus } from "@/lib/market-sources";
+import { StatusBadge, type StatusKind } from "@/components/status-badge";
 import {
   CANONICAL_LABEL,
-  canonicalStateColors,
   fromRegistryStatus,
 } from "./source-status-display";
 
@@ -77,25 +77,14 @@ export function SourceDiagnosticsPanel({
 
 function StatusPill({ status }: { status: SourceStatus }) {
   const state = fromRegistryStatus(status);
-  const colors = canonicalStateColors(state);
   const label = CANONICAL_LABEL[state];
+
   return (
-    <span
-      className="inline-flex items-center gap-1 justify-self-start border px-1.5 py-0.5 text-[11px] font-semibold sm:justify-self-end"
-      style={{
-        color: colors.fg,
-        background: colors.bg,
-        borderColor: colors.border,
-      }}
-      title={status}
-      aria-label={`${label} (raw provider state: ${status})`}
-    >
-      <span
-        aria-hidden
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{ background: colors.dot }}
-      />
-      {label}
-    </span>
+    <StatusBadge
+      kind={state as StatusKind}
+      label={label}
+      showIcon
+      compact
+    />
   );
 }
