@@ -60,9 +60,10 @@
 
   /* ========================================================================
      2. Market Tracker — Dark Palette (used inside .market-shell only).
-     Institutional finance feel.
+     Institutional finance / Bloomberg Terminal feel.
+     Aligned with the Real Estate Investment Workspace Color System spec.
      ====================================================================== */
-  --market-bg: #080A0D;
+  --market-bg: #0A0A0A;           /* Ultra-dark, per spec */
   --market-surface: #10141A;
   --market-surface-raised: #171D25;
   --market-surface-hover: #1F2732;
@@ -72,7 +73,7 @@
   --market-text-secondary: #AAB4C0;
   --market-text-muted: #6F7B89;
   --market-amber: #F5A623;
-  --market-cyan: #22C7D9;
+  --market-cyan: #06B6D4;         /* Neon cyan accent per spec */
   --market-blue: #4B8DFF;
   --market-purple: #8B5CF6;
 
@@ -123,7 +124,7 @@
   --status-premium: #7C3AED;
   --status-premium-dark: #A78BFA;
 
-  /* Market movement (price up/down/flat). */
+  /* Market movement (price up/down/flat) — Strict binary for directional signals only (Bloomberg style) */
   --market-positive: #16A34A;
   --market-negative: #DC2626;
   --market-flat: #737373;

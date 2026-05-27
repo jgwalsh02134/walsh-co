@@ -14,7 +14,17 @@ export type NeedsAttentionGroup = {
   properties: string[];
   /** Severity hint for color band. */
   severity: "info" | "warning" | "error";
+  /** AI-generated research suggestions (for missing data issues) */
+  aiSuggestions?: Array<{
+    property: string;
+    suggestion: string;
+    source?: string;
+    confidence?: string;
+  }>;
 };
+
+import Link from "next/link";
+import { StatusBadge } from "@/components/status-badge";
 
 export function NeedsAttentionPanel({
   groups,
@@ -26,54 +36,95 @@ export function NeedsAttentionPanel({
       aria-labelledby="needs-attention-heading"
       className="flex flex-col border border-[var(--market-border)] bg-[var(--market-surface)]"
     >
-      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--market-border)] px-4 py-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
+      <header className="flex items-center justify-between border-b border-[var(--market-border)] px-3 py-1.5">
+        <div className="flex items-baseline gap-2">
           <h2
             id="needs-attention-heading"
-            className="font-display text-base font-semibold text-[var(--market-text)]"
+            className="font-display text-sm font-semibold text-[var(--market-text)]"
           >
             Needs attention
           </h2>
-          <p className="text-[11.5px] text-[var(--market-text-secondary)]">
-            Items that reduce confidence or need verification.
+          <p className="text-[11px] text-[var(--market-text-secondary)]">
+            Items that reduce confidence or need verification
           </p>
         </div>
-        <span className="text-[11px] text-[var(--market-text-muted)]">
-          {groups.length === 0 ? "Clear" : `${groups.length} issues`}
-        </span>
+        {groups.length > 0 && (
+          <StatusBadge
+            kind="pending"
+            label={`${groups.length} issues`}
+            showIcon={false}
+            compact
+          />
+        )}
       </header>
 
       {groups.length === 0 ? (
-        <p className="px-4 py-3 text-sm text-[var(--market-text-secondary)]">
-          No critical market-data flags right now.
+        <p className="px-4 py-4 text-sm text-[var(--market-text-secondary)]">
+          All key data points are captured. Good.
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-[var(--market-border)]">
+        <ul className="flex flex-col divide-y divide-[var(--market-border)] text-sm">
           {groups.map((g, i) => (
-            <li key={`${g.issue}-${i}`} className="flex gap-3 px-4 py-3">
-              <span
-                aria-hidden
-                className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full"
-                style={{ background: severityColor(g.severity) }}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="font-display text-sm font-semibold text-[var(--market-text)]">
-                  {g.issue}
-                </div>
-                {g.detail ? (
-                  <div className="mt-0.5 text-xs text-[var(--market-text-secondary)]">
-                    {g.detail}
+            <li key={`${g.issue}-${i}`} className="px-3 py-3">
+              <div className="flex items-start gap-3">
+                <StatusBadge
+                  kind={g.severity === "error" ? "off" : g.severity === "warning" ? "pending" : "planned"}
+                  showIcon
+                  compact
+                />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div>
+                    <div className="font-medium text-[var(--market-text)]">{g.issue}</div>
+                    {g.detail && (
+                      <div className="text-xs text-[var(--market-text-secondary)]">{g.detail}</div>
+                    )}
                   </div>
-                ) : null}
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {g.properties.map((p) => (
-                    <span
-                      key={p}
-                      className="border border-[var(--market-border)] bg-[var(--market-surface-raised)] px-1.5 py-0.5 text-[11px] text-[var(--market-text)]"
-                    >
-                      {p}
-                    </span>
-                  ))}
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {g.properties.map((p) => (
+                      <Link
+                        key={p}
+                        href="/market/manual"
+                        className="rounded border border-[var(--market-border)] bg-[var(--market-surface-raised)] px-2 py-0.5 text-[11px] text-[var(--market-text)] hover:border-[var(--market-cyan)] hover:text-[var(--market-cyan)] transition-colors"
+                        title={`Edit manual data for ${p}`}
+                      >
+                        {p}
+                      </Link>
+                    ))}
+                  </div>
+
+                  <Link
+                    href="/market/manual"
+                    className="inline-block text-[12px] font-medium text-[var(--market-cyan)] hover:underline"
+                  >
+                    Edit manual data →
+                  </Link>
+
+                  {g.aiSuggestions && g.aiSuggestions.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-[var(--market-border)] bg-[var(--market-surface)] p-3 text-xs">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold text-[var(--market-cyan)]">AI Research Suggestions</div>
+                          <div className="text-[10px] text-[var(--market-text-muted)]">(auto-generated)</div>
+                        </div>
+                      </div>
+                      {g.aiSuggestions.map((s, idx) => (
+                        <div key={idx} className="mb-3 border-l-2 border-[var(--market-cyan)] pl-2">
+                          <div className="font-medium text-[var(--market-text)]">{s.property}</div>
+                          <div className="text-[var(--market-text-secondary)] mt-0.5">{s.suggestion}</div>
+                          {s.source && (
+                            <div className="mt-1 text-[10px] text-[var(--market-text-muted)]">Source: {s.source}</div>
+                          )}
+                          <Link
+                            href={`/market/manual?property=${encodeURIComponent(s.property)}&aiNote=${encodeURIComponent(s.suggestion)}`}
+                            className="mt-2 inline-flex items-center gap-1 rounded-md border border-[var(--market-cyan)] bg-[var(--market-surface-raised)] px-2 py-1 text-[11px] font-medium text-[var(--market-cyan)] hover:bg-[var(--market-cyan)] hover:text-white transition-colors"
+                          >
+                            Use this suggestion →
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </li>

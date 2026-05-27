@@ -65,13 +65,16 @@ function toDate(d: string | Date): Date {
   return d instanceof Date ? d : new Date(d);
 }
 
-/** Abbreviated currency for axis ticks: $500k, $1.2M, $250k. */
+/** Abbreviated currency for axis ticks — consistent with main formatCurrency style. */
 function formatCurrencyShort(v: number): string {
   if (!Number.isFinite(v)) return "—";
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `$${Math.round(v / 1_000)}k`;
-  return `$${Math.round(v)}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 1,
+    notation: "compact",
+    compactDisplay: "short",
+  }).format(v);
 }
 
 function formatCurrencyFull(v: number | null | undefined): string {
@@ -334,7 +337,8 @@ export function PropertyValuationChart({
 
             <CartesianGrid
               stroke="var(--market-border)"
-              strokeDasharray="2 4"
+              strokeDasharray="1 3"
+              strokeOpacity={0.5}
               vertical={false}
               opacity={0.6}
             />

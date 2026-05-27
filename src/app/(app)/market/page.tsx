@@ -37,6 +37,7 @@ import {
   hasGoogleMapsServerKey,
 } from "@/lib/google-maps";
 import { hasXaiKey } from "@/lib/xai";
+import { getAiProvider } from "@/lib/ai";
 import {
   FRED_SERIES,
   FRED_SERIES_LABELS,
@@ -87,6 +88,7 @@ import {
   type MacroSeriesObservation,
 } from "./components/macro-context-panel";
 import { MarketHeader } from "./components/market-header";
+import { MarketCommandTrigger } from "./components/market-command-trigger";
 import {
   NeedsAttentionPanel,
   type NeedsAttentionGroup,
@@ -1061,7 +1063,9 @@ export default async function MarketPage() {
   const privateAnalysis = privateProperty ? analyze(privateProperty) : null;
 
   // ---------- Serialize for client cards ----------
-  const toCardData = (a: PropertyAnalysis, isPrivate: boolean): PropertyCardData => ({
+  const toCardData = (a: PropertyAnalysis, isPrivate: boolean): PropertyCardData => {
+    const manualEntry = manualEntries.get(a.property.id);
+    return {
     property: {
       id: a.property.id,
       address: a.property.address,
@@ -1137,7 +1141,11 @@ export default async function MarketPage() {
       })
       .filter((p): p is SerializableValuationPoint => p != null),
     attentionItems: a.issues.map((id) => ISSUE_LABEL[id]),
-  });
+    purchaseBasis: manualEntry ? decimalToNumber(manualEntry.purchaseBasis) : null,
+    assessedValue: a.attomFacts?.assessedValue ?? (manualEntry ? decimalToNumber(manualEntry.assessedValue) : null),
+    annualTaxes: a.attomFacts?.annualTaxes ?? (manualEntry ? decimalToNumber(manualEntry.annualTaxes) : null),
+  };
+};
 
   const businessCards = businessAnalyses.map((a) => toCardData(a, false));
   const privateCard = privateAnalysis
@@ -1214,6 +1222,44 @@ export default async function MarketPage() {
       if (t !== 0) return t;
       return b.properties.length - a.properties.length;
     });
+
+  // ---------- Automatic AI Research for missing critical data ----------
+  // Runs in the background during page render for missing_acquisition_basis and missing_tax_data
+  const aiProvider = getAiProvider("openai"); // Prefer OpenAI for research quality
+
+  for (const group of attentionGroups) {
+    if (group.issue === "Acquisition basis missing" || group.issue === "Tax/assessment missing") {
+      const researchPromises = group.properties.map(async (address) => {
+        const prompt =
+          group.issue === "Acquisition basis missing"
+            ? `Find the most recent known purchase price, acquisition cost, or sale price for the property at "${address}, Loudonville or Menands, NY". Look for public deed records, property transfer history, or real estate archives. Return the price and year if found.`
+            : `Find the most recent assessed value and annual property tax amount for the property at "${address}" in Loudonville or Menands, NY. Check public tax assessor records or similar sources. Return the numbers and year if available.`;
+
+        try {
+          const result = await aiProvider.generateWithWebSearch({
+            prompt,
+            instructions:
+              "You are a research assistant for a real estate investor. Be precise. Only report information you can source from public records. If nothing reliable is found, say so clearly.",
+          });
+
+          return {
+            property: address,
+            suggestion: result.outputText,
+            source: result.sources?.[0] || "Web research",
+          };
+        } catch (e) {
+          return {
+            property: address,
+            suggestion: "AI research failed. Try manual lookup or the global AI assistant.",
+            source: "Error",
+          };
+        }
+      });
+
+      const suggestions = await Promise.all(researchPromises);
+      group.aiSuggestions = suggestions;
+    }
+  }
 
   // ---------- AI portfolio note input ----------
   const marketNoteInput: MarketNoteInput = {
@@ -1385,7 +1431,7 @@ export default async function MarketPage() {
 
   // ---------- Render ----------
   return (
-    <div className="flex flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+    <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 sm:py-3 lg:px-8 lg:py-5">
       <MarketHeader
         hasManualEntries={manualEntries.size > 0}
         databaseAvailable={dbAvailable}
@@ -1411,22 +1457,21 @@ export default async function MarketPage() {
         freshnessSub="Latest provider snapshot"
       />
 
-      <SourceStatusRow sources={sourceStatuses} />
-
       <NeedsAttentionPanel groups={attentionGroups} />
 
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="font-display text-lg font-semibold text-[var(--market-text)]">
+      <SourceStatusRow sources={sourceStatuses} />
+
+      <section className="flex flex-col gap-2">
+        <div>
+          <h2 className="font-display text-sm font-semibold text-[var(--market-text)]">
             Property comparison
           </h2>
-          <p className="text-xs text-[var(--market-text-secondary)]">
-            House market value, market rent, area trend, and public-record
-            verification — kept on separate pipelines per property.
+          <p className="text-[10px] text-[var(--market-text-secondary)]">
+            Market value, rent, trends &amp; verification
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {businessCards.map((d) => (
             <PropertyCard key={d.property.id} data={d} xaiAvailable={xaiKeyConfigured} />
           ))}
@@ -1492,6 +1537,8 @@ export default async function MarketPage() {
         diagnosticsSources={dynamicSources}
         diagnosticsCounts={counts}
       />
+
+      <MarketCommandTrigger />
     </div>
   );
 }

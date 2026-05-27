@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 type SearchParams = {
   propertyId?: string;
   saved?: string;
+  aiNote?: string;
 };
 
 export default async function ManualMarketPage({
@@ -27,6 +28,7 @@ export default async function ManualMarketPage({
   const requestedId = sp.propertyId ?? null;
   const property = requestedId ? getManualProperty(requestedId) : null;
   const saved = sp.saved === "1";
+  const aiNote = sp.aiNote ?? null;
 
   let dbAvailable = true;
   let entries: MarketManualEntry[] = [];
@@ -90,6 +92,7 @@ export default async function ManualMarketPage({
             property={property}
             initial={entry}
             saved={saved}
+            aiNote={aiNote}
           />
         </SectionPanel>
       ) : (

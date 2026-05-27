@@ -35,14 +35,27 @@ function dateInputValue(d: Date | null | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
+function extractFirstNumber(text: string): number | null {
+  const match = text.match(/\$?([\d,.]+)([kKmM])?/);
+  if (!match) return null;
+  let num = parseFloat(match[1].replace(/,/g, ""));
+  if (match[2]) {
+    if (match[2].toLowerCase() === "k") num *= 1000;
+    if (match[2].toLowerCase() === "m") num *= 1_000_000;
+  }
+  return Number.isFinite(num) ? Math.round(num) : null;
+}
+
 export function ManualEntryForm({
   property,
   initial,
   saved,
+  aiNote,
 }: {
   property: ManualProperty;
   initial: MarketManualEntry | null;
   saved: boolean;
+  aiNote?: string | null;
 }) {
   const [state, action, pending] = useActionState<ManualSaveState | null, FormData>(
     saveManualEntry,
@@ -68,6 +81,48 @@ export function ManualEntryForm({
           Saved.
         </div>
       ) : null}
+
+      {aiNote && (
+        <div className="rounded-[var(--radius-md)] border border-[var(--market-cyan)] bg-[var(--market-surface)] p-3 text-sm">
+          <div className="font-semibold text-[var(--market-cyan)] mb-1">AI Research Suggestion</div>
+          <p className="text-[var(--market-text-secondary)] mb-2">{aiNote}</p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const num = extractFirstNumber(aiNote);
+                if (num) {
+                  // Set value on the purchaseBasis input if it exists
+                  const input = document.querySelector('input[name="purchaseBasis"]') as HTMLInputElement;
+                  if (input) input.value = num.toString();
+                }
+                navigator.clipboard.writeText(aiNote);
+              }}
+              className="text-xs font-medium px-2 py-1 rounded border border-[var(--market-cyan)] text-[var(--market-cyan)] hover:bg-[var(--market-cyan)] hover:text-white transition"
+            >
+              Apply to Purchase Basis + Copy
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const num = extractFirstNumber(aiNote);
+                if (num) {
+                  const assessed = document.querySelector('input[name="assessedValue"]') as HTMLInputElement;
+                  const taxes = document.querySelector('input[name="annualTaxes"]') as HTMLInputElement;
+                  if (assessed) assessed.value = num.toString();
+                  if (taxes) taxes.value = Math.round(num * 0.012).toString(); // rough 1.2% tax guess
+                }
+                navigator.clipboard.writeText(aiNote);
+              }}
+              className="text-xs font-medium px-2 py-1 rounded border border-[var(--market-cyan)] text-[var(--market-cyan)] hover:bg-[var(--market-cyan)] hover:text-white transition"
+            >
+              Apply to Tax/Assessment + Copy
+            </button>
+          </div>
+        </div>
+      )}
 
       {state?.status === "error" ? (
         <div
@@ -115,7 +170,10 @@ export function ManualEntryForm({
               className={inputBase}
             />
           </Field>
-          <Field label="Purchase basis">
+          <Field 
+            label="Purchase basis" 
+            helper="Original acquisition cost / basis. Critical for yield and gain calculations."
+          >
             <input
               name="purchaseBasis"
               defaultValue={moneyDefault(initial?.purchaseBasis)}
@@ -129,7 +187,10 @@ export function ManualEntryForm({
 
       <Section title="Tax & assessment">
         <Grid>
-          <Field label="Assessed value">
+          <Field 
+            label="Assessed value" 
+            helper="Most recent assessed / appraised value from tax records or ATTOM."
+          >
             <input
               name="assessedValue"
               defaultValue={moneyDefault(initial?.assessedValue)}
@@ -138,7 +199,10 @@ export function ManualEntryForm({
               className={inputBase}
             />
           </Field>
-          <Field label="Annual taxes">
+          <Field 
+            label="Annual taxes" 
+            helper="Current annual property tax bill. Important for net yield calculations."
+          >
             <input
               name="annualTaxes"
               defaultValue={moneyDefault(initial?.annualTaxes)}

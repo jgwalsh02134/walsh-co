@@ -110,6 +110,10 @@ export type PropertyCardData = {
   attomLastFetched: IsoDate | null;
   valuationSeries: SerializableValuationPoint[];
   attentionItems: string[];
+  // Critical missing data fields surfaced for visibility
+  purchaseBasis: number | null;
+  assessedValue: number | null;
+  annualTaxes: number | null;
 };
 
 export type PropertyComp = {
@@ -203,15 +207,13 @@ function deserializeChartPoints(
 // Tabs
 // =============================================================
 
-const TABS = ["overview", "chart", "comps", "records", "trend"] as const;
+// Simplified tab system for cleaner Bloomberg-style experience
+const TABS = ["summary", "details"] as const;
 type TabId = (typeof TABS)[number];
 
 const TAB_LABELS: Record<TabId, string> = {
-  overview: "Summary",
-  chart: "Chart",
-  comps: "Comps",
-  records: "Records",
-  trend: "Area Trend",
+  summary: "Summary",
+  details: "Details",
 };
 
 // =============================================================
@@ -220,7 +222,7 @@ const TAB_LABELS: Record<TabId, string> = {
 
 export function PropertyCard({
   data,
-  defaultTab = "overview",
+  defaultTab = "summary",
   xaiAvailable = false,
 }: {
   data: PropertyCardData;
@@ -229,7 +231,51 @@ export function PropertyCard({
    *  the per-property AI panel offers a provider choice). */
   xaiAvailable?: boolean;
 }) {
+  // On mobile, default to summary for better density
+  const effectiveDefault = defaultTab;
   const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
+
+  // Smart collapsible state for Details tab (persisted per property + auto-expand logic)
+  const [openDetails, setOpenDetails] = useState<Set<string>>(() => {
+    const initial = new Set<string>(['records']);
+
+    // Auto-expand logic based on data presence
+    if (data.saleComps.length > 0 || data.rentalComps.length > 0) {
+      initial.add('comps');
+    }
+    if (data.attomFacts || data.verification.verifiedByAttom) {
+      initial.add('records');
+    }
+    if (data.trend?.latestValue) {
+      initial.add('trend');
+    }
+
+    // Load persisted state (overrides auto)
+    try {
+      const saved = localStorage.getItem(`details-${data.property.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved) as string[];
+        parsed.forEach(s => initial.add(s));
+      }
+    } catch {}
+
+    return initial;
+  });
+
+  const toggleDetail = (section: string) => {
+    setOpenDetails(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      try {
+        localStorage.setItem(`details-${data.property.id}`, JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  };
   const titleId = useId();
   const tablistId = useId();
 
@@ -347,12 +393,65 @@ export function PropertyCard({
         onChange={setActiveTab}
       />
 
-      <div className="px-4 py-4 sm:px-5">
-        {activeTab === "overview" ? <OverviewPanel data={data} /> : null}
-        {activeTab === "chart" ? <ChartPanel data={data} /> : null}
-        {activeTab === "comps" ? <CompsPanel data={data} /> : null}
-        {activeTab === "records" ? <RecordsPanel data={data} /> : null}
-        {activeTab === "trend" ? <TrendPanel data={data} /> : null}
+      <div className="px-3 py-3 sm:px-5 sm:py-4">
+        {activeTab === "summary" && <OverviewPanel data={data} />}
+
+        {activeTab === "details" && (
+          <div className="space-y-4">
+            {/* Valuation History - always expanded for quick access */}
+            <Section title="Valuation History">
+              <ChartPanel data={data} />
+            </Section>
+
+            {/* Comparables - smart collapsible */}
+            <div className="border border-[var(--market-border)] bg-[var(--market-surface)] rounded-lg overflow-hidden">
+              <button
+                onClick={() => toggleDetail('comps')}
+                className="w-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-[var(--market-border)] bg-[var(--market-surface-raised)] text-[var(--market-text-muted)] hover:bg-[var(--market-surface-hover)] flex items-center justify-between text-left"
+              >
+                Comparables
+                <span className={`text-[10px] transition-transform ${openDetails.has('comps') ? 'rotate-180' : ''}`}>▼</span>
+              </button>
+              {openDetails.has('comps') && (
+                <div className="p-3">
+                  <CompsPanel data={data} />
+                </div>
+              )}
+            </div>
+
+            {/* Public Records - smart collapsible (default open) */}
+            <div className="border border-[var(--market-border)] bg-[var(--market-surface)] rounded-lg overflow-hidden">
+              <button
+                onClick={() => toggleDetail('records')}
+                className="w-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-[var(--market-border)] bg-[var(--market-surface-raised)] text-[var(--market-text-muted)] hover:bg-[var(--market-surface-hover)] flex items-center justify-between text-left"
+              >
+                Public Records
+                <span className={`text-[10px] transition-transform ${openDetails.has('records') ? 'rotate-180' : ''}`}>▼</span>
+              </button>
+              {openDetails.has('records') && (
+                <div className="p-3">
+                  <RecordsPanel data={data} />
+                </div>
+              )}
+            </div>
+
+            {/* Area Trend - smart collapsible */}
+            <div className="border border-[var(--market-border)] bg-[var(--market-surface)] rounded-lg overflow-hidden">
+              <button
+                onClick={() => toggleDetail('trend')}
+                className="w-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-[var(--market-border)] bg-[var(--market-surface-raised)] text-[var(--market-text-muted)] hover:bg-[var(--market-surface-hover)] flex items-center justify-between text-left"
+              >
+                Area Trend
+                <span className={`text-[10px] transition-transform ${openDetails.has('trend') ? 'rotate-180' : ''}`}>▼</span>
+              </button>
+              {openDetails.has('trend') && (
+                <div className="p-3">
+                  <TrendPanel data={data} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <PropertyAiPanel data={data} xaiAvailable={xaiAvailable} />
@@ -559,12 +658,35 @@ function OverviewPanel({ data }: { data: PropertyCardData }) {
               Long-term rent estimate. Treated as a separate pipeline.
             </p>
           </InfoBlock>
+
+          {/* Financial Basis - surfaced prominently because this is currently a major gap */}
+          <InfoBlock title="Financial Basis">
+            <div className="space-y-1 text-sm font-data tabular-nums">
+              <div className={data.purchaseBasis == null ? "text-[var(--market-amber)]" : ""}>
+                <span className="text-[var(--market-text-muted)] font-sans">Purchase Basis:</span>{" "}
+                {data.purchaseBasis != null ? formatCurrency(data.purchaseBasis) : "Missing — record needed"}
+              </div>
+              <div className={data.assessedValue == null ? "text-[var(--market-amber)]" : ""}>
+                <span className="text-[var(--market-text-muted)] font-sans">Assessed Value:</span>{" "}
+                {data.assessedValue != null ? formatCurrency(data.assessedValue) : "Missing"}
+              </div>
+              <div className={data.annualTaxes == null ? "text-[var(--market-amber)]" : ""}>
+                <span className="text-[var(--market-text-muted)] font-sans">Annual Taxes:</span>{" "}
+                {data.annualTaxes != null ? formatCurrency(data.annualTaxes) : "Missing"}
+              </div>
+            </div>
+            <Link
+              href="/market/manual"
+              className="mt-2 inline-flex text-[11px] font-medium text-[var(--market-cyan)] hover:underline"
+            >
+              Edit these values →
+            </Link>
+          </InfoBlock>
         </div>
 
         {property.notes ? (
-          <p className="text-xs text-[var(--market-text-secondary)]">
-            <span className="text-[var(--market-text-muted)]">Note:</span>{" "}
-            {property.notes}
+          <p className="text-[11px] leading-tight text-[var(--market-text-secondary)]">
+            <span className="text-[var(--market-text-muted)]">Note:</span> {property.notes}
           </p>
         ) : null}
 
@@ -881,6 +1003,19 @@ function CompsList({
         </li>
       ))}
     </ul>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border border-[var(--market-border)] bg-[var(--market-surface)] rounded-lg overflow-hidden">
+      <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-[var(--market-border)] bg-[var(--market-surface-raised)] text-[var(--market-text-muted)]">
+        {title}
+      </div>
+      <div className="p-3">
+        {children}
+      </div>
+    </div>
   );
 }
 

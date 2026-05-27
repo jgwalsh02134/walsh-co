@@ -16,6 +16,8 @@
 
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import { RefreshAllButton } from "../refresh-all-button";
+import { Search } from "lucide-react";
 
 export type MarketHeaderProps = {
   hasManualEntries: boolean;
@@ -30,7 +32,7 @@ export function MarketHeader({
   settingsHref = "#market-tracker-settings",
 }: MarketHeaderProps) {
   return (
-    <header className="flex flex-col gap-3 border border-[var(--market-border)] bg-[var(--market-surface)] p-4 sm:p-5">
+    <header className="sticky top-0 z-30 flex flex-col gap-3 border border-[var(--market-border)] bg-[var(--market-surface)] p-3 sm:p-5 lg:static">
       <div className="flex flex-col gap-1">
         <h1 className="font-display text-2xl font-semibold leading-tight text-[var(--market-text)] sm:text-3xl">
           Market Intelligence
@@ -50,13 +52,17 @@ export function MarketHeader({
         >
           {hasManualEntries ? "Edit manual data" : "Add manual data"}
         </Link>
-        <Link
-          href={settingsHref}
-          title="Opens Data Source Settings where each provider has its own refresh button."
-          className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-[var(--market-border-strong)] bg-transparent px-3.5 py-2 text-sm font-medium text-[var(--market-text)] transition hover:border-[var(--market-cyan)] hover:bg-[var(--market-surface-raised)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]"
+        <RefreshAllButton />
+
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("open-market-command"))}
+          className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-md border border-[var(--market-border-strong)] bg-transparent px-3 py-2 text-sm font-medium text-[var(--market-text)] transition hover:border-[var(--market-cyan)] hover:bg-[var(--market-surface-raised)]"
+          title="Open command palette (⌘K)"
         >
-          Refresh market data
-        </Link>
+          <Search className="h-4 w-4" />
+          <span className="hidden sm:inline">Search</span>
+        </button>
+
         <Link
           href={settingsHref}
           className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-[var(--market-border-strong)] bg-transparent px-3.5 py-2 text-sm font-medium text-[var(--market-text)] transition hover:border-[var(--market-cyan)] hover:bg-[var(--market-surface-raised)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--market-cyan)]"
